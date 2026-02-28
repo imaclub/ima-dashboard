@@ -213,6 +213,25 @@
     .fi-select{width:100%;padding:10px 14px;border:1px solid var(--gris-200);border-radius:8px;font-size:14px;font-family:inherit;outline:none;background:var(--blanc);transition:all .15s;appearance:none;cursor:pointer}
     .fi-select:focus{border-color:var(--bordeaux);box-shadow:0 0 0 3px var(--bordeaux-10)}
 
+    /* Pennylane Integration */
+    .toggle-group{display:flex;gap:8px;align-items:center}
+    .toggle-btn{padding:6px 14px;border-radius:6px;border:1px solid var(--gris-200);background:var(--blanc);color:var(--gris-600);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s}
+    .toggle-btn.active{background:var(--bordeaux);color:var(--blanc);border-color:var(--bordeaux)}
+    .toggle-btn:hover{border-color:var(--bordeaux)}
+    .spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--gris-200);border-top-color:var(--bordeaux);border-radius:50%;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .status-indicator{width:10px;height:10px;border-radius:50%;display:inline-block}
+    .status-indicator.connected{background:var(--vert)}
+    .status-indicator.disconnected{background:var(--rouge)}
+    .pw-toggle{position:relative;display:inline-flex;align-items:center}
+    .pw-toggle-btn{background:none;border:none;cursor:pointer;padding:4px;color:var(--gris-500);margin-left:4px}
+    .pw-toggle-btn:hover{color:var(--gris-700)}
+    .input-with-btn{display:flex;gap:8px}
+    .input-with-btn input{flex:1}
+    .input-with-btn button{min-width:120px}
+    .error-msg{color:var(--rouge);font-size:11px;margin-top:4px}
+    .success-msg{color:var(--vert);font-size:11px;margin-top:4px}
+
     @media(max-width:1100px){.cg{grid-template-columns:1fr}.kpi-g{grid-template-columns:repeat(2,1fr)}}
   </style>
 </head>
@@ -242,6 +261,90 @@ const I={
 // ===== FORMATTERS =====
 const fmt=n=>new Intl.NumberFormat('fr-FR').format(n);
 const eur=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n);
+
+// ===== PENNYLANE SERVICE =====
+const PennylaneService={
+  getToken:()=>localStorage.getItem('ima_pennylane_token'),
+  setToken:(token)=>localStorage.setItem('ima_pennylane_token',token),
+  clearToken:()=>localStorage.removeItem('ima_pennylane_token'),
+  _companyInfo:null,
+
+  async request(endpoint,params={}){
+    const token=this.getToken();
+    const queryString=new URLSearchParams(params).toString();
+    const url=`/api/pennylane?endpoint=${encodeURIComponent(endpoint)}${queryString?'&'+queryString:''}`;
+
+    try{
+      const headers={'Accept':'application/json'};
+      // Send token from localStorage if available; proxy also checks PENNYLANE_TOKEN env var
+      if(token) headers['Authorization']=`Bearer ${token}`;
+
+      const response=await fetch(url,{method:'GET',headers});
+      const data=await response.json();
+
+      if(!response.ok){
+        const errMsg=data.message||data.error||`Erreur API: ${response.status}`;
+        throw new Error(errMsg);
+      }
+      return data;
+    }catch(e){
+      console.error('Pennylane API error:',e);
+      throw e;
+    }
+  },
+
+  async testConnection(){
+    try{
+      const data=await this.request('/me');
+      this._companyInfo=data;
+      return{success:true,company:data};
+    }catch(e){
+      return{success:false,error:e.message};
+    }
+  },
+
+  async getSupplierInvoices(params={}){
+    try{
+      const response=await this.request('/supplier_invoices',{per_page:25,...params});
+      return response.supplier_invoices||response.data||[];
+    }catch(e){
+      console.error('Failed to fetch supplier invoices:',e);
+      return[];
+    }
+  },
+
+  async getCustomerInvoices(params={}){
+    try{
+      const response=await this.request('/customer_invoices',{per_page:25,...params});
+      return response.customer_invoices||response.data||[];
+    }catch(e){
+      console.error('Failed to fetch customer invoices:',e);
+      return[];
+    }
+  },
+
+  async getCategories(){
+    try{
+      const response=await this.request('/categories');
+      return response.categories||response.data||[];
+    }catch(e){
+      console.error('Failed to fetch categories:',e);
+      return[];
+    }
+  },
+
+  async getMe(){
+    try{
+      const data=await this.request('/me');
+      this._companyInfo=data;
+      return data;
+    }catch(e){
+      return null;
+    }
+  },
+
+  getCompanyInfo(){return this._companyInfo;}
+};
 
 // ===== CSS BAR CHART =====
 function BarChart({data,keys,colors,height=180,labels}){
@@ -510,6 +613,19 @@ function Dashboard(){
 
 // ===== FINANCE =====
 function Finance(){
+  const[useLive,setUseLive]=useState(false);
+  const[supplierInvoices,setSupplierInvoices]=useState([]);
+  const[loading,setLoading]=useState(false);
+
+  useEffect(()=>{
+    if(useLive&&PennylaneService.getToken()){
+      setLoading(true);
+      PennylaneService.getSupplierInvoices({limit:10})
+        .then(invoices=>setSupplierInvoices(invoices))
+        .finally(()=>setLoading(false));
+    }
+  },[useLive]);
+
   const ebitda=mockPL.reduce((s,l)=>s+l.m,0);
   return(<div className="fin">
     <div className="kpi-g">
@@ -568,6 +684,19 @@ function Finance(){
 
 // ===== COSTS =====
 function Costs(){
+  const[useLive,setUseLive]=useState(false);
+  const[supplierInvoices,setSupplierInvoices]=useState([]);
+  const[loading,setLoading]=useState(false);
+
+  useEffect(()=>{
+    if(useLive&&PennylaneService.getToken()){
+      setLoading(true);
+      PennylaneService.getSupplierInvoices({limit:10})
+        .then(invoices=>setSupplierInvoices(invoices))
+        .finally(()=>setLoading(false));
+    }
+  },[useLive]);
+
   return(<div className="fin">
     <div className="tabs">
       <div className="tab active">Food Cost</div><div className="tab">Bar Cost</div><div className="tab">Prime Cost</div><div className="tab">Fournisseurs</div>
@@ -596,15 +725,30 @@ function Costs(){
       </div>
     </div>
     <div className="card">
-      <div className="card-h"><div><div className="card-t">Factures fournisseurs</div><div className="card-st">Synchronisées depuis Pennylane</div></div><span className="badge b-ima">Pennylane</span></div>
-      <div className="card-b"><div className="tbl"><table>
-        <thead><tr><th>Fournisseur</th><th>Type</th><th>Date</th><th style={{textAlign:'right'}}>Montant</th><th>Statut</th></tr></thead>
-        <tbody>{suppliers.map((s,i)=><tr key={i}>
-          <td style={{fontWeight:500}}>{s.n}</td><td>{s.t}</td><td>{s.d}</td>
-          <td style={{textAlign:'right',fontWeight:600}}>{eur(s.m)}</td>
-          <td><span className={`badge ${s.s==='Payée'?'b-ok':'b-warn'}`}>{s.s}</span></td>
-        </tr>)}</tbody>
-      </table></div></div>
+      <div className="card-h"><div><div className="card-t">Factures fournisseurs</div><div className="card-st">Synchronisées depuis Pennylane</div></div><div className="toggle-group">
+        <button className={`toggle-btn ${!useLive?'active':''}`} onClick={()=>setUseLive(false)}>Données démo</button>
+        <button className={`toggle-btn ${useLive?'active':''}`} onClick={()=>setUseLive(true)}>Données live</button>
+      </div></div>
+      <div className="card-b">
+        {loading&&<div style={{textAlign:'center',padding:'20px'}}><div className="spinner"/></div>}
+        {!loading&&<div className="tbl"><table>
+          <thead><tr><th>Fournisseur</th><th>Type</th><th>Date</th><th style={{textAlign:'right'}}>Montant</th><th>Statut</th></tr></thead>
+          <tbody>{(useLive?supplierInvoices:suppliers).map((s,i)=>{
+            const row={
+              n:s.supplier_name||s.n||'N/A',
+              t:s.document_type||s.t||'Facture',
+              d:s.due_date?s.due_date.substring(0,10):s.d||'N/A',
+              m:s.total_amount||s.m||0,
+              s:s.status==='paid'?'Payée':s.s||'En attente'
+            };
+            return <tr key={i}>
+              <td style={{fontWeight:500}}>{row.n}</td><td>{row.t}</td><td>{row.d}</td>
+              <td style={{textAlign:'right',fontWeight:600}}>{eur(row.m)}</td>
+              <td><span className={`badge ${row.s==='Payée'?'b-ok':'b-warn'}`}>{row.s}</span></td>
+            </tr>;
+          })}</tbody>
+        </table></div>}
+      </div>
     </div>
   </div>);
 }
@@ -1361,6 +1505,49 @@ function POSPage(){
 
 // ===== SETTINGS =====
 function Settings(){
+  const[token,setToken]=useState(PennylaneService.getToken()||'');
+  const[showToken,setShowToken]=useState(false);
+  const[testStatus,setTestStatus]=useState(null);
+  const[testing,setTesting]=useState(false);
+
+  const handleSaveToken=()=>{
+    if(token){
+      PennylaneService.setToken(token);
+      setTestStatus({success:true,msg:'Token sauvegardé'});
+    }
+  };
+
+  const[companyInfo,setCompanyInfo]=useState(null);
+
+  const handleTestConnection=async()=>{
+    if(!token){
+      setTestStatus({success:false,msg:'Veuillez entrer un token d\'abord'});
+      return;
+    }
+    PennylaneService.setToken(token);
+    setTesting(true);
+    const result=await PennylaneService.testConnection();
+    if(result.success){
+      setTestStatus({success:true,msg:'Connexion réussie !'});
+      setCompanyInfo(result.company);
+      setConnectedIntegrations(prev=>({...prev,pennylane:true}));
+    }else{
+      setTestStatus({success:false,msg:'Erreur: '+result.error});
+    }
+    setTesting(false);
+  };
+
+  const[connectedIntegrations,setConnectedIntegrations]=useState({
+    trivec:true,sevenrooms:true,pennylane:!!PennylaneService.getToken()
+  });
+
+  const handleClearToken=()=>{
+    PennylaneService.clearToken();
+    setToken('');
+    setTestStatus({success:false,msg:'Token supprimé'});
+    setConnectedIntegrations({...connectedIntegrations,pennylane:false});
+  };
+
   return(<div className="fin">
     <div className="tabs"><div className="tab active">Général</div><div className="tab">Utilisateurs</div><div className="tab">Établissements</div><div className="tab">Intégrations</div></div>
     <div className="cg">
@@ -1380,18 +1567,50 @@ function Settings(){
       <div className="card">
         <div className="card-h"><div><div className="card-t">Intégrations</div></div></div>
         <div className="card-b">
-          {[{n:'Trivec',d:'Caisses & POS',c:'T',bg:'var(--bordeaux-10)',co:'var(--bordeaux)'},
-            {n:'SevenRooms',d:'CRM & Réservations',c:'7R',bg:'var(--bleu-light)',co:'var(--bleu)'},
-            {n:'Pennylane',d:'Comptabilité & Factures',c:'PL',bg:'var(--vert-light)',co:'var(--vert)'}
+          {[{n:'Trivec',d:'Caisses & POS',c:'T',bg:'var(--bordeaux-10)',co:'var(--bordeaux)',key:'trivec'},
+            {n:'SevenRooms',d:'CRM & Réservations',c:'7R',bg:'var(--bleu-light)',co:'var(--bleu)',key:'sevenrooms'},
+            {n:'Pennylane',d:'Comptabilité & Factures',c:'PL',bg:'var(--vert-light)',co:'var(--vert)',key:'pennylane'}
           ].map((x,i)=>(
-            <div key={i} style={{padding:'10px 0',borderBottom:i<2?'1px solid var(--gris-100)':'none',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div key={x.key} style={{padding:'10px 0',borderBottom:i<2?'1px solid var(--gris-100)':'none',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <div style={{display:'flex',alignItems:'center',gap:10}}>
                 <div style={{width:34,height:34,borderRadius:8,background:x.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:x.co}}>{x.c}</div>
                 <div><div style={{fontWeight:500,fontSize:13}}>{x.n}</div><div style={{fontSize:10,color:'var(--gris-400)'}}>{x.d}</div></div>
               </div>
-              <span className="badge b-ok">Connecté</span>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <div className={`status-indicator ${connectedIntegrations[x.key]?'connected':'disconnected'}`}/>
+                <span className={`badge ${connectedIntegrations[x.key]?'b-ok':'b-err'}`}>{connectedIntegrations[x.key]?'Connecté':'Déconnecté'}</span>
+              </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Configuration Pennylane</div><div className="card-st">API Token</div></div></div>
+        <div className="card-b">
+          <div className="fg">
+            <label className="fl">Token API Pennylane</label>
+            <div className="pw-toggle">
+              <input className="fi" type={showToken?'text':'password'} value={token} onChange={(e)=>setToken(e.target.value)} placeholder="Collez votre token ici"/>
+              <button className="pw-toggle-btn" onClick={()=>setShowToken(!showToken)}>{showToken?'Masquer':'Afficher'}</button>
+            </div>
+            <div style={{fontSize:10,color:'var(--gris-400)',marginTop:4}}>Trouvez votre token dans les paramètres de votre compte Pennylane</div>
+          </div>
+          <div className="input-with-btn" style={{marginBottom:8}}>
+            <button className="btn btn-primary" onClick={handleSaveToken}>Enregistrer le token</button>
+            <button className="btn btn-secondary" onClick={handleTestConnection} disabled={testing}>{testing?'Test en cours...':'Tester la connexion'}</button>
+          </div>
+          {testStatus&&<div className={testStatus.success?'success-msg':'error-msg'}>
+            {testing&&<span className="spinner" style={{marginRight:6,verticalAlign:'middle'}}/>}
+            {testStatus.msg}
+          </div>}
+          {companyInfo&&<div style={{marginTop:12,padding:14,background:'var(--vert-light)',borderRadius:8,fontSize:12}}>
+            <div style={{fontWeight:600,color:'var(--vert)',marginBottom:6}}>Société connectée</div>
+            <div><strong>Nom :</strong> {companyInfo.name||companyInfo.company_name||'N/A'}</div>
+            {companyInfo.siren&&<div><strong>SIREN :</strong> {companyInfo.siren}</div>}
+            {companyInfo.legal_form&&<div><strong>Forme :</strong> {companyInfo.legal_form}</div>}
+          </div>}
+          {token&&<button className="btn btn-secondary" onClick={handleClearToken} style={{marginTop:8}}>Supprimer le token</button>}
         </div>
       </div>
       <div className="card">
