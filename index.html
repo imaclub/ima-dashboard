@@ -1605,10 +1605,22 @@ function Settings(){
             {testStatus.msg}
           </div>}
           {companyInfo&&<div style={{marginTop:12,padding:14,background:'var(--vert-light)',borderRadius:8,fontSize:12}}>
-            <div style={{fontWeight:600,color:'var(--vert)',marginBottom:6}}>Société connectée</div>
-            <div><strong>Nom :</strong> {companyInfo.name||companyInfo.company_name||'N/A'}</div>
-            {companyInfo.siren&&<div><strong>SIREN :</strong> {companyInfo.siren}</div>}
-            {companyInfo.legal_form&&<div><strong>Forme :</strong> {companyInfo.legal_form}</div>}
+            <div style={{fontWeight:600,color:'var(--vert)',marginBottom:6}}>Compte connecté</div>
+            {(()=>{
+              const c=companyInfo.company||companyInfo;
+              const u=companyInfo.user||companyInfo;
+              const nom=c.name||c.company_name||c.legal_name||'';
+              const siren=c.reg_no||c.siren||c.registration_number||'';
+              const email=u.email||'';
+              const userName=[u.first_name,u.last_name].filter(Boolean).join(' ');
+              return(<div>
+                {nom?<div><strong>Société :</strong> {nom}</div>:null}
+                {siren?<div><strong>SIREN :</strong> {siren}</div>:null}
+                {userName?<div><strong>Utilisateur :</strong> {userName}</div>:null}
+                {email?<div><strong>Email :</strong> {email}</div>:null}
+                {!nom&&!userName?<div style={{color:'var(--vert)'}}>Connexion API OK</div>:null}
+              </div>);
+            })()}
           </div>}
           {token&&<button className="btn btn-secondary" onClick={handleClearToken} style={{marginTop:8}}>Supprimer le token</button>}
         </div>
