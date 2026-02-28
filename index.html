@@ -1277,63 +1277,111 @@ const PennylaneService={
       const lastDay=new Date(year,month,0).getDate();
       const dateFrom=`${year}-${mm}-01`;
       const dateTo=`${year}-${mm}-${String(lastDay).padStart(2,'0')}`;
+      console.log(`[Pennylane CA] Fetching revenue for ${dateFrom} → ${dateTo}...`);
 
-      // Strategy 1: Try ledger_entry_lines with account 70x (revenue accounts in PCG)
       let totalCA=0,entries=0,source='ledger';
+
+      // Strategy 1: Get revenue accounts (70x) then fetch their ledger entry lines
       try{
-        const filter=JSON.stringify([
+        // Step A: Fetch all ledger accounts starting with 70 (revenue in PCG)
+        const acctFilter=JSON.stringify([{field:'number',operator:'start_with',value:'70'}]);
+        const acctResp=await this.request('/ledger_accounts',{per_page:100,filter:acctFilter});
+        const accounts=acctResp.items||acctResp.ledger_accounts||acctResp.data||[];
+        console.log(`[Pennylane CA] Found ${accounts.length} revenue accounts (70x)`);
+        if(accounts.length>0){
+          console.log('[Pennylane CA] Account sample:',JSON.stringify(accounts[0]));
+        }
+
+        // Build map: account_id → plan_item_number
+        const revenueAccountIds=new Set();
+        accounts.forEach(a=>{
+          const id=a.id||a.ledger_account_id;
+          if(id)revenueAccountIds.add(String(id));
+        });
+
+        if(revenueAccountIds.size===0){
+          throw new Error('No revenue accounts found with number starting with 70');
+        }
+
+        // Step B: Fetch ledger entry lines for the date range
+        const dateFilter=JSON.stringify([
           {field:'date',operator:'>=',value:dateFrom},
           {field:'date',operator:'<=',value:dateTo}
         ]);
         let allLines=[],cursor=null,page=0;
-        while(page<10){
-          const params={per_page:100,filter};
+        while(page<20){
+          const params={per_page:100,filter:dateFilter};
           if(cursor)params.cursor=cursor;
           const response=await this.request('/ledger_entry_lines',params);
           const items=response.items||response.ledger_entry_lines||response.data||[];
           allLines=allLines.concat(items);
+          console.log(`[Pennylane CA] Page ${page}: ${items.length} lines (total: ${allLines.length})`);
+          if(items.length>0&&page===0){
+            console.log('[Pennylane CA] Line sample keys:',Object.keys(items[0]).join(', '));
+            console.log('[Pennylane CA] Line sample:',JSON.stringify(items[0]));
+          }
           if(!response.has_more||!response.next_cursor||items.length===0)break;
           cursor=response.next_cursor;
           page++;
         }
-        // Filter for revenue accounts (PCG class 7: comptes 70x = CA)
+
+        // Step C: Filter lines belonging to revenue accounts
         const revenueLines=allLines.filter(l=>{
-          const num=String(l.ledger_account_number||l.account_number||l.planitem_number||'');
+          // Try matching by account ID first
+          const accId=String(l.ledger_account_id||l.account_id||'');
+          if(revenueAccountIds.has(accId))return true;
+          // Fallback: try matching by account number directly on the line
+          const num=String(l.plan_item_number||l.ledger_account_number||l.account_number||l.planitem_number||'');
           return num.startsWith('70');
         });
-        // In accounting: revenue = credit - debit (revenues are credited)
+
+        // Revenue in accounting: credit - debit (revenues are credited)
         totalCA=revenueLines.reduce((s,l)=>{
           const credit=parseFloat(l.credit||l.credit_amount||0);
           const debit=parseFloat(l.debit||l.debit_amount||0);
           return s+(credit-debit);
         },0);
         entries=revenueLines.length;
-        console.log(`Pennylane revenue: ${entries} écritures 70x, CA=${totalCA}€ (${dateFrom} → ${dateTo})`);
+        console.log(`[Pennylane CA] Result: ${entries} revenue lines, CA=${totalCA.toFixed(2)}€`);
+
       }catch(e){
-        console.warn('Ledger entries failed, trying customer invoices:',e.message);
+        console.warn('[Pennylane CA] Ledger strategy failed:',e.message);
+
         // Strategy 2: Fallback to customer invoices
         source='invoices';
-        let all=[],cursor2=null,page2=0;
-        while(page2<5){
-          const params={per_page:100};
-          params['filter']=JSON.stringify([{field:'date',operator:'>=',value:dateFrom},{field:'date',operator:'<=',value:dateTo}]);
-          if(cursor2)params.cursor=cursor2;
-          const response=await this.request('/customer_invoices',params);
-          const items=response.items||response.customer_invoices||response.data||[];
-          all=all.concat(items);
-          if(!response.has_more||!response.next_cursor||items.length===0)break;
-          cursor2=response.next_cursor;
-          page2++;
+        try{
+          const invFilter=JSON.stringify([
+            {field:'date',operator:'>=',value:dateFrom},
+            {field:'date',operator:'<=',value:dateTo}
+          ]);
+          let all=[],cursor2=null,page2=0;
+          while(page2<5){
+            const params={per_page:100,filter:invFilter};
+            if(cursor2)params.cursor=cursor2;
+            const response=await this.request('/customer_invoices',params);
+            const items=response.items||response.customer_invoices||response.data||[];
+            all=all.concat(items);
+            if(items.length>0&&page2===0){
+              console.log('[Pennylane CA] Invoice sample:',JSON.stringify(items[0]));
+            }
+            if(!response.has_more||!response.next_cursor||items.length===0)break;
+            cursor2=response.next_cursor;
+            page2++;
+          }
+          totalCA=all.reduce((s,inv)=>s+parseFloat(inv.amount||inv.total_amount||inv.total||0),0);
+          entries=all.length;
+          console.log(`[Pennylane CA] Invoices fallback: ${entries} invoices, CA=${totalCA.toFixed(2)}€`);
+        }catch(e2){
+          console.error('[Pennylane CA] Invoice fallback also failed:',e2.message);
         }
-        totalCA=all.reduce((s,inv)=>s+parseFloat(inv.amount||inv.total_amount||0),0);
-        entries=all.length;
       }
 
       const result={totalCA:Math.round(totalCA),entries,source};
       this._cache[cacheKey]={data:result,ts:Date.now()};
+      console.log(`[Pennylane CA] Final result:`,result);
       return result;
     }catch(e){
-      console.error('Failed to fetch monthly revenue:',e);
+      console.error('[Pennylane CA] Fatal error:',e);
       return{totalCA:0,entries:0,source:'error'};
     }
   },
