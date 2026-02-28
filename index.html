@@ -8,6 +8,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
@@ -2862,17 +2863,27 @@ function Settings(){
     e.target.value='';
   };
 
-  const handleInviteUser=()=>{
+  const handleInviteUser=async()=>{
     if(!inviteData.nom||!inviteData.email){setInviteStatus({success:false,msg:'Nom et email requis'});return;}
     const result=UserManager.addUser(inviteData);
     if(result.error){setInviteStatus({success:false,msg:result.error});return;}
-    // Send invitation email via mailto (or EmailJS in future)
-    const subject=encodeURIComponent('Invitation au Dashboard IMA');
-    const body=encodeURIComponent(`Bonjour ${inviteData.nom},\n\nVous êtes invité(e) à accéder au Dashboard IMA — Tour de contrôle.\n\nURL : https://dashboard.ima-club.com\nEmail : ${inviteData.email}\nMot de passe temporaire : ${inviteData.password}\nRôle : ${inviteData.role}\n\nMerci de changer votre mot de passe après votre première connexion.\n\nCordialement,\n${UserManager.getCurrentUser()?.nom||'IMA'}`);
-    window.open(`mailto:${inviteData.email}?subject=${subject}&body=${body}`,'_blank');
-    setInviteStatus({success:true,msg:`Invitation créée pour ${inviteData.nom}. L'email s'ouvre dans votre messagerie.`});
-    setInviteData({nom:'',email:'',role:'Directeur',password:Math.random().toString(36).slice(-8)});
-    setTimeout(()=>setShowInviteModal(false),2000);
+    // Send invitation email via EmailJS
+    setInviteStatus({success:true,msg:'Envoi en cours...'});
+    try{
+      await emailjs.send('service_0m9rogq','template_7dymzv8',{
+        to_name:inviteData.nom,
+        to_email:inviteData.email,
+        password:inviteData.password,
+        role:inviteData.role,
+        from_name:UserManager.getCurrentUser()?.nom||'IMA'
+      },'Q4hFBbA8dsSG7BkVQ');
+      setInviteStatus({success:true,msg:`Invitation envoyée par email à ${inviteData.email}`});
+      setInviteData({nom:'',email:'',role:'Directeur',password:Math.random().toString(36).slice(-8)});
+      setTimeout(()=>setShowInviteModal(false),2500);
+    }catch(err){
+      console.error('EmailJS error:',err);
+      setInviteStatus({success:false,msg:'Erreur envoi email: '+(err.text||err.message||'Vérifiez la config EmailJS')});
+    }
   };
 
   const handleSaveToken=()=>{
