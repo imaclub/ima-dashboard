@@ -770,23 +770,23 @@ const RecipeCosts={
   // Latkes
   'Latkes':18.07,
   // PLATS
-  "Poulet R\u00f4ti aux Cl\u00e9mentines":4.08,'Poulpe Aux Epices':9.41,
-  "Daurade \u00e0 La Rose":7.04,'Daurade a la rose':7.04,
+  "Poulet Rôti aux Clémentines":4.08,'Poulpe Aux Epices':9.41,
+  "Daurade à La Rose":7.04,'Daurade a la rose':7.04,
   'Shish taouk':3.08,'Shish taouk ENFANT':3.08,'Shish-Taouk':3.08,
   'Kefta Wagyu':6.38,'Tomahawk Black angus':63.22,
   "Epaule d'Agneau":29.30,'Poisson du jour':36.71,
-  "Man'ouch\u00e9 \u00e0 L'Agneau":3.85,
+  "Man'ouché à L'Agneau":3.85,
   'choux fleur roti':3.02,
   // Caviar
   'Caviar 30gr':29.69,'Caviar 50gr':49.54,'Caviar 125gr':122.49,
   // SIDES
-  'Patate douce':0.56,"Pur\u00e9e Patate .D":0.56,'Riz au Safran':0.74,
-  "Compot\u00e9 Aubergine":0.90,"Compot\u00e9 Aub\u00e9":0.90,
-  "Salade \u00c9pinard SIDE":0.74,
+  'Patate douce':0.56,"Purée Patate .D":0.56,'Riz au Safran':0.74,
+  "Compoté Aubergine":0.90,"Compoté Aubé":0.90,
+  "Salade Épinard SIDE":0.74,
   // DESSERTS
   'Mousse chocolat':5.16,'Mille Feuille':2.64,'Mille feuille':2.64,
   'Glace pistache':1.85,'Glace Achta':1.93,
-  'fruit givr\u00e9':5.70,
+  'fruit givré':5.70,
   // PAINS
   'Pain Libanais':0.26,'Pain Pita':0.26,'Pain Yemenite':0.30,'Bread basket':0.50,
   // COMBOS MEZZE (estimated from component costs avg ~1.20/item)
@@ -976,7 +976,7 @@ const InventoryService={
     if(!ln||ln.length<2)return null;
     const all=this.getAll();
     const noise=new Set(['par','au','aux','la','le','les','du','de','des','.','rg','blc','btl','vr','rge','cru','1er','verre','ex','divers','alcool','blanc','rouge','rose','sans','brut','grand','belle','epoque','noble','reserve','special','edition','cuvee','cuvée','vieilles','vignes','premier']);
-    const stripAcc=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const stripAcc=s=>s.normalize('NFD').replace(/[̀-ͯ]/g,'');
     const lnNorm=stripAcc(ln);
     // For magnums: try to find the magnum-specific product first (1.5L, 1.5 L, Mag)
     let m=null;
@@ -1265,6 +1265,76 @@ const PennylaneService={
     }catch(e){
       console.error('Failed to fetch customer invoices:',e);
       return[];
+    }
+  },
+
+  // Fetch monthly revenue (CA) from Pennylane accounting entries (comptes 70x)
+  async getMonthlyRevenue(year=2026,month=1){
+    const cacheKey=`revenue_${year}_${month}`;
+    if(this._cache[cacheKey]&&Date.now()-this._cache[cacheKey].ts<300000)return this._cache[cacheKey].data;
+    try{
+      const mm=String(month).padStart(2,'0');
+      const lastDay=new Date(year,month,0).getDate();
+      const dateFrom=`${year}-${mm}-01`;
+      const dateTo=`${year}-${mm}-${String(lastDay).padStart(2,'0')}`;
+
+      // Strategy 1: Try ledger_entry_lines with account 70x (revenue accounts in PCG)
+      let totalCA=0,entries=0,source='ledger';
+      try{
+        const filter=JSON.stringify([
+          {field:'date',operator:'>=',value:dateFrom},
+          {field:'date',operator:'<=',value:dateTo}
+        ]);
+        let allLines=[],cursor=null,page=0;
+        while(page<10){
+          const params={per_page:100,filter};
+          if(cursor)params.cursor=cursor;
+          const response=await this.request('/ledger_entry_lines',params);
+          const items=response.items||response.ledger_entry_lines||response.data||[];
+          allLines=allLines.concat(items);
+          if(!response.has_more||!response.next_cursor||items.length===0)break;
+          cursor=response.next_cursor;
+          page++;
+        }
+        // Filter for revenue accounts (PCG class 7: comptes 70x = CA)
+        const revenueLines=allLines.filter(l=>{
+          const num=String(l.ledger_account_number||l.account_number||l.planitem_number||'');
+          return num.startsWith('70');
+        });
+        // In accounting: revenue = credit - debit (revenues are credited)
+        totalCA=revenueLines.reduce((s,l)=>{
+          const credit=parseFloat(l.credit||l.credit_amount||0);
+          const debit=parseFloat(l.debit||l.debit_amount||0);
+          return s+(credit-debit);
+        },0);
+        entries=revenueLines.length;
+        console.log(`Pennylane revenue: ${entries} écritures 70x, CA=${totalCA}€ (${dateFrom} → ${dateTo})`);
+      }catch(e){
+        console.warn('Ledger entries failed, trying customer invoices:',e.message);
+        // Strategy 2: Fallback to customer invoices
+        source='invoices';
+        let all=[],cursor2=null,page2=0;
+        while(page2<5){
+          const params={per_page:100};
+          params['filter']=JSON.stringify([{field:'date',operator:'>=',value:dateFrom},{field:'date',operator:'<=',value:dateTo}]);
+          if(cursor2)params.cursor=cursor2;
+          const response=await this.request('/customer_invoices',params);
+          const items=response.items||response.customer_invoices||response.data||[];
+          all=all.concat(items);
+          if(!response.has_more||!response.next_cursor||items.length===0)break;
+          cursor2=response.next_cursor;
+          page2++;
+        }
+        totalCA=all.reduce((s,inv)=>s+parseFloat(inv.amount||inv.total_amount||0),0);
+        entries=all.length;
+      }
+
+      const result={totalCA:Math.round(totalCA),entries,source};
+      this._cache[cacheKey]={data:result,ts:Date.now()};
+      return result;
+    }catch(e){
+      console.error('Failed to fetch monthly revenue:',e);
+      return{totalCA:0,entries:0,source:'error'};
     }
   },
 
@@ -1596,11 +1666,21 @@ function Finance(){
   const groupTotals=useMemo(()=>SupplierMap.getGroupTotals(totals),[totals]);
   const totalCosts=Object.values(totals).reduce((s,v)=>s+v,0);
 
-  // CA from Trivec data
+  // CA from Trivec data, with Pennylane fallback
   const trivecMonth=useMemo(()=>TrivecService.getMonthData(),[]);
+  const trivecCA=trivecMonth.totalCA||0;
   const caFood=trivecMonth.caRestaurant||0;
   const caBar=(trivecMonth.caClub||0)+(trivecMonth.caBar||0);
-  const caTotal=trivecMonth.totalCA||0;
+
+  const[pennylaneCA,setPennylaneCA]=useState(0);
+  useEffect(()=>{
+    if(trivecCA===0&&PennylaneService.getToken()){
+      PennylaneService.getMonthlyRevenue(2026,1)
+        .then(rev=>{if(rev.totalCA>0)setPennylaneCA(rev.totalCA);})
+        .catch(()=>{});
+    }
+  },[trivecCA]);
+  const caTotal=trivecCA||pennylaneCA;
 
   // Calculate EBITDA — use real payroll data for Staff Cost
   const realStaffCost=PayrollService.getMasseSalariale();
@@ -2227,7 +2307,20 @@ function StaffPage(){
   const payTotals=PayrollService.getTotals(payroll);
   const deptTotals=PayrollService.getDeptTotals(payroll);
   const trivecMonth=TrivecService.getMonthData();
-  const caTotal=trivecMonth.totalCA||0;
+  const trivecCA=trivecMonth.totalCA||0;
+
+  // Fallback: fetch CA from Pennylane customer invoices (Trivec → Pennylane revenue)
+  const[pennylaneCA,setPennylaneCA]=useState(0);
+  useEffect(()=>{
+    if(trivecCA===0&&PennylaneService.getToken()){
+      PennylaneService.getMonthlyRevenue(2026,1)
+        .then(rev=>{if(rev.totalCA>0)setPennylaneCA(rev.totalCA);})
+        .catch(()=>{});
+    }
+  },[trivecCA]);
+
+  const caTotal=trivecCA||pennylaneCA;
+  const caSource=trivecCA>0?'Trivec':pennylaneCA>0?'Pennylane':'—';
   const staffCostPct=PayrollService.getStaffCostPct(caTotal);
   const evo=PayrollService.getEvolution();
   const upcoming=PayrollService.getUpcomingDepartures();
@@ -2235,7 +2328,7 @@ function StaffPage(){
   const deptColors={cuisine:'var(--vert)',salle:'var(--bordeaux)',bar:'var(--orange)',direction:'var(--bleu)'};
   const deptLabels={cuisine:'Cuisine',salle:'Salle',bar:'Bar',direction:'Direction'};
   const statusColors={'actif':'var(--vert)','sdtc':'var(--rouge)','sdtc-fev':'var(--orange)'};
-  const statusLabels={'actif':'Actif','sdtc':'Sorti Jan','sdtc-fev':'Sort F\u00e9v'};
+  const statusLabels={'actif':'Actif','sdtc':'Sorti Jan','sdtc-fev':'Sort Fév'};
 
   const handleAddOrSave=()=>{
     if(!newEmp.nom)return;
@@ -2277,25 +2370,25 @@ function StaffPage(){
 
   return(<div className="fin">
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">Effectif Janvier</div><div className="kpi-val">{PayrollDataJan.length}</div><div className="kpi-chg" style={{color:evo.janCount>evo.decCount?'var(--vert)':'var(--rouge)'}}>{evo.janCount>evo.decCount?'+':''}{evo.janCount-evo.decCount} vs D\u00e9c ({evo.decCount})</div></div>
-      <div className="kpi"><div className="kpi-label">Masse salariale</div><div className="kpi-val">{eur(evo.janTotal)}</div><div className="kpi-chg" style={{color:evo.pct<0?'var(--vert)':'var(--orange)'}}>{evo.pct>0?'+':''}{evo.pct}% vs D\u00e9c</div></div>
-      <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:staffCostPct>30?'var(--rouge)':staffCostPct>25?'var(--orange)':'var(--vert)'}}>{staffCostPct}%</div><div className="kpi-chg neu">vs CA {eur(caTotal)}</div></div>
-      <div className="kpi"><div className="kpi-label">D\u00e9parts F\u00e9vrier</div><div className="kpi-val" style={{color:'var(--orange)'}}>{upcoming.length}</div><div className="kpi-chg neg">{upcoming.map(u=>u.name.split(' ').pop()).join(', ')}</div></div>
+      <div className="kpi"><div className="kpi-label">Effectif Janvier</div><div className="kpi-val">{PayrollDataJan.length}</div><div className="kpi-chg" style={{color:evo.janCount>evo.decCount?'var(--vert)':'var(--rouge)'}}>{evo.janCount>evo.decCount?'+':''}{evo.janCount-evo.decCount} vs Déc ({evo.decCount})</div></div>
+      <div className="kpi"><div className="kpi-label">Masse salariale</div><div className="kpi-val">{eur(evo.janTotal)}</div><div className="kpi-chg" style={{color:evo.pct<0?'var(--vert)':'var(--orange)'}}>{evo.pct>0?'+':''}{evo.pct}% vs Déc</div></div>
+      <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:caTotal>0?(staffCostPct>30?'var(--rouge)':staffCostPct>25?'var(--orange)':'var(--vert)'):'var(--gris-300)'}}>{caTotal>0?staffCostPct+'%':'—'}</div><div className="kpi-chg neu">{caTotal>0?`vs CA ${eur(caTotal)} (${caSource})`:'CA non disponible'}</div></div>
+      <div className="kpi"><div className="kpi-label">Départs Février</div><div className="kpi-val" style={{color:'var(--orange)'}}>{upcoming.length}</div><div className="kpi-chg neg">{upcoming.map(u=>u.name.split(' ').pop()).join(', ')}</div></div>
     </div>
 
     <div className="tabs">
-      <div className={`tab ${tab==='paie'?'active':''}`} onClick={()=>setTab('paie')}>Paie Sila\u00e9</div>
+      <div className={`tab ${tab==='paie'?'active':''}`} onClick={()=>setTab('paie')}>Paie Silaé</div>
       <div className={`tab ${tab==='mouvements'?'active':''}`} onClick={()=>setTab('mouvements')}>Mouvements</div>
-      <div className={`tab ${tab==='equipe'?'active':''}`} onClick={()=>setTab('equipe')}>\u00c9quipe & Tips</div>
+      <div className={`tab ${tab==='equipe'?'active':''}`} onClick={()=>setTab('equipe')}>Équipe & Tips</div>
       <div className={`tab ${tab==='ajouter'?'active':''}`} onClick={()=>setTab('ajouter')}>Ajouter / Modifier</div>
-      <div className={`tab ${tab==='repartition'?'active':''}`} onClick={()=>setTab('repartition')}>R\u00e9partition</div>
+      <div className={`tab ${tab==='repartition'?'active':''}`} onClick={()=>setTab('repartition')}>Répartition</div>
     </div>
 
     {tab==='paie'&&<div>
       {/* Month selector */}
       <div style={{display:'flex',gap:8,marginBottom:16}}>
         <button className={`btn ${payMonth==='jan'?'btn-primary':'btn-secondary'}`} onClick={()=>setPayMonth('jan')} style={{fontSize:12}}>Janvier 2026</button>
-        <button className={`btn ${payMonth==='dec'?'btn-primary':'btn-secondary'}`} onClick={()=>setPayMonth('dec')} style={{fontSize:12}}>D\u00e9cembre 2025</button>
+        <button className={`btn ${payMonth==='dec'?'btn-primary':'btn-secondary'}`} onClick={()=>setPayMonth('dec')} style={{fontSize:12}}>Décembre 2025</button>
       </div>
 
       {/* Department breakdown */}
@@ -2304,16 +2397,16 @@ function StaffPage(){
           <div className="kpi" key={dept}>
             <div className="kpi-label" style={{color:deptColors[dept]||'var(--gris-500)'}}>{deptLabels[dept]||dept}</div>
             <div className="kpi-val" style={{fontSize:18}}>{eur(d.coutGlobal)}</div>
-            <div className="kpi-chg neu">{d.count} pers. \u2022 {caTotal>0?Math.round(d.coutGlobal/caTotal*1000)/10:0}% du CA</div>
+            <div className="kpi-chg neu">{d.count} pers. • {caTotal>0?Math.round(d.coutGlobal/caTotal*1000)/10:0}% du CA</div>
           </div>
         ))}
       </div>
 
       {/* Payroll detail table */}
       <div className="card">
-        <div className="card-h"><div><div className="card-t">Bulletins de paie \u2014 {payMonth==='jan'?'Janvier 2026':'D\u00e9cembre 2025'}</div><div className="card-st">Source : Sila\u00e9 \u2022 {payroll.length} collaborateurs \u2022 SAS ABAYTA</div></div><span className="badge b-ok">Donn\u00e9es r\u00e9elles</span></div>
+        <div className="card-h"><div><div className="card-t">Bulletins de paie — {payMonth==='jan'?'Janvier 2026':'Décembre 2025'}</div><div className="card-st">Source : Silaé • {payroll.length} collaborateurs • SAS ABAYTA</div></div><span className="badge b-ok">Données réelles</span></div>
         <div className="card-b"><div className="tbl"><table>
-          <thead><tr><th>Nom</th><th>Poste</th><th>D\u00e9pt</th>{payMonth==='jan'&&<th>Statut</th>}<th style={{textAlign:'right'}}>Heures</th><th style={{textAlign:'right'}}>Brut</th><th style={{textAlign:'right'}}>Ch. patronales</th><th style={{textAlign:'right'}}>Co\u00fbt global</th></tr></thead>
+          <thead><tr><th>Nom</th><th>Poste</th><th>Dépt</th>{payMonth==='jan'&&<th>Statut</th>}<th style={{textAlign:'right'}}>Heures</th><th style={{textAlign:'right'}}>Brut</th><th style={{textAlign:'right'}}>Ch. patronales</th><th style={{textAlign:'right'}}>Coût global</th></tr></thead>
           <tbody>
             {[...payroll].sort((a,b)=>(b.coutGlobal||0)-(a.coutGlobal||0)).map((e,i)=>(
               <tr key={i} style={{opacity:e.status==='sdtc'?0.6:1}}>
@@ -2350,14 +2443,14 @@ function StaffPage(){
               <div style={{marginTop:8,height:6,background:'var(--gris-100)',borderRadius:3,overflow:'hidden'}}><div style={{width:Math.min(staffCostPct/35*100,100)+'%',height:'100%',background:staffCostPct>30?'var(--rouge)':staffCostPct>25?'var(--orange)':'var(--vert)',borderRadius:3}}/></div>
             </div>
             <div className="cost-c">
-              <div className="cl">Co\u00fbt horaire moyen</div>
-              <div className="cv">{payTotals.totalHeures>0?(payTotals.totalCoutGlobal/payTotals.totalHeures).toFixed(1):0}\u20AC/h</div>
-              <div className="ct">co\u00fbt global / heures</div>
+              <div className="cl">Coût horaire moyen</div>
+              <div className="cv">{payTotals.totalHeures>0?(payTotals.totalCoutGlobal/payTotals.totalHeures).toFixed(1):0}€/h</div>
+              <div className="ct">coût global / heures</div>
             </div>
             <div className="cost-c">
-              <div className="cl">\u00c9volution Dec\u2192Jan</div>
+              <div className="cl">Évolution Dec→Jan</div>
               <div className="cv" style={{color:evo.pct<0?'var(--vert)':'var(--orange)'}}>{evo.pct>0?'+':''}{evo.pct}%</div>
-              <div className="ct">{eur(evo.decTotal)} \u2192 {eur(evo.janTotal)}</div>
+              <div className="ct">{eur(evo.decTotal)} → {eur(evo.janTotal)}</div>
             </div>
           </div>
         </div>
@@ -2366,13 +2459,13 @@ function StaffPage(){
 
     {tab==='mouvements'&&<div>
       {/* Upcoming departures alert */}
-      {upcoming.length>0&&<div className="alert-i a-warn" style={{marginBottom:16}}><I.Warn/><div><div className="at">{upcoming.length} d\u00e9part{upcoming.length>1?'s':''} pr\u00e9vu{upcoming.length>1?'s':''} en f\u00e9vrier</div><div className="as">{upcoming.map(u=>u.name+' ('+u.emploi+')').join(' \u2022 ')}</div></div></div>}
+      {upcoming.length>0&&<div className="alert-i a-warn" style={{marginBottom:16}}><I.Warn/><div><div className="at">{upcoming.length} départ{upcoming.length>1?'s':''} prévu{upcoming.length>1?'s':''} en février</div><div className="as">{upcoming.map(u=>u.name+' ('+u.emploi+')').join(' • ')}</div></div></div>}
 
       {/* SDTC timeline */}
       <div className="card">
-        <div className="card-h"><div><div className="card-t">Historique des mouvements</div><div className="card-st">{sdtcList.length} d\u00e9parts enregistr\u00e9s (SDTC)</div></div></div>
+        <div className="card-h"><div><div className="card-t">Historique des mouvements</div><div className="card-st">{sdtcList.length} départs enregistrés (SDTC)</div></div></div>
         <div className="card-b"><div className="tbl"><table>
-          <thead><tr><th>Nom</th><th>Poste</th><th>D\u00e9pt</th><th>P\u00e9riode SDTC</th><th>Statut</th></tr></thead>
+          <thead><tr><th>Nom</th><th>Poste</th><th>Dépt</th><th>Période SDTC</th><th>Statut</th></tr></thead>
           <tbody>
             {sdtcList.map((s,i)=>(
               <tr key={i}>
@@ -2380,7 +2473,7 @@ function StaffPage(){
                 <td><span className="badge b-ima" style={{fontSize:9}}>{s.emploi}</span></td>
                 <td><span className="badge" style={{background:deptColors[s.dept]||'var(--gris-300)',color:'white',fontSize:9}}>{deptLabels[s.dept]||s.dept}</span></td>
                 <td>{s.month}</td>
-                <td><span className="badge" style={{background:s.month==='02-2026'?'var(--orange)':'var(--rouge)',color:'white',fontSize:9}}>{s.month==='02-2026'?'Pr\u00e9vu':'Sorti'}</span></td>
+                <td><span className="badge" style={{background:s.month==='02-2026'?'var(--orange)':'var(--rouge)',color:'white',fontSize:9}}>{s.month==='02-2026'?'Prévu':'Sorti'}</span></td>
               </tr>
             ))}
           </tbody>
@@ -2389,31 +2482,31 @@ function StaffPage(){
 
       {/* Comparison Dec vs Jan */}
       <div className="card" style={{marginTop:16}}>
-        <div className="card-h"><div><div className="card-t">\u00c9volution effectifs D\u00e9c 2025 \u2192 Jan 2026</div></div></div>
+        <div className="card-h"><div><div className="card-t">Évolution effectifs Déc 2025 → Jan 2026</div></div></div>
         <div className="card-b">
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:20,marginBottom:20}}>
-            <div className="cost-c"><div className="cl">D\u00e9cembre 2025</div><div className="cv">{evo.decCount}</div><div className="ct">collaborateurs \u2022 {eur(evo.decTotal)}</div></div>
-            <div className="cost-c"><div className="cl">Janvier 2026</div><div className="cv">{evo.janCount}</div><div className="ct">collaborateurs \u2022 {eur(evo.janTotal)}</div></div>
+            <div className="cost-c"><div className="cl">Décembre 2025</div><div className="cv">{evo.decCount}</div><div className="ct">collaborateurs • {eur(evo.decTotal)}</div></div>
+            <div className="cost-c"><div className="cl">Janvier 2026</div><div className="cv">{evo.janCount}</div><div className="ct">collaborateurs • {eur(evo.janTotal)}</div></div>
             <div className="cost-c"><div className="cl">Variation</div><div className="cv" style={{color:evo.pct<0?'var(--vert)':'var(--orange)'}}>{evo.pct>0?'+':''}{evo.pct}%</div><div className="ct">{eur(evo.diff)}</div></div>
           </div>
           <div style={{fontSize:13,marginBottom:12}}>
-            <div style={{fontWeight:600,color:'var(--rouge)',marginBottom:6}}>D\u00e9parts ({sdtcList.filter(s=>s.month==='12-2025'||s.month==='01-2026').length})</div>
+            <div style={{fontWeight:600,color:'var(--rouge)',marginBottom:6}}>Départs ({sdtcList.filter(s=>s.month==='12-2025'||s.month==='01-2026').length})</div>
             {sdtcList.filter(s=>s.month==='12-2025'||s.month==='01-2026').map((s,i)=>(
               <div key={i} style={{padding:'4px 0',fontSize:12,color:'var(--gris-600)',display:'flex',gap:8}}>
-                <span style={{color:'var(--rouge)'}}>\u2716</span>
+                <span style={{color:'var(--rouge)'}}>✖</span>
                 <span style={{fontWeight:500}}>{s.name}</span>
-                <span style={{color:'var(--gris-400)'}}>{s.emploi} \u2022 {s.dept} \u2022 {s.month}</span>
+                <span style={{color:'var(--gris-400)'}}>{s.emploi} • {s.dept} • {s.month}</span>
               </div>
             ))}
           </div>
           <div style={{fontSize:13}}>
-            <div style={{fontWeight:600,color:'var(--vert)',marginBottom:6}}>Nouvelles arriv\u00e9es (5)</div>
+            <div style={{fontWeight:600,color:'var(--vert)',marginBottom:6}}>Nouvelles arrivées (5)</div>
             {['Abdoulaye SOW','Jeremy DUBOURG','Martial AUBERTIN','Noemie JOLY','Yaya KA'].map((n,i)=>{
               const emp=PayrollDataJan.find(e=>e.name===n);
               return emp?(<div key={i} style={{padding:'4px 0',fontSize:12,color:'var(--gris-600)',display:'flex',gap:8}}>
-                <span style={{color:'var(--vert)'}}>\u2714</span>
+                <span style={{color:'var(--vert)'}}>✔</span>
                 <span style={{fontWeight:500}}>{emp.name}</span>
-                <span style={{color:'var(--gris-400)'}}>{emp.emploi} \u2022 {emp.dept}</span>
+                <span style={{color:'var(--gris-400)'}}>{emp.emploi} • {emp.dept}</span>
               </div>):null;
             })}
           </div>
@@ -3938,6 +4031,7 @@ function Settings(){
           {(()=>{
             const tm=TrivecService.getMonthData();
             const ca=tm.totalCA||0;
+            const caTotal=ca; // alias for use below
             const hasCa=ca>0;
             const tmVal=tm.ticketMoyen||0;
             // Aggregate Trivec products for COGS
