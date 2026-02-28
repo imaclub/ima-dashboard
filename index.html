@@ -263,54 +263,88 @@ const fmt=n=>new Intl.NumberFormat('fr-FR').format(n);
 const eur=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n);
 
 // ===== SUPPLIER MAPPING =====
-// Maps supplier IDs to categories. Stored in localStorage for persistence.
+// Professional restaurant cost categories with grouping
+const COST_GROUPS={
+  'Coûts Directs (Prime Cost)':{
+    color:'var(--bordeaux)',cats:['Food','Bar','Staff'],
+    desc:'Matières premières + masse salariale'
+  },
+  'Charges d\'Exploitation':{
+    color:'var(--orange)',cats:['Hygiène & Entretien','Énergie & Fluides','Matériel & Équipement','Travaux & Maintenance','Blanchisserie'],
+    desc:'Coûts opérationnels du restaurant'
+  },
+  'Charges Générales (G&A)':{
+    color:'var(--bleu)',cats:['Loyer & Charges','Communication & Marketing','Administratif & Juridique','Transport & Véhicules','Assurances','IT & Logiciels','Divers'],
+    desc:'Frais généraux et administratifs'
+  },
+  'Hors Exploitation':{
+    color:'var(--gris-500)',cats:['Compte courant associé','Investissements','Non classé'],
+    desc:'Opérations hors exploitation courante'
+  }
+};
+
+const ALL_CATEGORIES=Object.values(COST_GROUPS).flatMap(g=>g.cats);
+const CAT_COLORS={
+  'Food':'#059669','Bar':'#581527','Staff':'#2563eb',
+  'Hygiène & Entretien':'#d97706','Énergie & Fluides':'#dc2626','Matériel & Équipement':'#7c3aed',
+  'Travaux & Maintenance':'#b45309','Blanchisserie':'#0891b2',
+  'Loyer & Charges':'#475569','Communication & Marketing':'#c026d3','Administratif & Juridique':'#64748b',
+  'Transport & Véhicules':'#374151','Assurances':'#6b7280','IT & Logiciels':'#4f46e5','Divers':'#9ca3af',
+  'Compte courant associé':'#374151','Investissements':'#1e293b','Non classé':'#dc2626'
+};
+
+// Get the group name for a category
+function getCatGroup(cat){
+  for(const[group,info]of Object.entries(COST_GROUPS)){
+    if(info.cats.includes(cat))return group;
+  }
+  return'Hors Exploitation';
+}
+
 const SupplierMap={
-  CATEGORIES:['Food','Bar','Travaux','Hygiène','G&A','Matériel','Communication','Restaurant','Compte courant','Non classé'],
-  COST_CATEGORIES:['Food','Bar'], // used for food/bar cost calculations
+  CATEGORIES:ALL_CATEGORIES,
 
   _getMap(){
-    try{return JSON.parse(localStorage.getItem('ima_supplier_map')||'{}');}catch(e){return{};}
+    try{return JSON.parse(localStorage.getItem('ima_supplier_map_v2')||'{}');}catch(e){return{};}
   },
-  _saveMap(map){localStorage.setItem('ima_supplier_map',JSON.stringify(map));},
+  _saveMap(map){localStorage.setItem('ima_supplier_map_v2',JSON.stringify(map));},
 
-  // Get category for a supplier ID
   getCategory(supplierId){
     const map=this._getMap();
     return map[supplierId]||'Non classé';
   },
 
-  // Set category for a supplier
   setCategory(supplierId,category){
     const map=this._getMap();
     map[supplierId]=category;
     this._saveMap(map);
   },
 
-  // Get all mappings
   getAll(){return this._getMap();},
 
-  // Extract supplier name from invoice label: "Facture SUPPLIER - NUMBER (label généré)"
   extractName(invoice){
     const label=invoice.label||'';
-    const match=label.match(/^(?:Facture|Avoir)\s+(.+?)\s*-\s*(?:AVOIR\s+)?(?:VTE-)?[A-Z0-9\/\-]+\s*\(label/i);
+    // Try to match: "Facture SUPPLIER_NAME - INVOICE_NUMBER (label généré)"
+    const match=label.match(/^(?:Facture|Avoir)\s+(.+?)\s+-\s+(?:AVOIR\s+)?(?:VTE-)?[\w\/\-\.]+\s*(?:\(label|\-\s*[\d,\.]+\s*CHF)/i);
     if(match)return match[1].trim();
-    // fallback: remove "Facture " prefix and " - number (label généré)" suffix
-    return label.replace(/^(Facture|Avoir)\s+/i,'').replace(/\s*-\s*[\w\/-]+\s*\(label.*$/,'').trim()||'Inconnu';
+    // Simpler fallback
+    const m2=label.match(/^(?:Facture|Avoir)\s+(.+?)\s+-\s+/i);
+    if(m2)return m2[1].trim();
+    return label.replace(/^(Facture|Avoir)\s+/i,'').replace(/\s*\(label.*$/,'').trim()||'Inconnu';
   },
 
-  // Initialize default map for known suppliers
   initDefaults(){
     const map=this._getMap();
     const defaults={
       '135128272':'Food','225921410':'Food',
       '135131297':'Bar',
-      '138286809':'Travaux','213706779':'Travaux',
-      '135132417':'Hygiène','150618374':'Hygiène',
-      '157926754':'G&A',
-      '148604506':'Matériel',
-      '135731681':'Communication',
-      '138599892':'Restaurant',
-      '135731679':'Compte courant',
+      '138286809':'Travaux & Maintenance','213706779':'Travaux & Maintenance',
+      '135132417':'Hygiène & Entretien','150618374':'Hygiène & Entretien',
+      '157926754':'Transport & Véhicules',
+      '148604506':'Matériel & Équipement',
+      '135731681':'Communication & Marketing',
+      '138599892':'Food',
+      '135731679':'Compte courant associé',
     };
     let changed=false;
     for(const[id,cat]of Object.entries(defaults)){
@@ -320,33 +354,38 @@ const SupplierMap={
     return map;
   },
 
-  // Categorize an array of invoices
   categorize(invoices){
-    const result={Food:[],Bar:[],other:[]};
+    const result={};
+    ALL_CATEGORIES.forEach(c=>{result[c]=[];});
     invoices.forEach(inv=>{
       const sid=String(inv.supplier?.id||'');
       const cat=this.getCategory(sid);
-      if(cat==='Food')result.Food.push(inv);
-      else if(cat==='Bar')result.Bar.push(inv);
-      else result.other.push(inv);
+      if(!result[cat])result[cat]=[];
+      result[cat].push(inv);
     });
     return result;
   },
 
-  // Get total amounts by category
   getTotals(invoices){
     const totals={};
-    this.CATEGORIES.forEach(c=>{totals[c]=0;});
+    ALL_CATEGORIES.forEach(c=>{totals[c]=0;});
     invoices.forEach(inv=>{
       const sid=String(inv.supplier?.id||'');
       const cat=this.getCategory(sid);
       totals[cat]=(totals[cat]||0)+parseFloat(inv.amount||0);
     });
     return totals;
+  },
+
+  getGroupTotals(totals){
+    const groupTotals={};
+    for(const[group,info]of Object.entries(COST_GROUPS)){
+      groupTotals[group]=info.cats.reduce((s,c)=>s+(totals[c]||0),0);
+    }
+    return groupTotals;
   }
 };
 
-// Initialize defaults on load
 SupplierMap.initDefaults();
 
 // ===== PENNYLANE SERVICE =====
@@ -802,22 +841,22 @@ function Finance(){
 
 // ===== COSTS =====
 function Costs(){
-  const[tab,setTab]=useState('food');
+  const[tab,setTab]=useState('overview');
   const[allInvoices,setAllInvoices]=useState([]);
   const[loading,setLoading]=useState(false);
   const[loaded,setLoaded]=useState(false);
   const[supplierNames,setSupplierNames]=useState({});
   const[editingSupplier,setEditingSupplier]=useState(null);
-  const[mapVersion,setMapVersion]=useState(0); // force re-render on map change
+  const[mapVersion,setMapVersion]=useState(0);
+  const[expandedCat,setExpandedCat]=useState(null);
+  const[filterCat,setFilterCat]=useState('Tous');
 
-  // Load real data from Pennylane
   useEffect(()=>{
     if(PennylaneService.getToken()){
       setLoading(true);
       PennylaneService.getAllSupplierInvoices({maxPages:5})
         .then(invoices=>{
           setAllInvoices(invoices);
-          // Build supplier names from labels
           const names={};
           invoices.forEach(inv=>{
             const sid=String(inv.supplier?.id||'');
@@ -830,23 +869,22 @@ function Costs(){
     }
   },[]);
 
-  // Categorize invoices
   const categorized=useMemo(()=>SupplierMap.categorize(allInvoices),[allInvoices,mapVersion]);
   const totals=useMemo(()=>SupplierMap.getTotals(allInvoices),[allInvoices,mapVersion]);
+  const groupTotals=useMemo(()=>SupplierMap.getGroupTotals(totals),[totals]);
   const totalAll=Object.values(totals).reduce((s,v)=>s+v,0);
   const foodTotal=totals['Food']||0;
   const barTotal=totals['Bar']||0;
-  const foodPct=totalAll>0?(foodTotal/totalAll*100).toFixed(1):0;
-  const barPct=totalAll>0?(barTotal/totalAll*100).toFixed(1):0;
+  const primeCost=(foodTotal+barTotal+(totals['Staff']||0));
 
-  // Group invoices by supplier for the mapping tab
   const supplierGroups=useMemo(()=>{
     const groups={};
     allInvoices.forEach(inv=>{
       const sid=String(inv.supplier?.id||'');
       if(!sid)return;
-      if(!groups[sid])groups[sid]={id:sid,name:supplierNames[sid]||'Inconnu',total:0,count:0,cat:SupplierMap.getCategory(sid)};
+      if(!groups[sid])groups[sid]={id:sid,name:supplierNames[sid]||'Inconnu',total:0,totalHT:0,count:0,cat:SupplierMap.getCategory(sid)};
       groups[sid].total+=parseFloat(inv.amount||0);
+      groups[sid].totalHT+=parseFloat(inv.currency_amount_before_tax||0);
       groups[sid].count++;
     });
     return Object.values(groups).sort((a,b)=>Math.abs(b.total)-Math.abs(a.total));
@@ -858,89 +896,176 @@ function Costs(){
     setEditingSupplier(null);
   };
 
+  // Helper: render invoice table for a category
+  const InvoiceTable=({catName,invoices,color})=>{
+    const sorted=invoices.sort((a,b)=>new Date(b.date)-new Date(a.date));
+    const totalTTC=invoices.reduce((s,i)=>s+parseFloat(i.amount||0),0);
+    const totalHT=invoices.reduce((s,i)=>s+parseFloat(i.currency_amount_before_tax||0),0);
+    return(<div className="card" style={{marginBottom:14}}>
+      <div className="card-h">
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <div style={{width:4,height:28,borderRadius:2,background:color||'var(--bordeaux)'}}/>
+          <div><div className="card-t">{catName}</div><div className="card-st">{invoices.length} facture{invoices.length>1?'s':''} — Total: {eur(totalTTC)}</div></div>
+        </div>
+        <span className="badge b-ima">Pennylane</span>
+      </div>
+      <div className="card-b"><div className="tbl"><table>
+        <thead><tr><th>Fournisseur</th><th>N° Facture</th><th>Date</th><th style={{textAlign:'right'}}>HT</th><th style={{textAlign:'right'}}>TTC</th><th>Statut</th></tr></thead>
+        <tbody>{sorted.map((inv,i)=>(
+          <tr key={inv.id||i}>
+            <td style={{fontWeight:500}}>{SupplierMap.extractName(inv)}</td>
+            <td style={{fontSize:12}}>{inv.invoice_number||'—'}</td>
+            <td style={{fontSize:12}}>{inv.date||'—'}</td>
+            <td style={{textAlign:'right'}}>{eur(parseFloat(inv.currency_amount_before_tax||0))}</td>
+            <td style={{textAlign:'right',fontWeight:600}}>{eur(parseFloat(inv.amount||0))}</td>
+            <td><span className={`badge ${inv.payment_status==='paid'?'b-ok':'b-warn'}`}>{inv.payment_status==='paid'?'Payée':'À traiter'}</span></td>
+          </tr>))}</tbody>
+        <tfoot><tr style={{fontWeight:700,background:'var(--gris-50)',borderTop:'2px solid var(--gris-300)'}}>
+          <td>TOTAL</td><td/><td/>
+          <td style={{textAlign:'right'}}>{eur(totalHT)}</td>
+          <td style={{textAlign:'right',color:color||'var(--bordeaux)',fontSize:15}}>{eur(totalTTC)}</td><td/>
+        </tr></tfoot>
+      </table></div></div>
+    </div>);
+  };
+
   return(<div className="fin">
     <div className="tabs">
-      <div className={`tab ${tab==='food'?'active':''}`} onClick={()=>setTab('food')}>Food Cost</div>
-      <div className={`tab ${tab==='bar'?'active':''}`} onClick={()=>setTab('bar')}>Bar Cost</div>
-      <div className={`tab ${tab==='fournisseurs'?'active':''}`} onClick={()=>setTab('fournisseurs')}>Fournisseurs Pennylane</div>
-      <div className={`tab ${tab==='mapping'?'active':''}`} onClick={()=>setTab('mapping')}>Mapping catégories</div>
+      <div className={`tab ${tab==='overview'?'active':''}`} onClick={()=>setTab('overview')}>Vue d'ensemble</div>
+      <div className={`tab ${tab==='food'?'active':''}`} onClick={()=>setTab('food')}>Food</div>
+      <div className={`tab ${tab==='bar'?'active':''}`} onClick={()=>setTab('bar')}>Bar</div>
+      <div className={`tab ${tab==='charges'?'active':''}`} onClick={()=>setTab('charges')}>Charges</div>
+      <div className={`tab ${tab==='fournisseurs'?'active':''}`} onClick={()=>setTab('fournisseurs')}>Tous les fournisseurs</div>
+      <div className={`tab ${tab==='mapping'?'active':''}`} onClick={()=>setTab('mapping')}>Mapping</div>
     </div>
-    {loading&&<div style={{textAlign:'center',padding:40}}><div className="spinner" style={{width:24,height:24}}/><div style={{marginTop:10,fontSize:13,color:'var(--gris-500)'}}>Chargement des données Pennylane...</div></div>}
+
+    {loading&&<div style={{textAlign:'center',padding:40}}><div className="spinner" style={{width:24,height:24}}/><div style={{marginTop:10,fontSize:13,color:'var(--gris-500)'}}>Chargement Pennylane...</div></div>}
 
     {!loading&&loaded&&<div>
-    {/* KPI - Real data */}
+    {/* KPI */}
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">Achats Food</div><div className="kpi-val">{eur(foodTotal)}</div><div className="kpi-chg pos"><span className="badge b-ok">{categorized.Food.length} factures</span></div></div>
-      <div className="kpi"><div className="kpi-label">Achats Bar</div><div className="kpi-val">{eur(barTotal)}</div><div className="kpi-chg pos"><span className="badge b-info">{categorized.Bar.length} factures</span></div></div>
-      <div className="kpi"><div className="kpi-label">Total achats</div><div className="kpi-val">{eur(totalAll)}</div><div className="kpi-chg neu">{allInvoices.length} factures</div></div>
-      <div className="kpi"><div className="kpi-label">Non classé</div><div className="kpi-val" style={{color:(totals['Non classé']||0)>0?'var(--orange)':'var(--vert)'}}>{eur(totals['Non classé']||0)}</div>
-        <div className="kpi-chg neu">{supplierGroups.filter(s=>s.cat==='Non classé').length} fournisseurs</div></div>
+      <div className="kpi"><div className="kpi-label">Achats Food</div><div className="kpi-val" style={{color:'#059669'}}>{eur(foodTotal)}</div><div className="kpi-chg pos">{(categorized['Food']||[]).length} factures</div></div>
+      <div className="kpi"><div className="kpi-label">Achats Bar</div><div className="kpi-val" style={{color:'#581527'}}>{eur(barTotal)}</div><div className="kpi-chg pos">{(categorized['Bar']||[]).length} factures</div></div>
+      <div className="kpi"><div className="kpi-label">Total charges</div><div className="kpi-val">{eur(totalAll)}</div><div className="kpi-chg neu">{allInvoices.length} factures</div></div>
+      <div className="kpi"><div className="kpi-label">Non classé</div><div className="kpi-val" style={{color:(totals['Non classé']||0)>0?'var(--rouge)':'var(--vert)'}}>{eur(totals['Non classé']||0)}</div>
+        <div className="kpi-chg neg">{supplierGroups.filter(s=>s.cat==='Non classé').length} fournisseurs</div></div>
     </div>
 
-    {/* TAB: FOOD */}
+    {/* ===== TAB: OVERVIEW ===== */}
+    {tab==='overview'&&<div>
+      {/* Cost groups summary */}
+      {Object.entries(COST_GROUPS).map(([groupName,groupInfo])=>{
+        const groupTotal=groupInfo.cats.reduce((s,c)=>s+(totals[c]||0),0);
+        if(groupTotal===0&&groupName==='Hors Exploitation')return null;
+        const catsWithData=groupInfo.cats.filter(c=>(totals[c]||0)!==0);
+        return(<div className="card" key={groupName} style={{marginBottom:14}}>
+          <div className="card-h" style={{cursor:'pointer'}} onClick={()=>setExpandedCat(expandedCat===groupName?null:groupName)}>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              <div style={{width:4,height:36,borderRadius:2,background:groupInfo.color}}/>
+              <div>
+                <div className="card-t">{groupName}</div>
+                <div className="card-st">{groupInfo.desc} — {catsWithData.length} catégorie{catsWithData.length>1?'s':''}</div>
+              </div>
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:14}}>
+              <div style={{textAlign:'right'}}>
+                <div style={{fontSize:22,fontWeight:700,color:groupInfo.color}}>{eur(groupTotal)}</div>
+                <div style={{fontSize:11,color:'var(--gris-400)'}}>{totalAll>0?((groupTotal/totalAll)*100).toFixed(1):0}% du total</div>
+              </div>
+              <I.Chev/>
+            </div>
+          </div>
+          {(expandedCat===groupName||groupName.includes('Prime'))&&<div className="card-b" style={{paddingTop:0}}>
+            {catsWithData.map(cat=>{
+              const catInvoices=categorized[cat]||[];
+              const catTotal=totals[cat]||0;
+              const catHT=catInvoices.reduce((s,i)=>s+parseFloat(i.currency_amount_before_tax||0),0);
+              return(<div key={cat} style={{padding:'10px 0',borderBottom:'1px solid var(--gris-100)'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}} onClick={()=>setExpandedCat(expandedCat===cat?groupName:cat)}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <div style={{width:10,height:10,borderRadius:3,background:CAT_COLORS[cat]||'var(--gris-400)'}}/>
+                    <div style={{fontWeight:500,fontSize:13}}>{cat}</div>
+                    <span className="badge b-ima" style={{fontSize:9}}>{catInvoices.length} fact.</span>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:14}}>
+                    <div style={{fontSize:11,color:'var(--gris-500)'}}>HT: {eur(catHT)}</div>
+                    <div style={{fontWeight:700,fontSize:14}}>{eur(catTotal)}</div>
+                    <div style={{width:100}}><div className="pbar"><div className="pfill" style={{width:`${totalAll>0?Math.min(Math.abs(catTotal/totalAll)*100*3,100):0}%`,background:CAT_COLORS[cat]||'var(--gris-400)'}}/></div></div>
+                  </div>
+                </div>
+                {expandedCat===cat&&<div style={{marginTop:8}}><div className="tbl"><table style={{fontSize:12}}>
+                  <thead><tr><th>Fournisseur</th><th>Date</th><th style={{textAlign:'right'}}>HT</th><th style={{textAlign:'right'}}>TTC</th></tr></thead>
+                  <tbody>{catInvoices.sort((a,b)=>new Date(b.date)-new Date(a.date)).map((inv,i)=>(
+                    <tr key={inv.id||i}><td>{SupplierMap.extractName(inv)}</td><td>{inv.date}</td>
+                    <td style={{textAlign:'right'}}>{eur(parseFloat(inv.currency_amount_before_tax||0))}</td>
+                    <td style={{textAlign:'right',fontWeight:600}}>{eur(parseFloat(inv.amount||0))}</td></tr>
+                  ))}</tbody>
+                </table></div></div>}
+              </div>);
+            })}
+            {catsWithData.length===0&&<div style={{padding:10,color:'var(--gris-400)',fontSize:12}}>Aucune facture dans ce groupe</div>}
+          </div>}
+        </div>);
+      })}
+
+      {/* Répartition bar chart */}
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Répartition des charges</div></div></div>
+        <div className="card-b">
+          <HBar data={ALL_CATEGORIES.filter(c=>(totals[c]||0)!==0).map(c=>({
+            label:c,value:Math.abs(totals[c]||0),display:eur(totals[c]||0)
+          })).sort((a,b)=>b.value-a.value)}
+            maxVal={Math.max(...ALL_CATEGORIES.map(c=>Math.abs(totals[c]||0)))||1}
+            color="var(--bordeaux)"/>
+        </div>
+      </div>
+    </div>}
+
+    {/* ===== TAB: FOOD ===== */}
     {tab==='food'&&<div>
-      <div className="card">
-        <div className="card-h"><div><div className="card-t">Achats Food — Pennylane</div><div className="card-st">{categorized.Food.length} factures fournisseurs classées Food</div></div><span className="badge b-ima">Pennylane Live</span></div>
-        <div className="card-b"><div className="tbl"><table>
-          <thead><tr><th>Fournisseur</th><th>N° Facture</th><th>Date</th><th style={{textAlign:'right'}}>HT</th><th style={{textAlign:'right'}}>TTC</th><th>Statut</th></tr></thead>
-          <tbody>{categorized.Food.sort((a,b)=>new Date(b.date)-new Date(a.date)).map((inv,i)=>(
-            <tr key={inv.id||i}>
-              <td style={{fontWeight:500}}>{SupplierMap.extractName(inv)}</td>
-              <td style={{fontSize:12}}>{inv.invoice_number||'—'}</td>
-              <td style={{fontSize:12}}>{inv.date||'—'}</td>
-              <td style={{textAlign:'right'}}>{eur(parseFloat(inv.currency_amount_before_tax||0))}</td>
-              <td style={{textAlign:'right',fontWeight:600}}>{eur(parseFloat(inv.amount||0))}</td>
-              <td><span className={`badge ${inv.payment_status==='paid'?'b-ok':'b-warn'}`}>{inv.payment_status==='paid'?'Payée':inv.payment_status==='to_be_processed'?'À traiter':'En cours'}</span></td>
-            </tr>))}</tbody>
-          {categorized.Food.length>0&&<tfoot><tr style={{fontWeight:700,background:'var(--gris-50)',borderTop:'2px solid var(--gris-300)'}}>
-            <td>TOTAL FOOD</td><td/><td/>
-            <td style={{textAlign:'right'}}>{eur(categorized.Food.reduce((s,i)=>s+parseFloat(i.currency_amount_before_tax||0),0))}</td>
-            <td style={{textAlign:'right',color:'var(--bordeaux)',fontSize:15}}>{eur(foodTotal)}</td><td/>
-          </tr></tfoot>}
-        </table></div></div>
-      </div>
-      {categorized.Food.length===0&&<div className="alert-i a-warn"><I.Warn/><div><div className="at">Aucune facture Food trouvée</div><div className="as">Vérifiez le mapping des fournisseurs dans l'onglet "Mapping catégories"</div></div></div>}
+      <InvoiceTable catName="Achats Food" invoices={categorized['Food']||[]} color="#059669"/>
+      {(categorized['Food']||[]).length===0&&<div className="alert-i a-warn"><I.Warn/><div><div className="at">Aucune facture Food</div><div className="as">Classez vos fournisseurs dans l'onglet Mapping</div></div></div>}
     </div>}
 
-    {/* TAB: BAR */}
+    {/* ===== TAB: BAR ===== */}
     {tab==='bar'&&<div>
-      <div className="card">
-        <div className="card-h"><div><div className="card-t">Achats Bar — Pennylane</div><div className="card-st">{categorized.Bar.length} factures fournisseurs classées Bar</div></div><span className="badge b-ima">Pennylane Live</span></div>
-        <div className="card-b"><div className="tbl"><table>
-          <thead><tr><th>Fournisseur</th><th>N° Facture</th><th>Date</th><th style={{textAlign:'right'}}>HT</th><th style={{textAlign:'right'}}>TTC</th><th>Statut</th></tr></thead>
-          <tbody>{categorized.Bar.sort((a,b)=>new Date(b.date)-new Date(a.date)).map((inv,i)=>(
-            <tr key={inv.id||i}>
-              <td style={{fontWeight:500}}>{SupplierMap.extractName(inv)}</td>
-              <td style={{fontSize:12}}>{inv.invoice_number||'—'}</td>
-              <td style={{fontSize:12}}>{inv.date||'—'}</td>
-              <td style={{textAlign:'right'}}>{eur(parseFloat(inv.currency_amount_before_tax||0))}</td>
-              <td style={{textAlign:'right',fontWeight:600}}>{eur(parseFloat(inv.amount||0))}</td>
-              <td><span className={`badge ${inv.payment_status==='paid'?'b-ok':'b-warn'}`}>{inv.payment_status==='paid'?'Payée':inv.payment_status==='to_be_processed'?'À traiter':'En cours'}</span></td>
-            </tr>))}</tbody>
-          {categorized.Bar.length>0&&<tfoot><tr style={{fontWeight:700,background:'var(--gris-50)',borderTop:'2px solid var(--gris-300)'}}>
-            <td>TOTAL BAR</td><td/><td/>
-            <td style={{textAlign:'right'}}>{eur(categorized.Bar.reduce((s,i)=>s+parseFloat(i.currency_amount_before_tax||0),0))}</td>
-            <td style={{textAlign:'right',color:'var(--bordeaux)',fontSize:15}}>{eur(barTotal)}</td><td/>
-          </tr></tfoot>}
-        </table></div></div>
-      </div>
+      <InvoiceTable catName="Achats Bar" invoices={categorized['Bar']||[]} color="#581527"/>
+      {(categorized['Bar']||[]).length===0&&<div className="alert-i a-warn"><I.Warn/><div><div className="at">Aucune facture Bar</div><div className="as">Classez vos fournisseurs dans l'onglet Mapping</div></div></div>}
     </div>}
 
-    {/* TAB: ALL INVOICES */}
+    {/* ===== TAB: CHARGES ===== */}
+    {tab==='charges'&&<div>
+      {Object.entries(COST_GROUPS).filter(([g])=>!g.includes('Prime')).map(([groupName,groupInfo])=>{
+        const catsWithData=groupInfo.cats.filter(c=>(categorized[c]||[]).length>0);
+        if(catsWithData.length===0)return null;
+        return catsWithData.map(cat=>(
+          <InvoiceTable key={cat} catName={cat} invoices={categorized[cat]||[]} color={CAT_COLORS[cat]}/>
+        ));
+      })}
+    </div>}
+
+    {/* ===== TAB: ALL INVOICES ===== */}
     {tab==='fournisseurs'&&<div>
+      <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
+        <button className={`btn btn-sm ${filterCat==='Tous'?'btn-primary':'btn-secondary'}`} onClick={()=>setFilterCat('Tous')}>Tous ({allInvoices.length})</button>
+        {ALL_CATEGORIES.filter(c=>(categorized[c]||[]).length>0).map(c=>(
+          <button key={c} className={`btn btn-sm ${filterCat===c?'btn-primary':'btn-secondary'}`} onClick={()=>setFilterCat(c)}
+            style={{borderLeft:`3px solid ${CAT_COLORS[c]||'var(--gris-400)'}`}}>{c} ({(categorized[c]||[]).length})</button>
+        ))}
+      </div>
       <div className="card">
-        <div className="card-h"><div><div className="card-t">Toutes les factures fournisseurs</div><div className="card-st">{allInvoices.length} factures — Données Pennylane</div></div><span className="badge b-ima">Pennylane Live</span></div>
+        <div className="card-h"><div><div className="card-t">{filterCat==='Tous'?'Toutes les factures':filterCat}</div><div className="card-st">Données Pennylane</div></div><span className="badge b-ima">Live</span></div>
         <div className="card-b"><div className="tbl"><table>
-          <thead><tr><th>Fournisseur</th><th>Catégorie</th><th>N° Facture</th><th>Date</th><th style={{textAlign:'right'}}>TTC</th><th>Statut</th></tr></thead>
-          <tbody>{allInvoices.sort((a,b)=>new Date(b.date)-new Date(a.date)).map((inv,i)=>{
+          <thead><tr><th>Fournisseur</th><th>Catégorie</th><th>N°</th><th>Date</th><th style={{textAlign:'right'}}>HT</th><th style={{textAlign:'right'}}>TTC</th><th>Statut</th></tr></thead>
+          <tbody>{(filterCat==='Tous'?allInvoices:(categorized[filterCat]||[])).sort((a,b)=>new Date(b.date)-new Date(a.date)).map((inv,i)=>{
             const sid=String(inv.supplier?.id||'');
             const cat=SupplierMap.getCategory(sid);
-            const catColor=cat==='Food'?'b-ok':cat==='Bar'?'b-info':cat==='Non classé'?'b-warn':'b-ima';
             return(<tr key={inv.id||i}>
               <td style={{fontWeight:500}}>{SupplierMap.extractName(inv)}</td>
-              <td><span className={`badge ${catColor}`}>{cat}</span></td>
-              <td style={{fontSize:12}}>{inv.invoice_number||'—'}</td>
+              <td><span style={{display:'inline-block',padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:500,background:CAT_COLORS[cat]||'var(--gris-400)',color:'white'}}>{cat}</span></td>
+              <td style={{fontSize:11}}>{inv.invoice_number||'—'}</td>
               <td style={{fontSize:12}}>{inv.date||'—'}</td>
+              <td style={{textAlign:'right',fontSize:12}}>{eur(parseFloat(inv.currency_amount_before_tax||0))}</td>
               <td style={{textAlign:'right',fontWeight:600}}>{eur(parseFloat(inv.amount||0))}</td>
               <td><span className={`badge ${inv.payment_status==='paid'?'b-ok':'b-warn'}`}>{inv.payment_status==='paid'?'Payée':'À traiter'}</span></td>
             </tr>);})}</tbody>
@@ -948,42 +1073,51 @@ function Costs(){
       </div>
     </div>}
 
-    {/* TAB: MAPPING */}
+    {/* ===== TAB: MAPPING ===== */}
     {tab==='mapping'&&<div>
-      <div className="alert-i a-info" style={{marginBottom:14}}><I.Warn/><div><div className="at">Classez vos fournisseurs pour alimenter le Food Cost et Bar Cost</div><div className="as">Cliquez sur la catégorie d'un fournisseur pour la modifier. Les fournisseurs "Non classé" ne sont pas comptés dans Food/Bar Cost.</div></div></div>
-      <div className="card">
-        <div className="card-h"><div><div className="card-t">Mapping fournisseurs → Catégories</div><div className="card-st">{supplierGroups.length} fournisseurs — {supplierGroups.filter(s=>s.cat==='Non classé').length} à classer</div></div></div>
-        <div className="card-b"><div className="tbl"><table>
-          <thead><tr><th style={{textAlign:'left'}}>Fournisseur</th><th>Catégorie actuelle</th><th style={{textAlign:'right'}}>Total factures</th><th style={{textAlign:'center'}}>Nb</th><th>Changer</th></tr></thead>
-          <tbody>{supplierGroups.map(s=>{
-            const catColor=s.cat==='Food'?'b-ok':s.cat==='Bar'?'b-info':s.cat==='Non classé'?'b-err':'b-ima';
-            return(<tr key={s.id} style={{background:s.cat==='Non classé'?'rgba(220,38,38,.03)':'transparent'}}>
-              <td style={{fontWeight:500}}>{s.name}</td>
-              <td><span className={`badge ${catColor}`}>{s.cat}</span></td>
-              <td style={{textAlign:'right',fontWeight:600}}>{eur(s.total)}</td>
-              <td style={{textAlign:'center'}}>{s.count}</td>
-              <td>
-                {editingSupplier===s.id?
-                  <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                    {SupplierMap.CATEGORIES.map(cat=>(
-                      <button key={cat} className={`btn btn-sm ${s.cat===cat?'btn-primary':'btn-secondary'}`}
-                        onClick={()=>handleCategoryChange(s.id,cat)} style={{fontSize:10,padding:'4px 8px'}}>{cat}</button>
-                    ))}
-                  </div>
-                  :<button className="btn btn-sm btn-secondary" onClick={()=>setEditingSupplier(s.id)}>Modifier</button>
-                }
-              </td>
-            </tr>);
-          })}</tbody>
-        </table></div></div>
-      </div>
-      <div className="card" style={{marginTop:14}}>
-        <div className="card-h"><div><div className="card-t">Répartition par catégorie</div></div></div>
-        <div className="card-b">
-          <HBar data={SupplierMap.CATEGORIES.filter(c=>(totals[c]||0)!==0).map(c=>({label:c,value:Math.abs(totals[c]||0),display:eur(totals[c]||0)})).sort((a,b)=>b.value-a.value)}
-            maxVal={Math.max(...Object.values(totals).map(Math.abs))||1}/>
-        </div>
-      </div>
+      {supplierGroups.filter(s=>s.cat==='Non classé').length>0&&<div className="alert-i a-err" style={{marginBottom:14}}><I.Warn/><div><div className="at">{supplierGroups.filter(s=>s.cat==='Non classé').length} fournisseur(s) non classé(s)</div><div className="as">Cliquez sur "Modifier" pour assigner une catégorie. Les fournisseurs non classés apparaissent en haut.</div></div></div>}
+
+      {/* Group by cost group */}
+      {Object.entries(COST_GROUPS).map(([groupName,groupInfo])=>{
+        const groupSuppliers=supplierGroups.filter(s=>groupInfo.cats.includes(s.cat));
+        if(groupSuppliers.length===0&&groupName!=='Hors Exploitation')return null;
+        const suppliersToShow=groupName==='Hors Exploitation'?
+          supplierGroups.filter(s=>groupInfo.cats.includes(s.cat)):groupSuppliers;
+        if(suppliersToShow.length===0)return null;
+        return(<div className="card" key={groupName} style={{marginBottom:14}}>
+          <div className="card-h"><div>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <div style={{width:4,height:20,borderRadius:2,background:groupInfo.color}}/>
+              <div className="card-t">{groupName}</div>
+            </div>
+            <div className="card-st">{suppliersToShow.length} fournisseur(s)</div>
+          </div></div>
+          <div className="card-b"><div className="tbl"><table>
+            <thead><tr><th style={{textAlign:'left'}}>Fournisseur</th><th>Catégorie</th><th style={{textAlign:'right'}}>Total TTC</th><th style={{textAlign:'center'}}>Factures</th><th style={{width:200}}>Action</th></tr></thead>
+            <tbody>{suppliersToShow.sort((a,b)=>a.cat==='Non classé'?-1:b.cat==='Non classé'?1:Math.abs(b.total)-Math.abs(a.total)).map(s=>(
+              <tr key={s.id} style={{background:s.cat==='Non classé'?'rgba(220,38,38,.04)':'transparent'}}>
+                <td style={{fontWeight:500}}>{s.name}</td>
+                <td><span style={{display:'inline-block',padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:600,background:CAT_COLORS[s.cat]||'var(--gris-400)',color:'white'}}>{s.cat}</span></td>
+                <td style={{textAlign:'right',fontWeight:600}}>{eur(s.total)}</td>
+                <td style={{textAlign:'center'}}>{s.count}</td>
+                <td>
+                  {editingSupplier===s.id?
+                    <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
+                      {ALL_CATEGORIES.map(cat=>(
+                        <button key={cat} onClick={()=>handleCategoryChange(s.id,cat)}
+                          style={{fontSize:9,padding:'3px 6px',borderRadius:4,border:'1px solid var(--gris-200)',background:s.cat===cat?CAT_COLORS[cat]||'var(--bordeaux)':'white',
+                            color:s.cat===cat?'white':'var(--gris-700)',cursor:'pointer',fontFamily:'inherit',fontWeight:s.cat===cat?600:400}}>
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                    :<button className="btn btn-sm btn-secondary" onClick={()=>setEditingSupplier(s.id)}>Modifier</button>
+                  }
+                </td>
+              </tr>))}</tbody>
+          </table></div></div>
+        </div>);
+      })}
     </div>}
     </div>}
 
