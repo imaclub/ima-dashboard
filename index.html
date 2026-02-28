@@ -464,18 +464,7 @@ const StaffRegistry={
   deactivate(id){this.update(id,{active:false});},
 
   initDefaults(){
-    if(this._getAll().length>0)return;
-    const defaults=[
-      {nom:'Marco Rossi',poste:'Chef de cuisine',section:'cuisine',tipCategory:'CHEF',points:2,contrat:'CDI',tel:'06 12 34 56 78',dateEntree:'15/09/2024',tips:false,coutBrut:6800,heures:196,extras:12},
-      {nom:'Julie Martin',poste:'Sous-chef',section:'cuisine',tipCategory:'CHEF',points:2,contrat:'CDI',tel:'06 23 45 67 89',dateEntree:'01/10/2024',tips:false,coutBrut:4200,heures:184,extras:8},
-      {nom:'Thomas Berger',poste:'Resp. salle',section:'salle',tipCategory:'MANAGERS',points:5,contrat:'CDI',tel:'06 34 56 78 90',dateEntree:'20/09/2024',tips:true,coutBrut:4500,heures:180,extras:15},
-      {nom:'Emma Dubois',poste:'Chef barman',section:'salle',tipCategory:'BAR',points:4,contrat:'CDI',tel:'06 45 67 89 01',dateEntree:'15/09/2024',tips:true,coutBrut:4100,heures:176,extras:20},
-      {nom:'Pierre Leroy',poste:'Sommelier',section:'salle',tipCategory:'FLOOR',points:4,contrat:'CDI',tel:'06 56 78 90 12',dateEntree:'01/12/2024',tips:true,coutBrut:3800,heures:168,extras:4},
-      {nom:'Sofia Moreau',poste:'Commis cuisine',section:'cuisine',tipCategory:'CHEF',points:2,contrat:'CDD',tel:'06 67 89 01 23',dateEntree:'15/12/2025',tips:false,coutBrut:2400,heures:160,extras:0},
-      {nom:'Lucas Petit',poste:'Serveur',section:'salle',tipCategory:'FLOOR',points:3,contrat:'CDI',tel:'06 78 90 12 34',dateEntree:'10/10/2024',tips:true,coutBrut:2200,heures:156,extras:8},
-      {nom:'Chloé Bernard',poste:'Serveuse',section:'salle',tipCategory:'COMMIS',points:2,contrat:'CDD',tel:'06 89 01 23 45',dateEntree:'01/01/2026',tips:true,coutBrut:2100,heures:152,extras:6}
-    ];
-    defaults.forEach(d=>this.add(d));
+    // No default employees in production
   }
 };
 
@@ -664,90 +653,92 @@ function Spark({data,color='var(--bordeaux)',w=120,h=32}){
   return(<svg width={w} height={h}><polyline points={pts} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>);
 }
 
-// ===== MOCK DATA =====
-const revData=[
-  {label:'Sep',ca:285000,prev:260000,food:170000,bar:115000},
-  {label:'Oct',ca:195000,prev:180000,food:115000,bar:80000},
-  {label:'Nov',ca:220000,prev:195000,food:130000,bar:90000},
-  {label:'Déc',ca:520000,prev:480000,food:310000,bar:210000},
-  {label:'Jan',ca:580000,prev:530000,food:345000,bar:235000},
-  {label:'Fév',ca:610000,prev:545000,food:365000,bar:245000},
-];
-const weekData=[
-  {label:'Lun',midi:4200,soir:12800},
-  {label:'Mar',midi:3800,soir:11500},
-  {label:'Mer',midi:5100,soir:14200},
-  {label:'Jeu',midi:4900,soir:15800},
-  {label:'Ven',midi:6200,soir:22500},
-  {label:'Sam',midi:8500,soir:28800},
-  {label:'Dim',midi:7200,soir:18500},
-];
-const costTrend=[28.5,29.1,27.8,26.2,25.8,26.5];
-const barTrend=[18.2,17.8,18.5,16.9,17.1,17.5];
-const staffTrend=[32.1,33.5,31.8,28.5,27.2,28.8];
+// ===== DATA =====
+// Real data comes from Pennylane, Trivec, SevenRooms APIs
+const revData=[];
+const weekData=[];
+const costTrend=[];
+const barTrend=[];
+const staffTrend=[];
+const mockPL=[];
+const staff=[];
+const stockAlerts=[];
+const resas=[];
+const posItems=[];
+const suppliers=[];
 
-const mockPL=[
-  {cat:'CA Food',m:365000,p:59.8},
-  {cat:'CA Bar',m:245000,p:40.2},
-  {cat:'Achats Food',m:-96725,p:-26.5},
-  {cat:'Achats Bar',m:-42875,p:-17.5},
-  {cat:'Masse salariale',m:-175680,p:-28.8},
-  {cat:'Loyer & charges',m:-48000,p:-7.9},
-  {cat:'Énergie',m:-18300,p:-3.0},
-  {cat:'Marketing',m:-6100,p:-1.0},
-  {cat:'Divers',m:-12200,p:-2.0},
-];
+// ===== USER MANAGEMENT =====
+const UserManager={
+  _getUsers(){
+    try{return JSON.parse(localStorage.getItem('ima_users')||'[]');}catch(e){return[];}
+  },
+  _saveUsers(users){localStorage.setItem('ima_users',JSON.stringify(users));},
+  getAll(){return this._getUsers();},
 
-const staff=[
-  {n:'Marco Rossi',p:'Chef de cuisine',h:196,x:12,c:6800},
-  {n:'Julie Martin',p:'Sous-chef',h:184,x:8,c:4200},
-  {n:'Thomas Berger',p:'Resp. salle',h:180,x:15,c:4500},
-  {n:'Emma Dubois',p:'Chef barman',h:176,x:20,c:4100},
-  {n:'Pierre Leroy',p:'Sommelier',h:168,x:4,c:3800},
-  {n:'Sofia Moreau',p:'Commis cuisine',h:160,x:0,c:2400},
-  {n:'Lucas Petit',p:'Serveur',h:156,x:8,c:2200},
-  {n:'Chloé Bernard',p:'Serveuse',h:152,x:6,c:2100},
-];
+  authenticate(email,password){
+    const users=this._getUsers();
+    const user=users.find(u=>u.email.toLowerCase()===email.toLowerCase()&&u.password===password&&u.active!==false);
+    if(user){
+      user.lastLogin=new Date().toISOString();
+      this._saveUsers(users);
+      localStorage.setItem('ima_current_user',JSON.stringify({id:user.id,nom:user.nom,email:user.email,role:user.role}));
+      return user;
+    }
+    return null;
+  },
 
-const stockAlerts=[
-  {p:'Truffe noire (Périgord)',s:120,u:'g',t:200,st:'critique'},
-  {p:'Caviar Osciètre',s:85,u:'g',t:150,st:'critique'},
-  {p:'Wagyu A5',s:1.2,u:'kg',t:2,st:'alerte'},
-  {p:'Champagne Krug',s:3,u:'bt',t:6,st:'alerte'},
-  {p:'Homard breton',s:4,u:'pcs',t:8,st:'alerte'},
-];
+  getCurrentUser(){
+    try{return JSON.parse(localStorage.getItem('ima_current_user')||'null');}catch(e){return null;}
+  },
 
-const resas=[
-  {n:'Famille Arnault',h:'12:30',c:6,t:'T1 - Salon privé',st:'confirmée',vip:true,note:'Anniversaire'},
-  {n:'M. & Mme Pinault',h:'13:00',c:4,t:'T5 - Vue montagne',st:'confirmée',vip:true,note:'Sans gluten'},
-  {n:'Groupe Rothschild',h:'19:30',c:8,t:'T2 - Grande table',st:'confirmée',vip:true,note:'Carte vins premium'},
-  {n:'M. Durand',h:'20:00',c:2,t:'T8 - Bar',st:'confirmée',vip:false,note:''},
-  {n:'Mme Chen',h:'20:30',c:4,t:'T12',st:'confirmée',vip:false,note:'Allergie fruits de mer'},
-  {n:'M. Smith',h:'21:00',c:2,t:'T9',st:'en attente',vip:false,note:''},
-  {n:'Famille Al-Rashid',h:'21:00',c:6,t:'T3 - Salon',st:'confirmée',vip:true,note:'Halal'},
-];
+  logout(){localStorage.removeItem('ima_current_user');},
 
-const posItems=[
-  {cat:'Entrées',ca:45200,q:320,tm:141},
-  {cat:'Plats',ca:128500,q:485,tm:265},
-  {cat:'Desserts',ca:32800,q:280,tm:117},
-  {cat:'Cocktails',ca:68500,q:620,tm:110},
-  {cat:'Vins',ca:125000,q:380,tm:329},
-  {cat:'Spiritueux',ca:42000,q:190,tm:221},
-  {cat:'Soft drinks',ca:8200,q:240,tm:34},
-];
+  addUser({nom,email,role,password}){
+    const users=this._getUsers();
+    if(users.find(u=>u.email.toLowerCase()===email.toLowerCase()))return{error:'Cet email existe déjà'};
+    const newUser={id:Date.now(),nom,email:email.toLowerCase(),role:role||'Viewer',password:password||Math.random().toString(36).slice(-8),active:true,createdAt:new Date().toISOString(),invitedBy:this.getCurrentUser()?.nom||'Système'};
+    users.push(newUser);
+    this._saveUsers(users);
+    return{success:true,user:newUser};
+  },
 
-const suppliers=[
-  {n:'Maison Troisgros',t:'Viandes premium',d:'25/02/2026',m:8450,s:'Payée'},
-  {n:'Rungis Express',t:'Légumes & Fruits',d:'26/02/2026',m:3200,s:'En attente'},
-  {n:'Petrossian',t:'Caviar & Saumon',d:'24/02/2026',m:5800,s:'Payée'},
-  {n:'Maison Perrier',t:'Fromages affinés',d:'22/02/2026',m:1850,s:'Payée'},
-  {n:'Cave de Bourgogne',t:'Vins & Champagnes',d:'20/02/2026',m:12400,s:'En attente'},
-  {n:'Lavazza Pro',t:'Café & Thés',d:'18/02/2026',m:680,s:'Payée'},
-];
+  removeUser(id){
+    const users=this._getUsers().filter(u=>u.id!==id);
+    this._saveUsers(users);
+  },
+
+  updateUser(id,updates){
+    const users=this._getUsers();
+    const idx=users.findIndex(u=>u.id===id);
+    if(idx>=0){users[idx]={...users[idx],...updates};this._saveUsers(users);}
+  },
+
+  initDefaults(){
+    if(this._getUsers().length>0)return;
+    this.addUser({nom:'Nicolas Spielmann',email:'nicolas@ima-club.com',role:'Admin',password:'N39suy**93'});
+  }
+};
+UserManager.initDefaults();
 
 // ===== LOGIN =====
 function Login({onLogin}){
+  const[email,setEmail]=useState('');
+  const[password,setPassword]=useState('');
+  const[error,setError]=useState('');
+
+  const handleLogin=()=>{
+    if(!email||!password){setError('Veuillez remplir tous les champs');return;}
+    const user=UserManager.authenticate(email,password);
+    if(user){
+      setError('');
+      onLogin(user);
+    }else{
+      setError('Email ou mot de passe incorrect');
+    }
+  };
+
+  const handleKeyDown=(e)=>{if(e.key==='Enter')handleLogin();};
+
   return(
     <div className="login">
       <div className="login-c">
@@ -755,9 +746,10 @@ function Login({onLogin}){
         <div className="login-tag">Tour de contrôle</div>
         <div className="login-form">
           <h3>Connexion</h3>
-          <div className="fg"><label className="fl">Email</label><input className="fi" type="email" defaultValue="nicolas@ima-club.com"/></div>
-          <div className="fg"><label className="fl">Mot de passe</label><input className="fi" type="password" placeholder="••••••••"/></div>
-          <button className="login-btn" onClick={onLogin}>Se connecter</button>
+          <div className="fg"><label className="fl">Email</label><input className="fi" type="email" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={handleKeyDown} placeholder="votre@email.com"/></div>
+          <div className="fg"><label className="fl">Mot de passe</label><input className="fi" type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={handleKeyDown} placeholder="••••••••"/></div>
+          {error&&<div className="error-msg" style={{marginBottom:10}}>{error}</div>}
+          <button className="login-btn" onClick={handleLogin}>Se connecter</button>
           <p style={{fontSize:10,color:'var(--gris-400)',textAlign:'center',marginTop:14}}>dashboard.ima-club.com</p>
         </div>
       </div>
@@ -767,95 +759,60 @@ function Login({onLogin}){
 
 // ===== DASHBOARD =====
 function Dashboard(){
+  const team=StaffRegistry.getActive();
+  const tipsEligible=StaffRegistry.getTipsEligible();
   return(<div className="fin">
+    <div style={{background:'var(--bleu-light)',border:'1px solid var(--bleu)',borderRadius:10,padding:16,marginBottom:20,fontSize:13,color:'var(--bleu)'}}>
+      <strong>Bienvenue sur le tableau de bord IMA.</strong> Les données s'afficheront automatiquement lorsque vos services seront connectés. Rendez-vous dans <strong>Administration</strong> pour configurer Pennylane, Trivec et SevenRooms.
+    </div>
     <div className="kpi-g">
-      <div className="kpi">
-        <div className="kpi-label">CA du mois</div>
-        <div className="kpi-val">{eur(610000)}</div>
-        <div className="kpi-chg pos"><I.Up/> +11.9% vs N-1</div>
-      </div>
-      <div className="kpi">
-        <div className="kpi-label">Couverts</div>
-        <div className="kpi-val">{fmt(2850)}</div>
-        <div className="kpi-chg pos"><I.Up/> +8.2% vs N-1</div>
-      </div>
-      <div className="kpi">
-        <div className="kpi-label">Ticket moyen</div>
-        <div className="kpi-val">{eur(214)}</div>
-        <div className="kpi-chg pos"><I.Up/> +3.4%</div>
-      </div>
-      <div className="kpi">
-        <div className="kpi-label">Taux occupation</div>
-        <div className="kpi-val">87%</div>
-        <div className="kpi-chg pos"><I.Up/> +5pts</div>
-      </div>
+      <div className="kpi"><div className="kpi-label">CA du mois</div><div className="kpi-val" style={{color:'var(--gris-300)'}}>—</div><div className="kpi-chg neu">En attente Trivec</div></div>
+      <div className="kpi"><div className="kpi-label">Couverts</div><div className="kpi-val" style={{color:'var(--gris-300)'}}>—</div><div className="kpi-chg neu">En attente Trivec</div></div>
+      <div className="kpi"><div className="kpi-label">Effectif actif</div><div className="kpi-val">{team.length}</div><div className="kpi-chg neu">{tipsEligible.length} bénéf. tips</div></div>
+      <div className="kpi"><div className="kpi-label">Pennylane</div><div className="kpi-val" style={{fontSize:16}}>{PennylaneService.getToken()?'Connecté':'Non configuré'}</div><div className={`kpi-chg ${PennylaneService.getToken()?'pos':'neg'}`}>{PennylaneService.getToken()?'API active':'Voir Administration'}</div></div>
     </div>
-
-    <div className="cost-row">
-      <div className="cost-c">
-        <div className="cl">Food Cost</div><div className="cv">26.5%</div><div className="ct">Objectif: 28%</div>
-        <div className="pbar"><div className="pfill" style={{width:'94.6%',background:'var(--vert)'}}/></div>
-      </div>
-      <div className="cost-c">
-        <div className="cl">Bar Cost</div><div className="cv">17.5%</div><div className="ct">Objectif: 20%</div>
-        <div className="pbar"><div className="pfill" style={{width:'87.5%',background:'var(--vert)'}}/></div>
-      </div>
-      <div className="cost-c">
-        <div className="cl">Staff Cost</div><div className="cv">28.8%</div><div className="ct">Objectif: 30%</div>
-        <div className="pbar"><div className="pfill" style={{width:'96%',background:'var(--orange)'}}/></div>
-      </div>
-    </div>
-
     <div className="cg">
       <div className="card">
-        <div className="card-h"><div><div className="card-t">Évolution du CA</div><div className="card-st">Saison 2025-2026</div></div></div>
-        <div className="card-b">
-          <BarChart data={revData} keys={['food','bar']} colors={['#581527','#c46880']} labels={['Food','Bar']} height={200}/>
+        <div className="card-h"><div><div className="card-t">Évolution du CA</div><div className="card-st">Données Trivec</div></div><span className="badge b-warn">Non connecté</span></div>
+        <div className="card-b" style={{padding:40,textAlign:'center',color:'var(--gris-400)'}}>
+          <div style={{fontSize:32,marginBottom:8}}>📊</div>
+          <div style={{fontWeight:500}}>Connectez Trivec pour voir l'évolution du chiffre d'affaires</div>
+          <div style={{fontSize:11,marginTop:4}}>Les graphiques s'afficheront automatiquement</div>
         </div>
       </div>
       <div className="card">
-        <div className="card-h"><div><div className="card-t">CA par jour (cette semaine)</div><div className="card-st">Midi vs Soir</div></div></div>
-        <div className="card-b">
-          <BarChart data={weekData} keys={['soir','midi']} colors={['#581527','#c46880']} labels={['Soir','Midi']} height={200}/>
+        <div className="card-h"><div><div className="card-t">Réservations du jour</div><div className="card-st">Données SevenRooms</div></div><span className="badge b-warn">Non connecté</span></div>
+        <div className="card-b" style={{padding:40,textAlign:'center',color:'var(--gris-400)'}}>
+          <div style={{fontSize:32,marginBottom:8}}>📋</div>
+          <div style={{fontWeight:500}}>Connectez SevenRooms pour voir les réservations</div>
+          <div style={{fontSize:11,marginTop:4}}>Les réservations du jour apparaîtront ici</div>
         </div>
       </div>
-
       <div className="card">
-        <div className="card-h"><div><div className="card-t">Répartition CA</div><div className="card-st">Food vs Bar</div></div></div>
+        <div className="card-h"><div><div className="card-t">Coûts Pennylane</div><div className="card-st">Factures fournisseurs</div></div>{PennylaneService.getToken()?<span className="badge b-ok">Connecté</span>:<span className="badge b-warn">Non connecté</span>}</div>
+        <div className="card-b" style={{padding:40,textAlign:'center',color:'var(--gris-400)'}}>
+          {PennylaneService.getToken()?
+            <div><div style={{fontWeight:500,color:'var(--vert)'}}>Pennylane connecté</div><div style={{fontSize:11,marginTop:4}}>Consultez Finance & P&L et Food & Bar Cost pour les détails</div></div>:
+            <div><div style={{fontSize:32,marginBottom:8}}>💰</div><div style={{fontWeight:500}}>Configurez Pennylane dans Administration</div></div>
+          }
+        </div>
+      </div>
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Équipe</div></div></div>
         <div className="card-b">
-          <div className="donut-wrap">
-            <Donut segments={[{value:59.8,color:'#581527'},{value:40.2,color:'#c46880'}]} centerValue="610k" centerLabel="CA total"/>
-            <div className="donut-legend">
-              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#581527'}}/> Food — 59.8% ({eur(365000)})</div>
-              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#c46880'}}/> Bar — 40.2% ({eur(245000)})</div>
+          {team.length>0?<div>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:8,fontSize:12,color:'var(--gris-500)'}}>
+              <span>Salle: {team.filter(e=>e.section==='salle').length}</span>
+              <span>Cuisine: {team.filter(e=>e.section==='cuisine').length}</span>
+              <span>Tips: {tipsEligible.length}</span>
             </div>
-          </div>
+            {team.slice(0,5).map(e=>(<div key={e.id} style={{padding:'6px 0',borderBottom:'1px solid var(--gris-100)',display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:12}}>
+              <span style={{fontWeight:500}}>{e.nom}</span>
+              <span className="badge b-ima" style={{fontSize:9}}>{e.poste}</span>
+            </div>))}
+            {team.length>5&&<div style={{textAlign:'center',fontSize:11,color:'var(--gris-400)',marginTop:8}}>+{team.length-5} autres</div>}
+          </div>:<div style={{textAlign:'center',padding:20,color:'var(--gris-400)',fontSize:12}}>Ajoutez votre équipe dans Staff & RH</div>}
         </div>
-      </div>
-
-      <div className="card">
-        <div className="card-h"><div><div className="card-t">Alertes du jour</div><div className="card-st">4 alertes actives</div></div></div>
-        <div className="card-b">
-          <div className="alert-i a-err"><I.Warn/><div><div className="at">Stock critique : Truffe noire</div><div className="as">Reste 120g — seuil 200g</div></div></div>
-          <div className="alert-i a-err"><I.Warn/><div><div className="at">Stock critique : Caviar Osciètre</div><div className="as">Reste 85g — seuil 150g</div></div></div>
-          <div className="alert-i a-warn"><I.Warn/><div><div className="at">Staff cost en hausse</div><div className="as">28.8% — proche de l'objectif 30%</div></div></div>
-          <div className="alert-i a-info"><I.Warn/><div><div className="at">7 réservations ce soir</div><div className="as">dont 4 VIP — 32 couverts prévus</div></div></div>
-        </div>
-      </div>
-    </div>
-
-    <div className="card">
-      <div className="card-h"><div><div className="card-t">Réservations du jour</div><div className="card-st">7 réservations — 32 couverts</div></div><span className="badge b-ima">SevenRooms</span></div>
-      <div className="card-b">
-        {resas.slice(0,5).map((r,i)=>(
-          <div className="resa" key={i}>
-            <div className="resa-l">
-              <div className="resa-av" style={{background:r.vip?'var(--bordeaux)':'var(--gris-400)'}}>{r.n[0]}</div>
-              <div><div className="resa-name">{r.n} {r.vip&&<span className="badge b-ima" style={{marginLeft:6}}>VIP</span>}</div><div className="resa-det">{r.note||r.t}</div></div>
-            </div>
-            <div className="resa-r"><div className="resa-time">{r.h}</div><div className="resa-pax">{r.c} couverts — {r.t}</div></div>
-          </div>
-        ))}
       </div>
     </div>
   </div>);
@@ -885,8 +842,8 @@ function Finance(){
   const totalCosts=Object.values(totals).reduce((s,v)=>s+v,0);
 
   // Mock CA (from POS data, not real yet)
-  const caFood=365000;
-  const caBar=245000;
+  const caFood=0;
+  const caBar=0;
   const caTotal=caFood+caBar;
 
   // Calculate EBITDA
@@ -1548,33 +1505,7 @@ function Stocks(){
   const[newItem,setNewItem]=useState({nom:'',cat:'Viandes',unite:'kg',prixUnit:0,seuil:0});
 
   // Full inventory with counted qty, theoretical stock, Trivec sales
-  const[inventory,setInventory]=useState([
-    // Viandes
-    {id:1,nom:'Wagyu A5 (striploin)',cat:'Viandes',unite:'kg',prixUnit:380,seuil:2,stockPrec:5.5,achats:8,ventesTrivec:12.3,compteInventaire:1.2},
-    {id:2,nom:'Côte de boeuf Salers',cat:'Viandes',unite:'kg',prixUnit:52,seuil:5,stockPrec:12,achats:25,ventesTrivec:28.5,compteInventaire:7.8},
-    {id:3,nom:'Agneau de lait Pyrénées',cat:'Viandes',unite:'kg',prixUnit:38,seuil:3,stockPrec:8,achats:15,ventesTrivec:18,compteInventaire:4.5},
-    {id:4,nom:'Canard (magret)',cat:'Viandes',unite:'kg',prixUnit:28,seuil:4,stockPrec:6,achats:20,ventesTrivec:21,compteInventaire:4.2},
-    // Poissons
-    {id:5,nom:'Bar de ligne',cat:'Poissons',unite:'kg',prixUnit:45,seuil:3,stockPrec:4,achats:18,ventesTrivec:17.5,compteInventaire:4.2},
-    {id:6,nom:'Homard breton',cat:'Poissons',unite:'pcs',prixUnit:32,seuil:8,stockPrec:10,achats:20,ventesTrivec:26,compteInventaire:4},
-    {id:7,nom:'Saint-Jacques (Normandie)',cat:'Poissons',unite:'kg',prixUnit:65,seuil:2,stockPrec:3,achats:12,ventesTrivec:12.5,compteInventaire:2.1},
-    // Épicerie fine
-    {id:8,nom:'Truffe noire (Périgord)',cat:'Épicerie fine',unite:'g',prixUnit:8.5,seuil:200,stockPrec:250,achats:400,ventesTrivec:530,compteInventaire:120},
-    {id:9,nom:'Caviar Osciètre',cat:'Épicerie fine',unite:'g',prixUnit:12,seuil:150,stockPrec:180,achats:200,ventesTrivec:295,compteInventaire:85},
-    {id:10,nom:'Huile truffe blanche',cat:'Épicerie fine',unite:'L',prixUnit:120,seuil:1,stockPrec:2,achats:3,ventesTrivec:3.2,compteInventaire:1.5},
-    // Vins
-    {id:11,nom:'Champagne Krug Grande Cuvée',cat:'Vins',unite:'bt',prixUnit:155,seuil:6,stockPrec:12,achats:12,ventesTrivec:21,compteInventaire:3},
-    {id:12,nom:'Meursault 1er Cru Perrières',cat:'Vins',unite:'bt',prixUnit:85,seuil:4,stockPrec:8,achats:12,ventesTrivec:14,compteInventaire:5.5},
-    {id:13,nom:'Châteauneuf-du-Pape',cat:'Vins',unite:'bt',prixUnit:42,seuil:6,stockPrec:15,achats:18,ventesTrivec:22,compteInventaire:10},
-    {id:14,nom:'Sancerre blanc',cat:'Vins',unite:'bt',prixUnit:22,seuil:8,stockPrec:18,achats:24,ventesTrivec:30,compteInventaire:11},
-    // Spiritueux
-    {id:15,nom:'Vodka Beluga Noble',cat:'Spiritueux',unite:'bt',prixUnit:48,seuil:3,stockPrec:5,achats:6,ventesTrivec:7.5,compteInventaire:3.2},
-    {id:16,nom:'Whisky Macallan 18',cat:'Spiritueux',unite:'bt',prixUnit:195,seuil:2,stockPrec:4,achats:3,ventesTrivec:5,compteInventaire:1.8},
-    {id:17,nom:'Gin Hendrick\'s',cat:'Spiritueux',unite:'bt',prixUnit:35,seuil:3,stockPrec:6,achats:8,ventesTrivec:10,compteInventaire:3.5},
-    // Légumes & Fruits
-    {id:18,nom:'Asperges vertes bio',cat:'Légumes',unite:'botte',prixUnit:6,seuil:10,stockPrec:15,achats:40,ventesTrivec:42,compteInventaire:12},
-    {id:19,nom:'Morilles séchées',cat:'Légumes',unite:'g',prixUnit:3.5,seuil:100,stockPrec:150,achats:200,ventesTrivec:260,compteInventaire:80},
-  ]);
+  const[inventory,setInventory]=useState([]);
 
   const cats=['Tous','Viandes','Poissons','Épicerie fine','Vins','Spiritueux','Légumes'];
   const filtered=filterCat==='Tous'?inventory:inventory.filter(i=>i.cat===filterCat);
@@ -1867,52 +1798,21 @@ function Stocks(){
 // ===== CRM =====
 function CRMPage(){
   return(<div className="fin">
+    <div style={{background:'var(--bleu-light)',border:'1px solid var(--bleu)',borderRadius:10,padding:16,marginBottom:20,fontSize:13,color:'var(--bleu)'}}>
+      <strong>CRM & Réservations</strong> — Cette page affichera les données SevenRooms une fois le service connecté.
+    </div>
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">Réservations</div><div className="kpi-val">7</div><div className="kpi-chg pos">32 couverts</div></div>
-      <div className="kpi"><div className="kpi-label">Taux occupation</div><div className="kpi-val">87%</div><div className="kpi-chg pos"><I.Up/> +5pts</div></div>
-      <div className="kpi"><div className="kpi-label">Clients VIP</div><div className="kpi-val">4</div><div className="kpi-chg pos">sur 7 résa</div></div>
-      <div className="kpi"><div className="kpi-label">Note moyenne</div><div className="kpi-val">4.8/5</div><div className="kpi-chg pos">SevenRooms</div></div>
+      <div className="kpi"><div className="kpi-label">Réservations</div><div className="kpi-val" style={{color:'var(--gris-300)'}}>—</div><div className="kpi-chg neu">En attente SevenRooms</div></div>
+      <div className="kpi"><div className="kpi-label">Taux occupation</div><div className="kpi-val" style={{color:'var(--gris-300)'}}>—</div><div className="kpi-chg neu">En attente</div></div>
+      <div className="kpi"><div className="kpi-label">Clients VIP</div><div className="kpi-val" style={{color:'var(--gris-300)'}}>—</div><div className="kpi-chg neu">En attente</div></div>
+      <div className="kpi"><div className="kpi-label">Note moyenne</div><div className="kpi-val" style={{color:'var(--gris-300)'}}>—</div><div className="kpi-chg neu">En attente</div></div>
     </div>
     <div className="card">
-      <div className="card-h"><div><div className="card-t">Réservations — 28 février 2026</div><div className="card-st">Synchronisé avec SevenRooms</div></div><span className="badge b-ima">SevenRooms</span></div>
-      <div className="card-b"><div className="tbl"><table>
-        <thead><tr><th>Client</th><th>Heure</th><th style={{textAlign:'center'}}>Couverts</th><th>Table</th><th>Notes</th><th>Statut</th></tr></thead>
-        <tbody>{resas.map((r,i)=><tr key={i}>
-          <td><div style={{display:'flex',alignItems:'center',gap:8}}>
-            <div style={{width:26,height:26,borderRadius:'50%',background:r.vip?'var(--bordeaux)':'var(--gris-300)',color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:600}}>{r.n[0]}</div>
-            <span style={{fontWeight:500}}>{r.n}</span>{r.vip&&<span className="badge b-ima">VIP</span>}
-          </div></td>
-          <td style={{fontWeight:600}}>{r.h}</td>
-          <td style={{textAlign:'center',fontWeight:600}}>{r.c}</td>
-          <td>{r.t}</td>
-          <td style={{fontSize:11,color:'var(--gris-500)'}}>{r.note||'—'}</td>
-          <td><span className={`badge ${r.st==='confirmée'?'b-ok':'b-warn'}`}>{r.st}</span></td>
-        </tr>)}</tbody>
-      </table></div></div>
-    </div>
-    <div className="cg" style={{marginTop:16}}>
-      <div className="card">
-        <div className="card-h"><div><div className="card-t">Occupation par service</div></div></div>
-        <div className="card-b">
-          <BarChart data={[
-            {label:'Lun',midi:65,soir:78},{label:'Mar',midi:55,soir:72},{label:'Mer',midi:70,soir:85},
-            {label:'Jeu',midi:72,soir:90},{label:'Ven',midi:85,soir:98},{label:'Sam',midi:95,soir:100},{label:'Dim',midi:80,soir:60}
-          ]} keys={['soir','midi']} colors={['#581527','#c46880']} labels={['Soir','Midi']} height={180}/>
-        </div>
-      </div>
-      <div className="card">
-        <div className="card-h"><div><div className="card-t">Profil clients</div></div></div>
-        <div className="card-b">
-          <div className="donut-wrap">
-            <Donut segments={[{value:35,color:'#581527'},{value:40,color:'#7a2d42'},{value:15,color:'#a04560'},{value:10,color:'#c46880'}]} centerValue="87%" centerLabel="Occupation"/>
-            <div className="donut-legend">
-              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#581527'}}/> VIP réguliers — 35%</div>
-              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#7a2d42'}}/> Touristes — 40%</div>
-              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#a04560'}}/> Locaux — 15%</div>
-              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#c46880'}}/> Corporate — 10%</div>
-            </div>
-          </div>
-        </div>
+      <div className="card-h"><div><div className="card-t">Réservations</div><div className="card-st">SevenRooms</div></div><span className="badge b-warn">Non connecté</span></div>
+      <div className="card-b" style={{padding:50,textAlign:'center',color:'var(--gris-400)'}}>
+        <div style={{fontSize:32,marginBottom:10}}>📋</div>
+        <div style={{fontWeight:500,marginBottom:4}}>Connectez SevenRooms pour afficher les réservations</div>
+        <div style={{fontSize:11}}>Rendez-vous dans Administration → Intégrations</div>
       </div>
     </div>
   </div>);
@@ -1920,34 +1820,22 @@ function CRMPage(){
 
 // ===== POS =====
 function POSPage(){
-  const total=posItems.reduce((s,i)=>s+i.ca,0);
   return(<div className="fin">
+    <div style={{background:'var(--bleu-light)',border:'1px solid var(--bleu)',borderRadius:10,padding:16,marginBottom:20,fontSize:13,color:'var(--bleu)'}}>
+      <strong>Caisses Trivec</strong> — Cette page affichera les données de vente une fois Trivec connecté.
+    </div>
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">CA POS (mois)</div><div className="kpi-val">{eur(total)}</div><div className="kpi-chg pos">Trivec</div></div>
-      <div className="kpi"><div className="kpi-label">Ticket moyen</div><div className="kpi-val">{eur(214)}</div><div className="kpi-chg pos"><I.Up/> +8.1%</div></div>
-      <div className="kpi"><div className="kpi-label">Transactions</div><div className="kpi-val">{fmt(2515)}</div><div className="kpi-chg pos"><I.Up/> +5.3%</div></div>
-      <div className="kpi"><div className="kpi-label">Panier bar moy.</div><div className="kpi-val">{eur(89)}</div><div className="kpi-chg pos"><I.Up/> +12.4%</div></div>
+      <div className="kpi"><div className="kpi-label">CA POS (mois)</div><div className="kpi-val" style={{color:'var(--gris-300)'}}>—</div><div className="kpi-chg neu">En attente Trivec</div></div>
+      <div className="kpi"><div className="kpi-label">Ticket moyen</div><div className="kpi-val" style={{color:'var(--gris-300)'}}>—</div><div className="kpi-chg neu">En attente</div></div>
+      <div className="kpi"><div className="kpi-label">Transactions</div><div className="kpi-val" style={{color:'var(--gris-300)'}}>—</div><div className="kpi-chg neu">En attente</div></div>
+      <div className="kpi"><div className="kpi-label">Panier bar moy.</div><div className="kpi-val" style={{color:'var(--gris-300)'}}>—</div><div className="kpi-chg neu">En attente</div></div>
     </div>
     <div className="card">
-      <div className="card-h"><div><div className="card-t">Ventes par catégorie — Février 2026</div><div className="card-st">Caisses Trivec</div></div><span className="badge b-ima">Trivec</span></div>
-      <div className="card-b"><div className="tbl"><table>
-        <thead><tr><th>Catégorie</th><th style={{textAlign:'right'}}>CA</th><th style={{textAlign:'right'}}>Qtés</th><th style={{textAlign:'right'}}>Ticket moy.</th><th style={{width:160}}>Part CA</th></tr></thead>
-        <tbody>{posItems.map((it,i)=><tr key={i}>
-          <td style={{fontWeight:500}}>{it.cat}</td>
-          <td style={{textAlign:'right',fontWeight:600}}>{eur(it.ca)}</td>
-          <td style={{textAlign:'right'}}>{fmt(it.q)}</td>
-          <td style={{textAlign:'right'}}>{eur(it.tm)}</td>
-          <td><div style={{display:'flex',alignItems:'center',gap:6}}>
-            <div className="pbar" style={{flex:1}}><div className="pfill" style={{width:`${(it.ca/total)*200}%`,background:'var(--bordeaux)'}}/></div>
-            <span style={{fontSize:11,fontWeight:500,minWidth:35}}>{((it.ca/total)*100).toFixed(1)}%</span>
-          </div></td>
-        </tr>)}</tbody>
-      </table></div></div>
-    </div>
-    <div className="card" style={{marginTop:16}}>
-      <div className="card-h"><div><div className="card-t">CA par catégorie</div></div></div>
-      <div className="card-b">
-        <HBar data={posItems.map(i=>({label:i.cat,value:i.ca}))} maxVal={130000}/>
+      <div className="card-h"><div><div className="card-t">Ventes par catégorie</div><div className="card-st">Trivec POS</div></div><span className="badge b-warn">Non connecté</span></div>
+      <div className="card-b" style={{padding:50,textAlign:'center',color:'var(--gris-400)'}}>
+        <div style={{fontSize:32,marginBottom:10}}>🧾</div>
+        <div style={{fontWeight:500,marginBottom:4}}>Connectez Trivec pour afficher les ventes</div>
+        <div style={{fontSize:11}}>Rendez-vous dans Administration → Intégrations</div>
       </div>
     </div>
   </div>);
@@ -2363,6 +2251,22 @@ function Settings(){
   const[showToken,setShowToken]=useState(false);
   const[testStatus,setTestStatus]=useState(null);
   const[testing,setTesting]=useState(false);
+  const[showInviteModal,setShowInviteModal]=useState(false);
+  const[inviteData,setInviteData]=useState({nom:'',email:'',role:'Directeur',password:Math.random().toString(36).slice(-8)});
+  const[inviteStatus,setInviteStatus]=useState(null);
+
+  const handleInviteUser=()=>{
+    if(!inviteData.nom||!inviteData.email){setInviteStatus({success:false,msg:'Nom et email requis'});return;}
+    const result=UserManager.addUser(inviteData);
+    if(result.error){setInviteStatus({success:false,msg:result.error});return;}
+    // Send invitation email via mailto (or EmailJS in future)
+    const subject=encodeURIComponent('Invitation au Dashboard IMA');
+    const body=encodeURIComponent(`Bonjour ${inviteData.nom},\n\nVous êtes invité(e) à accéder au Dashboard IMA — Tour de contrôle.\n\nURL : https://dashboard.ima-club.com\nEmail : ${inviteData.email}\nMot de passe temporaire : ${inviteData.password}\nRôle : ${inviteData.role}\n\nMerci de changer votre mot de passe après votre première connexion.\n\nCordialement,\n${UserManager.getCurrentUser()?.nom||'IMA'}`);
+    window.open(`mailto:${inviteData.email}?subject=${subject}&body=${body}`,'_blank');
+    setInviteStatus({success:true,msg:`Invitation créée pour ${inviteData.nom}. L'email s'ouvre dans votre messagerie.`});
+    setInviteData({nom:'',email:'',role:'Directeur',password:Math.random().toString(36).slice(-8)});
+    setTimeout(()=>setShowInviteModal(false),2000);
+  };
 
   const handleSaveToken=()=>{
     if(token){
@@ -2392,7 +2296,7 @@ function Settings(){
   };
 
   const[connectedIntegrations,setConnectedIntegrations]=useState({
-    trivec:true,sevenrooms:true,pennylane:!!PennylaneService.getToken()
+    trivec:false,sevenrooms:false,pennylane:!!PennylaneService.getToken()
   });
 
   const handleClearToken=()=>{
@@ -2480,22 +2384,63 @@ function Settings(){
         </div>
       </div>
       <div className="card">
-        <div className="card-h"><div><div className="card-t">Utilisateurs</div></div></div>
+        <div className="card-h"><div><div className="card-t">Utilisateurs du dashboard</div><div className="card-st">{UserManager.getAll().length} compte(s)</div></div>
+          <button className="btn btn-sm btn-primary" onClick={()=>setShowInviteModal(true)}>+ Inviter</button>
+        </div>
         <div className="card-b">
-          {[{n:'Nicolas Spielmann',r:'Associé — Admin',e:'nicolas@ima-club.com'},
-            {n:'Laurent Attias',r:'Associé — Admin',e:'laurent@ima-club.com'},
-            {n:'Marco Rossi',r:'Directeur',e:'marco@ima-club.com'}
-          ].map((u,i)=>(
-            <div key={i} style={{padding:'10px 0',borderBottom:i<2?'1px solid var(--gris-100)':'none',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          {UserManager.getAll().map((u,i,arr)=>(
+            <div key={u.id} style={{padding:'10px 0',borderBottom:i<arr.length-1?'1px solid var(--gris-100)':'none',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <div style={{display:'flex',alignItems:'center',gap:10}}>
-                <div style={{width:32,height:32,borderRadius:'50%',background:'var(--bordeaux)',color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600}}>{u.n[0]}</div>
-                <div><div style={{fontWeight:500,fontSize:13}}>{u.n}</div><div style={{fontSize:10,color:'var(--gris-400)'}}>{u.e}</div></div>
+                <div style={{width:32,height:32,borderRadius:'50%',background:'var(--bordeaux)',color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600}}>{u.nom?u.nom[0]:'?'}</div>
+                <div>
+                  <div style={{fontWeight:500,fontSize:13}}>{u.nom}</div>
+                  <div style={{fontSize:10,color:'var(--gris-400)'}}>{u.email}</div>
+                </div>
               </div>
-              <span className="badge b-ima">{u.r}</span>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <span className="badge b-ima">{u.role}</span>
+                {u.lastLogin&&<span style={{fontSize:9,color:'var(--gris-400)'}}>Vu {new Date(u.lastLogin).toLocaleDateString('fr-FR')}</span>}
+                {UserManager.getAll().length>1&&u.email!==UserManager.getCurrentUser()?.email&&
+                  <button className="btn btn-sm" style={{background:'var(--rouge-light)',color:'var(--rouge)',border:'none',padding:'3px 6px',fontSize:9,cursor:'pointer'}} onClick={()=>{if(confirm(`Supprimer ${u.nom} ?`)){UserManager.removeUser(u.id);setInviteStatus({success:true,msg:'Utilisateur supprimé'});}}}>Supprimer</button>
+                }
+              </div>
             </div>
           ))}
         </div>
       </div>
+      {showInviteModal&&<div className="modal-overlay" onClick={()=>setShowInviteModal(false)}>
+        <div className="modal" onClick={e=>e.stopPropagation()}>
+          <h3>Inviter un utilisateur <button className="modal-close" onClick={()=>setShowInviteModal(false)}>×</button></h3>
+          <div className="fg" style={{marginBottom:12}}>
+            <label className="fl">Nom complet</label>
+            <input className="fi" value={inviteData.nom} onChange={e=>setInviteData(p=>({...p,nom:e.target.value}))} placeholder="Prénom Nom"/>
+          </div>
+          <div className="fg" style={{marginBottom:12}}>
+            <label className="fl">Email</label>
+            <input className="fi" type="email" value={inviteData.email} onChange={e=>setInviteData(p=>({...p,email:e.target.value}))} placeholder="email@ima-club.com"/>
+          </div>
+          <div className="fg-row" style={{marginBottom:12}}>
+            <div className="fg">
+              <label className="fl">Rôle</label>
+              <select className="fi-select" value={inviteData.role} onChange={e=>setInviteData(p=>({...p,role:e.target.value}))}>
+                <option value="Admin">Admin</option>
+                <option value="Directeur">Directeur</option>
+                <option value="Comptable">Comptable (lecture seule)</option>
+                <option value="Viewer">Viewer</option>
+              </select>
+            </div>
+            <div className="fg">
+              <label className="fl">Mot de passe temporaire</label>
+              <input className="fi" value={inviteData.password} onChange={e=>setInviteData(p=>({...p,password:e.target.value}))} placeholder="Généré auto"/>
+            </div>
+          </div>
+          {inviteStatus&&<div className={inviteStatus.success?'success-msg':'error-msg'} style={{marginBottom:10}}>{inviteStatus.msg}</div>}
+          <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+            <button className="btn btn-secondary" onClick={()=>setShowInviteModal(false)}>Annuler</button>
+            <button className="btn btn-primary" onClick={handleInviteUser}>Envoyer l'invitation</button>
+          </div>
+        </div>
+      </div>}
       <div className="card">
         <div className="card-h"><div><div className="card-t">Objectifs & Seuils</div></div></div>
         <div className="card-b">
@@ -2520,9 +2465,12 @@ function Settings(){
 
 // ===== APP =====
 function App(){
-  const[auth,setAuth]=useState(false);
+  const[currentUser,setCurrentUser]=useState(()=>UserManager.getCurrentUser());
   const[page,setPage]=useState('dashboard');
   const[period,setPeriod]=useState('mois');
+
+  const handleLogin=(user)=>{setCurrentUser({id:user.id,nom:user.nom,email:user.email,role:user.role});};
+  const handleLogout=()=>{UserManager.logout();setCurrentUser(null);};
 
   const nav=[
     {sec:'Pilotage',items:[
@@ -2545,7 +2493,7 @@ function App(){
 
   const titles={dashboard:'Dashboard',finance:'Finance & P&L',costs:'Food & Bar Cost',staff:'Staff & RH',stocks:'Stocks & Inventaire',crm:'CRM & Réservations',pos:'Caisses (Trivec)',caisse:'Clôture de Caisse',tips:'Tips & Pourboires',settings:'Administration'};
 
-  if(!auth) return <Login onLogin={()=>setAuth(true)}/>;
+  if(!currentUser) return <Login onLogin={handleLogin}/>;
 
   const P=()=>{switch(page){
     case 'dashboard':return <Dashboard/>;case 'finance':return <Finance/>;case 'costs':return <Costs/>;
@@ -2569,9 +2517,10 @@ function App(){
             </div>
           ))}
         </nav>
-        <div className="sidebar-foot">
-          <div className="avatar">NS</div>
-          <div><div className="uname">Nicolas S.</div><div className="urole">Associé — Admin</div></div>
+        <div className="sidebar-foot" style={{cursor:'pointer'}} onClick={handleLogout} title="Se déconnecter">
+          <div className="avatar">{currentUser.nom?currentUser.nom.split(' ').map(w=>w[0]).join(''):'?'}</div>
+          <div style={{flex:1}}><div className="uname">{currentUser.nom}</div><div className="urole">{currentUser.role}</div></div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         </div>
       </aside>
       <main className="main">
