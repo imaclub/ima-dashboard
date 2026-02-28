@@ -256,6 +256,8 @@ const I={
   Chev:()=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>,
   Pin:()=><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>,
   Warn:()=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+  Cash:()=><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><circle cx="9" cy="10" r="1"/><path d="M15 10h.01"/></svg>,
+  Tips:()=><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
 };
 
 // ===== FORMATTERS =====
@@ -387,6 +389,97 @@ const SupplierMap={
 };
 
 SupplierMap.initDefaults();
+
+// ===== STAFF REGISTRY =====
+const TIP_CATEGORIES={
+  salle:{
+    MANAGERS:{label:'Managers',defaultPoints:5,color:'var(--bordeaux)'},
+    FLOOR:{label:'Floor',defaultPoints:4,color:'var(--orange)'},
+    COMMIS:{label:'Commis',defaultPoints:2,color:'var(--bleu)'},
+    BAR:{label:'Bar',defaultPoints:4,color:'#7c3aed'},
+    HOTESSE:{label:'Hôtesse / Com',defaultPoints:1,color:'var(--gris-500)'}
+  },
+  cuisine:{
+    CHEF:{label:'Chef & Sous-chefs',defaultPoints:2,color:'var(--vert)'}
+  }
+};
+
+const StaffRegistry={
+  _getAll(){
+    try{return JSON.parse(localStorage.getItem('ima_staff_v1')||'[]');}catch(e){return[];}
+  },
+  _saveAll(list){localStorage.setItem('ima_staff_v1',JSON.stringify(list));},
+
+  getAll(){return this._getAll();},
+  getActive(){return this._getAll().filter(e=>e.active!==false);},
+  getById(id){return this._getAll().find(e=>e.id===id);},
+
+  getBySectionAndCategory(section,tipCategory){
+    return this.getActive().filter(e=>e.section===section&&e.tipCategory===tipCategory);
+  },
+  getBySection(section){
+    return this.getActive().filter(e=>e.section===section);
+  },
+
+  getTipsEligible(){return this.getActive().filter(e=>e.tips);},
+
+  getResponsables(){return this.getActive().filter(e=>['Chef de cuisine','Resp. salle','Chef barman','Directeur','Manager'].includes(e.poste)||e.tipCategory==='MANAGERS');},
+
+  add(employee){
+    const all=this._getAll();
+    const newEmp={
+      id:Date.now(),
+      nom:employee.nom||'',
+      poste:employee.poste||'',
+      section:employee.section||'salle',
+      tipCategory:employee.tipCategory||'FLOOR',
+      points:employee.points||TIP_CATEGORIES[employee.section||'salle']?.[employee.tipCategory||'FLOOR']?.defaultPoints||3,
+      contrat:employee.contrat||'CDI',
+      tel:employee.tel||'',
+      dateEntree:employee.dateEntree||new Date().toLocaleDateString('fr-FR'),
+      tips:employee.tips!==false,
+      active:true,
+      coutBrut:employee.coutBrut||0,
+      heures:employee.heures||0,
+      extras:employee.extras||0,
+      ...employee
+    };
+    all.push(newEmp);
+    this._saveAll(all);
+    return newEmp;
+  },
+
+  update(id,updates){
+    const all=this._getAll();
+    const idx=all.findIndex(e=>e.id===id);
+    if(idx>=0){all[idx]={...all[idx],...updates};this._saveAll(all);}
+    return all[idx];
+  },
+
+  remove(id){
+    const all=this._getAll().filter(e=>e.id!==id);
+    this._saveAll(all);
+  },
+
+  deactivate(id){this.update(id,{active:false});},
+
+  initDefaults(){
+    if(this._getAll().length>0)return;
+    const defaults=[
+      {nom:'Marco Rossi',poste:'Chef de cuisine',section:'cuisine',tipCategory:'CHEF',points:2,contrat:'CDI',tel:'06 12 34 56 78',dateEntree:'15/09/2024',tips:false,coutBrut:6800,heures:196,extras:12},
+      {nom:'Julie Martin',poste:'Sous-chef',section:'cuisine',tipCategory:'CHEF',points:2,contrat:'CDI',tel:'06 23 45 67 89',dateEntree:'01/10/2024',tips:false,coutBrut:4200,heures:184,extras:8},
+      {nom:'Thomas Berger',poste:'Resp. salle',section:'salle',tipCategory:'MANAGERS',points:5,contrat:'CDI',tel:'06 34 56 78 90',dateEntree:'20/09/2024',tips:true,coutBrut:4500,heures:180,extras:15},
+      {nom:'Emma Dubois',poste:'Chef barman',section:'salle',tipCategory:'BAR',points:4,contrat:'CDI',tel:'06 45 67 89 01',dateEntree:'15/09/2024',tips:true,coutBrut:4100,heures:176,extras:20},
+      {nom:'Pierre Leroy',poste:'Sommelier',section:'salle',tipCategory:'FLOOR',points:4,contrat:'CDI',tel:'06 56 78 90 12',dateEntree:'01/12/2024',tips:true,coutBrut:3800,heures:168,extras:4},
+      {nom:'Sofia Moreau',poste:'Commis cuisine',section:'cuisine',tipCategory:'CHEF',points:2,contrat:'CDD',tel:'06 67 89 01 23',dateEntree:'15/12/2025',tips:false,coutBrut:2400,heures:160,extras:0},
+      {nom:'Lucas Petit',poste:'Serveur',section:'salle',tipCategory:'FLOOR',points:3,contrat:'CDI',tel:'06 78 90 12 34',dateEntree:'10/10/2024',tips:true,coutBrut:2200,heures:156,extras:8},
+      {nom:'Chloé Bernard',poste:'Serveuse',section:'salle',tipCategory:'COMMIS',points:2,contrat:'CDD',tel:'06 89 01 23 45',dateEntree:'01/01/2026',tips:true,coutBrut:2100,heures:152,extras:6}
+    ];
+    defaults.forEach(d=>this.add(d));
+  }
+};
+
+StaffRegistry.initDefaults();
 
 // ===== PENNYLANE SERVICE =====
 const PennylaneService={
@@ -770,65 +863,126 @@ function Dashboard(){
 
 // ===== FINANCE =====
 function Finance(){
-  const[useLive,setUseLive]=useState(false);
-  const[supplierInvoices,setSupplierInvoices]=useState([]);
+  const[allInvoices,setAllInvoices]=useState([]);
   const[loading,setLoading]=useState(false);
+  const[loaded,setLoaded]=useState(false);
+  const[expandedGroup,setExpandedGroup]=useState('Coûts Directs (Prime Cost)');
 
   useEffect(()=>{
-    if(useLive&&PennylaneService.getToken()){
+    if(PennylaneService.getToken()){
       setLoading(true);
-      PennylaneService.getSupplierInvoices({limit:10})
-        .then(invoices=>setSupplierInvoices(invoices))
+      PennylaneService.getAllSupplierInvoices({maxPages:5})
+        .then(invoices=>{
+          setAllInvoices(invoices);
+          setLoaded(true);
+        })
         .finally(()=>setLoading(false));
     }
-  },[useLive]);
+  },[]);
 
-  const ebitda=mockPL.reduce((s,l)=>s+l.m,0);
+  const totals=useMemo(()=>SupplierMap.getTotals(allInvoices),[allInvoices]);
+  const groupTotals=useMemo(()=>SupplierMap.getGroupTotals(totals),[totals]);
+  const totalCosts=Object.values(totals).reduce((s,v)=>s+v,0);
+
+  // Mock CA (from POS data, not real yet)
+  const caFood=365000;
+  const caBar=245000;
+  const caTotal=caFood+caBar;
+
+  // Calculate EBITDA
+  const staffCosts=totals['Staff']||0;
+  const primeCostTotal=(totals['Food']||0)+(totals['Bar']||0)+staffCosts;
+  const primeCostPct=caTotal>0?(primeCostTotal/caTotal)*100:0;
+  const ebitda=caTotal-totalCosts;
+
+  // Build P&L table data
+  const plData=[];
+  plData.push({type:'revenue',label:'CA Food',amount:caFood,pct:100*(caFood/caTotal),isSubsection:false,isBold:true,color:'var(--vert)'});
+  plData.push({type:'revenue',label:'CA Bar',amount:caBar,pct:100*(caBar/caTotal),isSubsection:false,isBold:true,color:'var(--vert)'});
+  plData.push({type:'spacer'});
+
+  for(const[groupName,groupInfo]of Object.entries(COST_GROUPS)){
+    const groupTotal=groupTotals[groupName]||0;
+    if(groupTotal===0)continue;
+    plData.push({type:'group',label:groupName,amount:-groupTotal,pct:-100*(groupTotal/caTotal),groupName,color:groupInfo.color,isBold:true});
+    const catsWithData=groupInfo.cats.filter(c=>(totals[c]||0)!==0);
+    for(const cat of catsWithData){
+      const catTotal=totals[cat]||0;
+      plData.push({type:'category',label:cat,amount:-catTotal,pct:-100*(catTotal/caTotal),indent:true,color:CAT_COLORS[cat]});
+    }
+  }
+
+  plData.push({type:'spacer'});
+  plData.push({type:'total',label:'EBITDA',amount:ebitda,pct:100*(ebitda/caTotal),isSubsection:false,isBold:true,color:ebitda>0?'var(--vert)':'var(--rouge)'});
+
+  // Donut data - cost proportions
+  const donutSegments=[];
+  const colors=['#581527','#7a2d42','#a04560','#c46880','#059669'];
+  let colorIdx=0;
+  for(const[groupName,groupInfo]of Object.entries(COST_GROUPS)){
+    const groupTotal=groupTotals[groupName]||0;
+    if(groupTotal>0){
+      const pct=100*(groupTotal/totalCosts);
+      donutSegments.push({value:pct,color:colors[colorIdx%colors.length]});
+      colorIdx++;
+    }
+  }
+
   return(<div className="fin">
+    {!PennylaneService.getToken()&&<div style={{background:'var(--orange-light)',border:'1px solid var(--orange)',borderRadius:8,padding:14,marginBottom:16,color:'var(--orange)',fontSize:13}}>
+      <strong>Configuration requise :</strong> Veuillez configurer votre token Pennylane dans les paramètres pour afficher les données réelles des coûts.
+    </div>}
+
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">CA Total</div><div className="kpi-val">{eur(610000)}</div><div className="kpi-chg pos"><I.Up/> +11.9%</div></div>
-      <div className="kpi"><div className="kpi-label">Marge brute</div><div className="kpi-val">{eur(470400)}</div><div className="kpi-chg pos"><I.Up/> +9.2%</div></div>
-      <div className="kpi"><div className="kpi-label">EBITDA</div><div className="kpi-val">{eur(ebitda)}</div><div className="kpi-chg pos"><I.Up/> +15.3%</div></div>
-      <div className="kpi"><div className="kpi-label">Prime cost</div><div className="kpi-val">55.3%</div><div className="kpi-chg pos"><I.Up/> -2.1pts</div></div>
+      <div className="kpi"><div className="kpi-label">CA Total</div><div className="kpi-val">{eur(caTotal)}</div><div className="kpi-chg pos"><I.Up/> +11.9%</div></div>
+      <div className="kpi"><div className="kpi-label">Coûts totaux</div><div className="kpi-val">{eur(totalCosts)}</div><div className="kpi-chg neu">{allInvoices.length} factures</div></div>
+      <div className="kpi"><div className="kpi-label">EBITDA</div><div className="kpi-val" style={{color:ebitda>0?'var(--vert)':'var(--rouge)'}}>{eur(ebitda)}</div><div className={`kpi-chg ${ebitda>0?'pos':'neg'}`}>{ebitda>0?'Marge positive':'Déficit'}</div></div>
+      <div className="kpi"><div className="kpi-label">Prime Cost %</div><div className="kpi-val">{primeCostPct.toFixed(1)}%</div><div className="kpi-chg neu">Food+Bar+Staff</div></div>
     </div>
-    <div className="card">
-      <div className="card-h"><div><div className="card-t">Compte de résultat — Février 2026</div><div className="card-st">Données Pennylane</div></div><span className="badge b-ima">Pennylane</span></div>
+
+    {loading&&<div style={{textAlign:'center',padding:40}}><div className="spinner" style={{width:24,height:24}}/><div style={{marginTop:10,fontSize:13,color:'var(--gris-500)'}}>Chargement Pennylane...</div></div>}
+
+    {!loading&&<div>
+    <div className="card" style={{marginBottom:16}}>
+      <div className="card-h"><div><div className="card-t">Compte de résultat — Février 2026</div><div className="card-st">CA estimé + Coûts Pennylane</div></div><span className="badge b-ima">Pennylane</span></div>
       <div className="card-b"><div className="tbl"><table>
-        <thead><tr><th>Catégorie</th><th style={{textAlign:'right'}}>Montant</th><th style={{textAlign:'right'}}>% CA</th><th style={{width:180}}>Répartition</th></tr></thead>
+        <thead><tr><th>Poste</th><th style={{textAlign:'right'}}>Montant</th><th style={{textAlign:'right'}}>% CA</th><th style={{width:180}}>Répartition</th></tr></thead>
         <tbody>
-          {mockPL.map((l,i)=><tr key={i} style={{fontWeight:i<2?600:400}}>
-            <td>{l.cat}</td>
-            <td style={{textAlign:'right',color:l.m>0?'var(--vert)':'var(--gris-700)'}}>{eur(l.m)}</td>
-            <td style={{textAlign:'right'}}>{Math.abs(l.p).toFixed(1)}%</td>
-            <td><div className="pbar"><div className="pfill" style={{width:`${Math.abs(l.p)*1.5}%`,background:l.m>0?'var(--vert)':'var(--bordeaux)'}}/></div></td>
-          </tr>)}
-          <tr style={{fontWeight:700,borderTop:'2px solid var(--gris-300)'}}>
-            <td>Résultat net</td>
-            <td style={{textAlign:'right',color:'var(--vert)',fontSize:16}}>{eur(ebitda)}</td>
-            <td style={{textAlign:'right'}}>{(ebitda/610000*100).toFixed(1)}%</td>
-            <td/>
-          </tr>
+          {plData.map((row,i)=>{
+            if(row.type==='spacer')return <tr key={`spacer-${i}`} style={{height:8}}><td colSpan={4}/></tr>;
+            if(row.type==='revenue'||row.type==='group'||row.type==='category'||row.type==='total'){
+              const isBold=row.isBold;
+              const fontSize=row.isBold?14:13;
+              return <tr key={i} style={{fontWeight:isBold?700:400,background:row.type==='total'?'var(--gris-50)':'transparent',borderTop:row.type==='total'?'2px solid var(--gris-300)':'none'}}>
+                <td style={{paddingLeft:row.indent?40:14,fontSize}}>{row.label}{row.type==='revenue'&&<span className="badge b-warn" style={{marginLeft:8,fontSize:9}}>Estimé</span>}</td>
+                <td style={{textAlign:'right',color:row.color,fontSize}}>{eur(row.amount)}</td>
+                <td style={{textAlign:'right'}}>{Math.abs(row.pct).toFixed(1)}%</td>
+                <td><div className="pbar"><div className="pfill" style={{width:`${Math.abs(row.pct)*1.5}%`,background:row.color}}/></div></td>
+              </tr>;
+            }
+            return null;
+          })}
         </tbody>
       </table></div></div>
     </div>
+
     <div className="cg" style={{marginTop:16}}>
       <div className="card">
-        <div className="card-h"><div><div className="card-t">Répartition des charges</div></div></div>
+        <div className="card-h"><div><div className="card-t">Répartition des charges</div><div className="card-st">{allInvoices.length} factures Pennylane</div></div></div>
         <div className="card-b">
-          <div className="donut-wrap">
-            <Donut segments={[
-              {value:26.5,color:'#581527'},{value:17.5,color:'#7a2d42'},
-              {value:28.8,color:'#a04560'},{value:12.9,color:'#c46880'},
-              {value:14.3,color:'#059669'}
-            ]} size={150} thickness={22} centerValue="14.3%" centerLabel="Résultat"/>
+          {donutSegments.length>0?<div className="donut-wrap">
+            <Donut segments={donutSegments} size={150} thickness={22} centerValue={`${(totalCosts/caTotal*100).toFixed(0)}%`} centerLabel="Coûts"/>
             <div className="donut-legend">
-              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#581527'}}/> Food Cost — 26.5%</div>
-              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#7a2d42'}}/> Bar Cost — 17.5%</div>
-              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#a04560'}}/> Staff Cost — 28.8%</div>
-              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#c46880'}}/> Charges fixes — 12.9%</div>
-              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#059669'}}/> Résultat — 14.3%</div>
+              {Object.entries(COST_GROUPS).map(([groupName,groupInfo],i)=>{
+                const gt=groupTotals[groupName]||0;
+                if(gt===0)return null;
+                return <div key={groupName} className="donut-legend-item">
+                  <div className="donut-legend-dot" style={{background:colors[i%colors.length]}}/>
+                  {groupName} — {(100*(gt/totalCosts)).toFixed(1)}%
+                </div>;
+              })}
             </div>
-          </div>
+          </div>:<div style={{padding:20,textAlign:'center',color:'var(--gris-400)'}}>Aucune donnée Pennylane</div>}
         </div>
       </div>
       <div className="card">
@@ -836,6 +990,53 @@ function Finance(){
         <div className="card-b"><BarChart data={revData} keys={['food','bar']} colors={['#581527','#c46880']} labels={['Food','Bar']} height={220}/></div>
       </div>
     </div>
+
+    <div className="card">
+      <div className="card-h"><div><div className="card-t">Détail des charges par groupe</div><div className="card-st">Cliquez pour voir les catégories détaillées</div></div></div>
+      <div className="card-b">
+        {Object.entries(COST_GROUPS).map(([groupName,groupInfo])=>{
+          const gt=groupTotals[groupName]||0;
+          if(gt===0)return null;
+          const catsWithData=groupInfo.cats.filter(c=>(totals[c]||0)!==0);
+          return <div key={groupName} style={{marginBottom:12}}>
+            <div style={{cursor:'pointer',padding:'10px 14px',background:'var(--gris-50)',borderRadius:8,display:'flex',justifyContent:'space-between',alignItems:'center'}} onClick={()=>setExpandedGroup(expandedGroup===groupName?null:groupName)}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <div style={{width:4,height:28,borderRadius:2,background:groupInfo.color}}/>
+                <div style={{fontWeight:600,color:'var(--gris-800)'}}>{groupName}</div>
+                <span className="badge b-ima" style={{fontSize:9}}>{catsWithData.length} cat.</span>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:12}}>
+                <div style={{textAlign:'right'}}>
+                  <div style={{fontSize:14,fontWeight:700,color:groupInfo.color}}>{eur(gt)}</div>
+                  <div style={{fontSize:9,color:'var(--gris-400)'}}>{(100*(gt/totalCosts)).toFixed(1)}% des coûts</div>
+                </div>
+                <I.Chev style={{transform:expandedGroup===groupName?'rotate(180deg)':'rotate(0deg)',transition:'transform .2s'}}/>
+              </div>
+            </div>
+            {expandedGroup===groupName&&<div style={{marginTop:8,paddingLeft:14}}>
+              {catsWithData.map(cat=>{
+                const ct=totals[cat]||0;
+                return <div key={cat} style={{padding:'8px 0',borderBottom:'1px solid var(--gris-100)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <div style={{width:8,height:8,borderRadius:2,background:CAT_COLORS[cat]||'var(--gris-400)'}}/>
+                    <span style={{fontWeight:500}}>{cat}</span>
+                    <span className="badge b-ima" style={{fontSize:8}}>{(allInvoices.filter(inv=>{
+                      const sid=String(inv.supplier?.id||'');
+                      return SupplierMap.getCategory(sid)===cat;
+                    })).length} fact.</span>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:14}}>
+                    <span style={{fontSize:11,color:'var(--gris-500)'}}>{(100*(ct/totalCosts)).toFixed(1)}%</span>
+                    <span style={{fontWeight:700,minWidth:70,textAlign:'right'}}>{eur(ct)}</span>
+                  </div>
+                </div>;
+              })}
+            </div>}
+          </div>;
+        })}
+      </div>
+    </div>
+    </div>}
   </div>);
 }
 
@@ -1126,336 +1327,196 @@ function Costs(){
 }
 
 // ===== STAFF =====
-// Points system per role (for tip distribution)
-const ROLE_POINTS={
-  'Chef de cuisine':0,'Sous-chef':0,'Commis cuisine':0,
-  'Resp. salle':10,'Chef barman':9,'Sommelier':8,
-  'Serveur':7,'Serveuse':7,'Barman':8,'Runner':5,'Hôtesse':6,'Plongeur':0
-};
-const PENALTY_TYPES=[
-  {id:'retard',label:'Retard',pts:-1},
-  {id:'absent',label:'Absence injustifiée',pts:-3},
-  {id:'tenue',label:'Tenue non conforme',pts:-1},
-  {id:'service',label:'Erreur de service',pts:-2},
-  {id:'bonus',label:'Bonus (excellent service)',pts:2},
-];
-const JOURS=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
-
 function StaffPage(){
   const[tab,setTab]=useState('equipe');
   const[showModal,setShowModal]=useState(false);
-  const[team,setTeam]=useState([
-    {id:1,n:'Marco Rossi',p:'Chef de cuisine',h:196,x:12,c:6800,tel:'06 12 34 56 78',contrat:'CDI',dateEntree:'15/09/2024',tips:false},
-    {id:2,n:'Julie Martin',p:'Sous-chef',h:184,x:8,c:4200,tel:'06 23 45 67 89',contrat:'CDI',dateEntree:'01/10/2024',tips:false},
-    {id:3,n:'Thomas Berger',p:'Resp. salle',h:180,x:15,c:4500,tel:'06 34 56 78 90',contrat:'CDI',dateEntree:'20/09/2024',tips:true},
-    {id:4,n:'Emma Dubois',p:'Chef barman',h:176,x:20,c:4100,tel:'06 45 67 89 01',contrat:'CDI',dateEntree:'15/09/2024',tips:true},
-    {id:5,n:'Pierre Leroy',p:'Sommelier',h:168,x:4,c:3800,tel:'06 56 78 90 12',contrat:'CDI',dateEntree:'01/12/2024',tips:true},
-    {id:6,n:'Sofia Moreau',p:'Commis cuisine',h:160,x:0,c:2400,tel:'06 67 89 01 23',contrat:'CDD',dateEntree:'15/12/2025',tips:false},
-    {id:7,n:'Lucas Petit',p:'Serveur',h:156,x:8,c:2200,tel:'06 78 90 12 34',contrat:'CDI',dateEntree:'10/10/2024',tips:true},
-    {id:8,n:'Chloé Bernard',p:'Serveuse',h:152,x:6,c:2100,tel:'06 89 01 23 45',contrat:'CDD',dateEntree:'01/01/2026',tips:true},
-  ]);
+  const[editingId,setEditingId]=useState(null);
+  const[newEmp,setNewEmp]=useState({nom:'',poste:'Serveur',section:'salle',tipCategory:'FLOOR',points:4,contrat:'CDI',tel:'',dateEntree:new Date().toLocaleDateString('fr-FR'),tips:true,coutBrut:0,heures:0,extras:0});
+  const team=StaffRegistry.getActive();
+  const tipsTeam=StaffRegistry.getTipsEligible();
 
-  // New employee form
-  const[newEmp,setNewEmp]=useState({n:'',p:'Serveur',tel:'',contrat:'CDI',tips:true});
-
-  // Tips: daily amounts
-  const[dailyTips,setDailyTips]=useState({
-    Lun:850,Mar:720,Mer:980,Jeu:1120,Ven:1850,Sam:2400,Dim:1350
-  });
-
-  // Presence grid: {empId: {Lun:true,...}}
-  const tipsTeam=team.filter(e=>e.tips);
-  const[presence,setPresence]=useState(()=>{
-    const p={};
-    tipsTeam.forEach(e=>{
-      p[e.id]={};
-      JOURS.forEach(j=>{p[e.id][j]=true;});
-    });
-    // some absences
-    if(tipsTeam.length>2){p[tipsTeam[2].id]={...p[tipsTeam[2].id],Mer:false};}
-    return p;
-  });
-
-  // Penalties: {empId: [{jour,type,pts}]}
-  const[penalties,setPenalties]=useState(()=>{
-    const pen={};
-    tipsTeam.forEach(e=>{pen[e.id]=[];});
-    if(tipsTeam.length>3){
-      pen[tipsTeam[3].id]=[{jour:'Ven',type:'retard',pts:-1}];
-      pen[tipsTeam[1].id]=[{jour:'Sam',type:'bonus',pts:2}];
-    }
-    return pen;
-  });
-
-  const togglePresence=(eid,jour)=>{
-    setPresence(prev=>({...prev,[eid]:{...prev[eid],[jour]:!prev[eid]?.[jour]}}));
-  };
-
-  const addEmployee=()=>{
-    if(!newEmp.n)return;
-    const id=Math.max(...team.map(e=>e.id))+1;
-    setTeam(prev=>[...prev,{id,n:newEmp.n,p:newEmp.p,h:0,x:0,c:0,tel:newEmp.tel,contrat:newEmp.contrat,dateEntree:'28/02/2026',tips:newEmp.tips}]);
-    // init presence & penalties for new tip employee
-    if(newEmp.tips){
-      setPresence(prev=>{const p={...prev};p[id]={};JOURS.forEach(j=>{p[id][j]=true;});return p;});
-      setPenalties(prev=>({...prev,[id]:[]}));
-    }
-    setNewEmp({n:'',p:'Serveur',tel:'',contrat:'CDI',tips:true});
+  const handleAddEmployee=()=>{
+    if(!newEmp.nom)return;
+    StaffRegistry.add(newEmp);
+    setNewEmp({nom:'',poste:'Serveur',section:'salle',tipCategory:'FLOOR',points:4,contrat:'CDI',tel:'',dateEntree:new Date().toLocaleDateString('fr-FR'),tips:true,coutBrut:0,heures:0,extras:0});
     setShowModal(false);
   };
 
-  // Calculate tip distribution
-  const calcTips=()=>{
-    const totalWeekTips=JOURS.reduce((s,j)=>s+(dailyTips[j]||0),0);
-    const rows=tipsTeam.map(e=>{
-      const basePoints=ROLE_POINTS[e.p]||6;
-      const daysPresent=JOURS.filter(j=>presence[e.id]?.[j]).length;
-      const penaltyPts=(penalties[e.id]||[]).reduce((s,p)=>s+p.pts,0);
-      const totalPts=Math.max(0,(basePoints*daysPresent)+penaltyPts);
-      return{id:e.id,nom:e.n,poste:e.p,basePoints,daysPresent,penaltyPts,totalPts,
-        presenceByDay:JOURS.map(j=>!!presence[e.id]?.[j])};
-    });
-    const grandTotalPts=rows.reduce((s,r)=>s+r.totalPts,0);
-    return rows.map(r=>({
-      ...r,
-      share:grandTotalPts>0?r.totalPts/grandTotalPts:0,
-      amount:grandTotalPts>0?Math.round((r.totalPts/grandTotalPts)*totalWeekTips):0
-    }));
+  const handleUpdateField=(id,field,value)=>{
+    StaffRegistry.update(id,{[field]:isNaN(value)?value:parseFloat(value)||0});
   };
-  const tipRows=calcTips();
-  const totalWeekTips=JOURS.reduce((s,j)=>s+(dailyTips[j]||0),0);
+
+  const handleDeactivate=(id)=>{
+    if(confirm('Marquer comme inactif?'))StaffRegistry.deactivate(id);
+  };
+
+  const totalMasseS=team.reduce((s,e)=>s+(e.coutBrut||0),0);
+  const totalHeures=team.reduce((s,e)=>s+(e.heures||0),0);
+  const totalExtras=team.reduce((s,e)=>s+(e.extras||0),0);
+  const salleCount=team.filter(e=>e.section==='salle').length;
+  const cuisineCount=team.filter(e=>e.section==='cuisine').length;
+
+  const sectionColors={salle:'var(--bordeaux)',cuisine:'var(--vert)'};
 
   return(<div className="fin">
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">Masse salariale</div><div className="kpi-val">{eur(175680)}</div><div className="kpi-chg neg"><I.Down/> +3.2%</div></div>
-      <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val">28.8%</div><div className="kpi-chg pos">Obj: 30%</div></div>
-      <div className="kpi"><div className="kpi-label">Effectif</div><div className="kpi-val">{team.length}</div><div className="kpi-chg neu">dont {team.filter(e=>e.contrat==='CDD').length} CDD</div></div>
-      <div className="kpi"><div className="kpi-label">Tips semaine</div><div className="kpi-val">{eur(totalWeekTips)}</div><div className="kpi-chg pos">{tipsTeam.length} bénéficiaires</div></div>
+      <div className="kpi"><div className="kpi-label">Effectif total</div><div className="kpi-val">{team.length}</div><div className="kpi-chg neu">dont {team.filter(e=>e.contrat==='CDD').length} CDD</div></div>
+      <div className="kpi"><div className="kpi-label">Salle / Cuisine</div><div className="kpi-val">{salleCount} / {cuisineCount}</div><div className="kpi-chg neu">répartition</div></div>
+      <div className="kpi"><div className="kpi-label">Masse salariale</div><div className="kpi-val">{eur(totalMasseS)}</div><div className="kpi-chg neu">total brut</div></div>
+      <div className="kpi"><div className="kpi-label">Bénéf. Tips</div><div className="kpi-val">{tipsTeam.length}</div><div className="kpi-chg pos">éligibles</div></div>
     </div>
 
     <div className="tabs">
       <div className={`tab ${tab==='equipe'?'active':''}`} onClick={()=>setTab('equipe')}>Équipe</div>
-      <div className={`tab ${tab==='tips'?'active':''}`} onClick={()=>setTab('tips')}>Tips & Répartition</div>
-      <div className={`tab ${tab==='repartition'?'active':''}`} onClick={()=>setTab('repartition')}>Répartition par pôle</div>
+      <div className={`tab ${tab==='ajouter'?'active':''}`} onClick={()=>setTab('ajouter')}>Ajouter / Modifier</div>
+      <div className={`tab ${tab==='repartition'?'active':''}`} onClick={()=>setTab('repartition')}>Répartition</div>
     </div>
 
-    {/* ===== TAB: ÉQUIPE ===== */}
     {tab==='equipe'&&<div>
-      <div style={{display:'flex',justifyContent:'flex-end',marginBottom:14}}>
-        <button className="btn btn-primary" onClick={()=>setShowModal(true)}>+ Ajouter un collaborateur</button>
-      </div>
       <div className="card">
-        <div className="card-h"><div><div className="card-t">Équipe — Février 2026</div><div className="card-st">{team.length} collaborateurs</div></div></div>
+        <div className="card-h"><div><div className="card-t">Équipe — Février 2026</div><div className="card-st">{team.length} collaborateurs actifs</div></div></div>
         <div className="card-b"><div className="tbl"><table>
-          <thead><tr><th>Nom</th><th>Poste</th><th>Contrat</th><th>Entrée</th><th style={{textAlign:'right'}}>Heures</th><th style={{textAlign:'right'}}>Extras</th><th style={{textAlign:'right'}}>Coût brut</th><th style={{textAlign:'center'}}>Tips</th><th style={{width:80}}>Charge</th></tr></thead>
-          <tbody>{team.map((e,i)=><tr key={e.id}>
-            <td><div style={{display:'flex',alignItems:'center',gap:8}}>
-              <div style={{width:28,height:28,borderRadius:'50%',background:'var(--bordeaux)',color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:600}}>{e.n.split(' ').map(w=>w[0]).join('')}</div>
-              <div><div style={{fontWeight:500}}>{e.n}</div><div style={{fontSize:10,color:'var(--gris-400)'}}>{e.tel}</div></div>
-            </div></td>
-            <td><span className="badge b-ima">{e.p}</span></td>
+          <thead><tr><th>Nom</th><th>Poste</th><th>Section</th><th>Catégorie Tips</th><th>Points</th><th>Contrat</th><th>Entrée</th><th style={{textAlign:'right'}}>Heures</th><th style={{textAlign:'right'}}>Extras</th><th style={{textAlign:'right'}}>Coût brut</th><th>Tips</th><th>Actions</th></tr></thead>
+          <tbody>{team.map(e=><tr key={e.id}>
+            <td style={{fontWeight:500}}>{e.nom}</td>
+            <td><span className="badge b-ima">{e.poste}</span></td>
+            <td><span className="badge" style={{background:sectionColors[e.section],color:'white',fontSize:10}}>{e.section==='salle'?'Salle':'Cuisine'}</span></td>
+            <td><span className="badge" style={{background:TIP_CATEGORIES[e.section]?.[e.tipCategory]?.color||'var(--gris-300)',color:'white',fontSize:9}}>{TIP_CATEGORIES[e.section]?.[e.tipCategory]?.label||e.tipCategory}</span></td>
+            <td style={{fontWeight:600}}>{e.points}</td>
             <td><span className={`badge ${e.contrat==='CDI'?'b-ok':'b-info'}`}>{e.contrat}</span></td>
             <td style={{fontSize:12}}>{e.dateEntree}</td>
-            <td style={{textAlign:'right'}}>{e.h}h</td>
-            <td style={{textAlign:'right'}}>{e.x>0?<span style={{color:e.x>10?'var(--rouge)':'var(--orange)'}}>{e.x}h</span>:'—'}</td>
-            <td style={{textAlign:'right',fontWeight:600}}>{e.c>0?eur(e.c):'—'}</td>
-            <td style={{textAlign:'center'}}>{e.tips?<span className="badge b-ok">Oui</span>:<span className="badge" style={{background:'var(--gris-100)',color:'var(--gris-400)'}}>Non</span>}</td>
-            <td><div className="pbar"><div className="pfill" style={{width:`${(e.c/7000)*100}%`,background:'var(--bordeaux)'}}/></div></td>
+            <td style={{textAlign:'right'}}>{e.heures}h</td>
+            <td style={{textAlign:'right',color:e.extras>0?'var(--orange)':'var(--gris-400)'}}>{e.extras>0?e.extras+'h':'—'}</td>
+            <td style={{textAlign:'right',fontWeight:600}}>{e.coutBrut>0?eur(e.coutBrut):'—'}</td>
+            <td>{e.tips?<span className="badge b-ok" style={{fontSize:10}}>Oui</span>:<span className="badge" style={{background:'var(--gris-100)',color:'var(--gris-400)',fontSize:10}}>Non</span>}</td>
+            <td><button className="btn btn-sm" style={{background:'var(--rouge-light)',color:'var(--rouge)',border:'none',padding:'4px 8px',fontSize:10,cursor:'pointer'}} onClick={()=>handleDeactivate(e.id)}>Désactiver</button></td>
           </tr>)}</tbody>
         </table></div></div>
       </div>
     </div>}
 
-    {/* ===== TAB: TIPS ===== */}
-    {tab==='tips'&&<div>
-      {/* Daily tips input */}
-      <div className="card" style={{marginBottom:16}}>
-        <div className="card-h"><div><div className="card-t">Tips du jour — Saisie quotidienne</div><div className="card-st">Semaine du 24 au 28 février 2026</div></div></div>
+    {tab==='ajouter'&&<div>
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Ajouter / Modifier un employé</div></div></div>
         <div className="card-b">
-          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-            {JOURS.map(j=>(
-              <div key={j} style={{flex:1,minWidth:80,background:'var(--gris-50)',borderRadius:10,padding:12,textAlign:'center',border:'1px solid var(--gris-200)'}}>
-                <div style={{fontSize:11,fontWeight:600,color:'var(--bordeaux)',marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>{j}</div>
-                <input type="number" value={dailyTips[j]||''} onChange={e=>{const v=parseInt(e.target.value)||0;setDailyTips(prev=>({...prev,[j]:v}));}}
-                  style={{width:'100%',padding:'8px 4px',border:'1px solid var(--gris-200)',borderRadius:6,fontSize:16,textAlign:'center',fontWeight:700,fontFamily:'inherit',outline:'none'}}
-                  placeholder="0"/>
-                <div style={{fontSize:10,color:'var(--gris-400)',marginTop:4}}>euros</div>
-              </div>
-            ))}
-            <div style={{flex:1,minWidth:80,background:'var(--bordeaux-10)',borderRadius:10,padding:12,textAlign:'center',border:'1px solid var(--bordeaux-20)'}}>
-              <div style={{fontSize:11,fontWeight:600,color:'var(--bordeaux)',marginBottom:6,letterSpacing:1}}>TOTAL</div>
-              <div style={{fontSize:22,fontWeight:700,color:'var(--bordeaux)'}}>{eur(totalWeekTips)}</div>
-              <div style={{fontSize:10,color:'var(--bordeaux-light)',marginTop:4}}>semaine</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
+            <div className="fg">
+              <label className="fl">Nom complet</label>
+              <input className="fi" value={newEmp.nom} onChange={e=>setNewEmp(p=>({...p,nom:e.target.value}))} placeholder="Prénom Nom"/>
+            </div>
+            <div className="fg">
+              <label className="fl">Poste</label>
+              <input className="fi" value={newEmp.poste} onChange={e=>setNewEmp(p=>({...p,poste:e.target.value}))} placeholder="ex: Serveur"/>
             </div>
           </div>
+
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:16,marginBottom:16}}>
+            <div className="fg">
+              <label className="fl">Section</label>
+              <select className="fi-select" value={newEmp.section} onChange={e=>{const s=e.target.value;const tc=Object.keys(TIP_CATEGORIES[s]||{})[0]||'FLOOR';setNewEmp(p=>({...p,section:s,tipCategory:tc}));}}>
+                <option value="salle">Salle</option>
+                <option value="cuisine">Cuisine</option>
+              </select>
+            </div>
+            <div className="fg">
+              <label className="fl">Catégorie Tips</label>
+              <select className="fi-select" value={newEmp.tipCategory} onChange={e=>{const cat=e.target.value;const pts=TIP_CATEGORIES[newEmp.section]?.[cat]?.defaultPoints||3;setNewEmp(p=>({...p,tipCategory:cat,points:pts}));}}>
+                {Object.entries(TIP_CATEGORIES[newEmp.section]||{}).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+              </select>
+            </div>
+            <div className="fg">
+              <label className="fl">Points</label>
+              <input type="number" className="fi" value={newEmp.points} onChange={e=>setNewEmp(p=>({...p,points:parseFloat(e.target.value)||0}))}/>
+            </div>
+            <div className="fg">
+              <label className="fl">Contrat</label>
+              <select className="fi-select" value={newEmp.contrat} onChange={e=>setNewEmp(p=>({...p,contrat:e.target.value}))}>
+                <option value="CDI">CDI</option>
+                <option value="CDD">CDD</option>
+                <option value="Extra">Extra</option>
+                <option value="Stage">Stage</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:16,marginBottom:16}}>
+            <div className="fg">
+              <label className="fl">Téléphone</label>
+              <input className="fi" value={newEmp.tel} onChange={e=>setNewEmp(p=>({...p,tel:e.target.value}))} placeholder="06 XX XX XX XX"/>
+            </div>
+            <div className="fg">
+              <label className="fl">Date d'entrée</label>
+              <input type="date" className="fi" value={newEmp.dateEntree} onChange={e=>setNewEmp(p=>({...p,dateEntree:e.target.value}))}/>
+            </div>
+            <div className="fg">
+              <label className="fl">Coût brut mensuel (€)</label>
+              <input type="number" className="fi" value={newEmp.coutBrut} onChange={e=>setNewEmp(p=>({...p,coutBrut:parseFloat(e.target.value)||0}))}/>
+            </div>
+          </div>
+
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
+            <div className="fg">
+              <label className="fl">Heures mensuelles</label>
+              <input type="number" className="fi" value={newEmp.heures} onChange={e=>setNewEmp(p=>({...p,heures:parseFloat(e.target.value)||0}))}/>
+            </div>
+            <div className="fg">
+              <label className="fl">Extras (h)</label>
+              <input type="number" className="fi" value={newEmp.extras} onChange={e=>setNewEmp(p=>({...p,extras:parseFloat(e.target.value)||0}))}/>
+            </div>
+          </div>
+
+          <div className="fg" style={{display:'flex',alignItems:'center',gap:10,marginBottom:20}}>
+            <input type="checkbox" id="tips-check" checked={newEmp.tips} onChange={e=>setNewEmp(p=>({...p,tips:e.target.checked}))} style={{width:16,height:16,accentColor:'var(--bordeaux)'}}/>
+            <label htmlFor="tips-check" style={{fontSize:13,fontWeight:500,cursor:'pointer'}}>Éligible aux tips</label>
+          </div>
+
+          <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+            <button className="btn btn-secondary" onClick={()=>setNewEmp({nom:'',poste:'Serveur',section:'salle',tipCategory:'FLOOR',points:4,contrat:'CDI',tel:'',dateEntree:new Date().toLocaleDateString('fr-FR'),tips:true,coutBrut:0,heures:0,extras:0})}>Réinitialiser</button>
+            <button className="btn btn-primary" onClick={handleAddEmployee}>Ajouter l'employé</button>
+          </div>
         </div>
       </div>
+    </div>}
 
-      {/* Presence + Penalties grid */}
-      <div className="card" style={{marginBottom:16}}>
-        <div className="card-h"><div><div className="card-t">Présence & Pénalités / Bonus</div><div className="card-st">Cliquez sur les pastilles pour marquer absent — Points par poste appliqués automatiquement</div></div></div>
-        <div className="card-b tips-grid"><table>
-          <thead>
-            <tr>
-              <th style={{textAlign:'left',minWidth:130}}>Collaborateur</th>
-              <th>Poste</th>
-              <th>Pts/jour</th>
-              {JOURS.map(j=><th key={j} className="day-header">{j}</th>)}
-              <th>Jours</th>
-              <th>Pénalités</th>
-              <th style={{fontWeight:700}}>Total pts</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tipRows.map(r=>{
-              const emp=team.find(e=>e.id===r.id);
-              const empPen=penalties[r.id]||[];
-              return(<tr key={r.id}>
-                <td style={{textAlign:'left',fontWeight:500}}>{r.nom}</td>
-                <td><span className="badge b-ima" style={{fontSize:9}}>{r.poste}</span></td>
-                <td style={{fontWeight:600}}>{r.basePoints}</td>
-                {JOURS.map((j,ji)=>(
-                  <td key={j}>
-                    <div className={`presence-dot ${r.presenceByDay[ji]?'present':'absent'}`}
-                      onClick={()=>togglePresence(r.id,j)}
-                      title={r.presenceByDay[ji]?'Présent — cliquer pour marquer absent':'Absent — cliquer pour marquer présent'}>
-                      {r.presenceByDay[ji]?'✓':'✗'}
-                    </div>
-                  </td>
-                ))}
-                <td style={{fontWeight:600}}>{r.daysPresent}/7</td>
-                <td>
-                  {r.penaltyPts!==0&&<span className={r.penaltyPts>0?'bonus-cell':'penalty-cell'}>
-                    {r.penaltyPts>0?'+':''}{r.penaltyPts}
-                  </span>}
-                  {r.penaltyPts===0&&<span style={{color:'var(--gris-400)'}}>—</span>}
-                </td>
-                <td style={{fontWeight:700,fontSize:14}}>{r.totalPts}</td>
-              </tr>);
-            })}
-          </tbody>
-        </table></div>
-      </div>
-
-      {/* Tip distribution table */}
+    {tab==='repartition'&&<div>
       <div className="card">
-        <div className="card-h"><div><div className="card-t">Répartition des tips — Semaine</div><div className="card-st">Calcul: (Points base × jours présents + pénalités) / total points × tips total</div></div></div>
-        <div className="card-b"><div className="tbl"><table>
-          <thead><tr>
-            <th style={{textAlign:'left'}}>Collaborateur</th>
-            <th>Poste</th>
-            <th style={{textAlign:'center'}}>Pts base/jour</th>
-            <th style={{textAlign:'center'}}>Jours</th>
-            <th style={{textAlign:'center'}}>Pénalités</th>
-            <th style={{textAlign:'center'}}>Total points</th>
-            <th style={{textAlign:'center'}}>Part (%)</th>
-            <th style={{textAlign:'right'}}>Montant</th>
-          </tr></thead>
-          <tbody>
-            {tipRows.sort((a,b)=>b.amount-a.amount).map(r=>(
-              <tr key={r.id}>
-                <td style={{fontWeight:500}}>{r.nom}</td>
-                <td><span className="badge b-ima">{r.poste}</span></td>
-                <td style={{textAlign:'center'}}>{r.basePoints}</td>
-                <td style={{textAlign:'center'}}>{r.daysPresent}/7</td>
-                <td style={{textAlign:'center'}}>
-                  {r.penaltyPts!==0?<span className={r.penaltyPts>0?'bonus-cell':'penalty-cell'}>{r.penaltyPts>0?'+':''}{r.penaltyPts}</span>:'—'}
-                </td>
-                <td style={{textAlign:'center',fontWeight:600,fontSize:15}}>{r.totalPts}</td>
-                <td style={{textAlign:'center'}}>{(r.share*100).toFixed(1)}%</td>
-                <td style={{textAlign:'right',fontWeight:700,fontSize:15,color:'var(--bordeaux)'}}>{eur(r.amount)}</td>
-              </tr>
-            ))}
-            <tr className="total-row">
-              <td style={{fontWeight:700}}>TOTAL</td>
-              <td/>
-              <td/>
-              <td/>
-              <td/>
-              <td style={{textAlign:'center',fontWeight:700}}>{tipRows.reduce((s,r)=>s+r.totalPts,0)}</td>
-              <td style={{textAlign:'center',fontWeight:700}}>100%</td>
-              <td style={{textAlign:'right',fontWeight:700,fontSize:15,color:'var(--bordeaux)'}}>{eur(totalWeekTips)}</td>
-            </tr>
-          </tbody>
-        </table></div></div>
-      </div>
-
-      {/* Penalty legend */}
-      <div className="card" style={{marginTop:16}}>
-        <div className="card-h"><div><div className="card-t">Barème des pénalités & bonus</div></div></div>
+        <div className="card-h"><div><div className="card-t">Répartition par section</div></div></div>
         <div className="card-b">
-          <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
-            {PENALTY_TYPES.map(p=>(
-              <div key={p.id} style={{padding:'8px 14px',borderRadius:8,background:p.pts>0?'var(--vert-light)':'var(--rouge-light)',fontSize:12,display:'flex',gap:8,alignItems:'center'}}>
-                <span style={{fontWeight:700,color:p.pts>0?'var(--vert)':'var(--rouge)'}}>{p.pts>0?'+':''}{p.pts} pt{Math.abs(p.pts)>1?'s':''}</span>
-                <span>{p.label}</span>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,marginBottom:30}}>
+            <div className="cost-c">
+              <div className="cl" style={{color:'var(--bordeaux)'}}>Salle</div>
+              <div className="cv">{salleCount}</div>
+              <div className="ct">collaborateurs</div>
+            </div>
+            <div className="cost-c">
+              <div className="cl" style={{color:'var(--vert)'}}>Cuisine</div>
+              <div className="cv">{cuisineCount}</div>
+              <div className="ct">collaborateurs</div>
+            </div>
+          </div>
+
+          <div style={{marginTop:20}}>
+            <div style={{fontSize:13,fontWeight:600,marginBottom:12,color:'var(--bordeaux)'}}>Répartition par catégorie Tips</div>
+            {['salle','cuisine'].map(section=>(
+              <div key={section} style={{marginBottom:20}}>
+                <div style={{fontSize:11,color:'var(--gris-500)',textTransform:'uppercase',marginBottom:8}}>{section==='salle'?'Salle':'Cuisine'}</div>
+                {Object.entries(TIP_CATEGORIES[section]||{}).map(([catKey,catData])=>{
+                  const count=StaffRegistry.getBySectionAndCategory(section,catKey).length;
+                  const totalPoints=StaffRegistry.getBySectionAndCategory(section,catKey).reduce((s,e)=>s+e.points,0);
+                  return(<div key={catKey} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:10,background:'var(--gris-50)',borderRadius:6,marginBottom:8,fontSize:12}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <div style={{width:12,height:12,borderRadius:3,background:catData.color}}/>
+                      <span style={{fontWeight:500}}>{catData.label}</span>
+                    </div>
+                    <div style={{textAlign:'right'}}>
+                      <div style={{fontWeight:600}}>{count} person{count>1?'s':''}</div>
+                      <div style={{color:'var(--gris-500)',fontSize:10}}>Total: {totalPoints} pts</div>
+                    </div>
+                  </div>);
+                })}
               </div>
             ))}
           </div>
-          <div style={{marginTop:12,fontSize:12,color:'var(--gris-500)'}}>
-            <strong>Points par poste :</strong> {Object.entries(ROLE_POINTS).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k} (${v}pts)`).join(' · ')}
-          </div>
-        </div>
-      </div>
-    </div>}
-
-    {/* ===== TAB: RÉPARTITION ===== */}
-    {tab==='repartition'&&<div>
-      <div className="card">
-        <div className="card-h"><div><div className="card-t">Répartition par pôle</div></div></div>
-        <div className="card-b">
-          <HBar data={[
-            {label:'Cuisine',value:13400},{label:'Salle',value:8800},{label:'Bar',value:4100},
-            {label:'Sommellerie',value:3800},{label:'Plonge',value:2200}
-          ]} maxVal={14000}/>
-        </div>
-      </div>
-      <div className="card" style={{marginTop:16}}>
-        <div className="card-h"><div><div className="card-t">Coût par service</div></div></div>
-        <div className="card-b">
-          <HBar data={[
-            {label:'Midi',value:4200},{label:'Soir',value:8100},{label:'Coupure',value:1500}
-          ]} maxVal={8500}/>
-        </div>
-      </div>
-    </div>}
-
-    {/* ===== MODAL: AJOUTER COLLABORATEUR ===== */}
-    {showModal&&<div className="modal-overlay" onClick={()=>setShowModal(false)}>
-      <div className="modal" onClick={e=>e.stopPropagation()}>
-        <h3>Ajouter un collaborateur <button className="modal-close" onClick={()=>setShowModal(false)}>×</button></h3>
-        <div className="fg">
-          <label className="fl">Nom complet</label>
-          <input className="fi" value={newEmp.n} onChange={e=>setNewEmp(p=>({...p,n:e.target.value}))} placeholder="Prénom Nom"/>
-        </div>
-        <div className="fg-row">
-          <div className="fg">
-            <label className="fl">Poste</label>
-            <select className="fi-select" value={newEmp.p} onChange={e=>setNewEmp(p=>({...p,p:e.target.value}))}>
-              {Object.keys(ROLE_POINTS).map(r=><option key={r} value={r}>{r}</option>)}
-            </select>
-          </div>
-          <div className="fg">
-            <label className="fl">Contrat</label>
-            <select className="fi-select" value={newEmp.contrat} onChange={e=>setNewEmp(p=>({...p,contrat:e.target.value}))}>
-              <option value="CDI">CDI</option>
-              <option value="CDD">CDD</option>
-              <option value="Extra">Extra</option>
-              <option value="Stage">Stage</option>
-            </select>
-          </div>
-        </div>
-        <div className="fg">
-          <label className="fl">Téléphone</label>
-          <input className="fi" value={newEmp.tel} onChange={e=>setNewEmp(p=>({...p,tel:e.target.value}))} placeholder="06 XX XX XX XX"/>
-        </div>
-        <div className="fg" style={{display:'flex',alignItems:'center',gap:10}}>
-          <input type="checkbox" id="tips-check" checked={newEmp.tips} onChange={e=>setNewEmp(p=>({...p,tips:e.target.checked}))} style={{width:16,height:16,accentColor:'var(--bordeaux)'}}/>
-          <label htmlFor="tips-check" style={{fontSize:13,fontWeight:500,cursor:'pointer'}}>Éligible aux tips (service en salle / bar)</label>
-        </div>
-        <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:20}}>
-          <button className="btn btn-secondary" onClick={()=>setShowModal(false)}>Annuler</button>
-          <button className="btn btn-primary" onClick={addEmployee}>Ajouter</button>
         </div>
       </div>
     </div>}
@@ -1875,6 +1936,410 @@ function POSPage(){
   </div>);
 }
 
+// ===== CLÔTURE DE CAISSE =====
+function CaissePage(){
+  const[tab,setTab]=useState('saisie');
+  const[entries,setEntries]=useState(()=>{
+    try{return JSON.parse(localStorage.getItem('ima_caisse_v2')||'[]');}catch(e){return[];}
+  });
+  const days=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+
+  // Default empty entry structure
+  const emptyEntry={
+    date:new Date().toISOString().split('T')[0],
+    dayOfWeek:new Date().getDay(),
+    nom:'',responsable:'',
+    caDomino:{liquide10:0,liquide20:0,solide10:0,solide20:0,tips:0,virement:0},
+    caDept:{restaurant:0,club:0,bar:0},
+    rapprochement:{domino:{especes:0,cb:0,amex:0,tipsCb:0,tipsAmex:0,entree:0,creditClient:0,virement:0,sevenroom:0},reel:{especes:0,cb:0,amex:0,tipsCb:0,tipsAmex:0,entree:0,creditClient:0,virement:0,sevenroom:0}},
+    tipsDetails:{restoEsp:0,restoCb:0,clubEsp:0,clubCb:0},
+    creditClients:[],creditClientsRembt:[],
+    detailEspeces:{500:0,200:0,100:0,50:0,20:0,10:0,5:0,2:0,1:0,0.50:0,0.20:0,0.10:0,0.05:0,0.02:0,0.01:0},
+    commentaires:'',teleCb:0,teleAmex:0
+  };
+
+  const[formData,setFormData]=useState(emptyEntry);
+
+  const handleInputChange=(path,value)=>{
+    const parts=path.split('.');
+    setFormData(prev=>{
+      const copy={...prev};
+      let current=copy;
+      for(let i=0;i<parts.length-1;i++){
+        if(!current[parts[i]])current[parts[i]]={};
+        current=current[parts[i]];
+      }
+      current[parts[parts.length-1]]=isNaN(value)?value:parseFloat(value)||0;
+      return copy;
+    });
+  };
+
+  const getCATotals=()=>{
+    const d=formData.caDomino;
+    const total=d.liquide10+d.liquide20+d.solide10+d.solide20+d.tips+d.virement;
+    return{total,netTotal:formData.caDept.restaurant+formData.caDept.club+formData.caDept.bar};
+  };
+
+  const getRapprochTotals=()=>{
+    const calc=(section)=>Object.values(section).reduce((s,v)=>s+v,0);
+    const domTotal=calc(formData.rapprochement.domino);
+    const realTotal=calc(formData.rapprochement.reel);
+    return{domTotal,realTotal,ecart:realTotal-domTotal};
+  };
+
+  const getCashTotals=()=>{
+    const details=formData.detailEspeces;
+    const denoms=[500,200,100,50,20,10,5,2,1,0.50,0.20,0.10,0.05,0.02,0.01];
+    let total=0;
+    denoms.forEach(d=>{
+      total+=(details[d]||0)*d;
+    });
+    return total;
+  };
+
+  const handleSaveEntry=()=>{
+    const newEntry={...formData,id:Date.now(),createdAt:new Date().toISOString()};
+    setEntries(prev=>{const updated=[newEntry,...prev];localStorage.setItem('ima_caisse_v2',JSON.stringify(updated));return updated;});
+    setFormData(emptyEntry);
+    alert('Saisie enregistrée avec succès !');
+  };
+
+  const SectionCard=({title,children})=>(
+    <div style={{background:'var(--blanc)',border:'1px solid var(--gris-200)',borderRadius:12,padding:18,marginBottom:16}}>
+      <div style={{fontSize:13,fontWeight:600,color:'var(--gris-800)',marginBottom:14,textTransform:'uppercase',letterSpacing:'0.5px'}}>{title}</div>
+      {children}
+    </div>
+  );
+
+  const NumInput=({label,value,onChange,readOnly=false})=>(
+    <div className="fg" style={{marginBottom:12}}>
+      <label className="fl">{label}</label>
+      <input type="number" step="0.01" className="fi" value={value} onChange={e=>onChange(e.target.value)} readOnly={readOnly} style={{backgroundColor:readOnly?'var(--gris-50)':undefined}}/>
+    </div>
+  );
+
+  return(<div className="fin">
+    <div className="tabs">
+      <div className={`tab ${tab==='saisie'?'active':''}`} onClick={()=>setTab('saisie')}>Saisie du jour</div>
+      <div className={`tab ${tab==='recap'?'active':''}`} onClick={()=>setTab('recap')}>Récap semaine</div>
+      <div className={`tab ${tab==='historique'?'active':''}`} onClick={()=>setTab('historique')}>Historique</div>
+    </div>
+
+    {tab==='saisie'&&<div>
+      <SectionCard title="Données Domino (POS)">
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
+          <NumInput label="Date" value={formData.date} onChange={v=>handleInputChange('date',v)}/>
+          <div className="fg">
+            <label className="fl">Responsable</label>
+            <select className="fi-select" value={formData.responsable} onChange={e=>handleInputChange('responsable',e.target.value)}>
+              <option value="">— Sélectionner —</option>
+              {StaffRegistry.getResponsables().length>0?
+                StaffRegistry.getResponsables().map(emp=><option key={emp.id} value={emp.nom}>{emp.nom} — {emp.poste}</option>):
+                StaffRegistry.getActive().map(emp=><option key={emp.id} value={emp.nom}>{emp.nom} — {emp.poste}</option>)
+              }
+            </select>
+          </div>
+        </div>
+        <div style={{fontSize:12,fontWeight:600,color:'var(--gris-700)',marginBottom:10,marginTop:16}}>CA DOMINO Détails</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12,marginBottom:16}}>
+          <NumInput label="LIQUIDE 10%" value={formData.caDomino.liquide10} onChange={v=>handleInputChange('caDomino.liquide10',v)}/>
+          <NumInput label="LIQUIDE 20%" value={formData.caDomino.liquide20} onChange={v=>handleInputChange('caDomino.liquide20',v)}/>
+          <NumInput label="SOLIDE 10%" value={formData.caDomino.solide10} onChange={v=>handleInputChange('caDomino.solide10',v)}/>
+          <NumInput label="SOLIDE 20%" value={formData.caDomino.solide20} onChange={v=>handleInputChange('caDomino.solide20',v)}/>
+          <NumInput label="TIPS" value={formData.caDomino.tips} onChange={v=>handleInputChange('caDomino.tips',v)}/>
+          <NumInput label="VIREMENT" value={formData.caDomino.virement} onChange={v=>handleInputChange('caDomino.virement',v)}/>
+        </div>
+        <div style={{background:'var(--gris-50)',padding:12,borderRadius:8,fontSize:13,fontWeight:600,marginBottom:16,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <span>TOTAL CA TTC:</span><span style={{fontSize:16,color:'var(--bordeaux)'}}>{eur(getCATotals().total)}</span>
+        </div>
+        <div style={{fontSize:12,fontWeight:600,color:'var(--gris-700)',marginBottom:10}}>CA par Département</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12}}>
+          <NumInput label="CA RESTAURANT" value={formData.caDept.restaurant} onChange={v=>handleInputChange('caDept.restaurant',v)}/>
+          <NumInput label="CA CLUB" value={formData.caDept.club} onChange={v=>handleInputChange('caDept.club',v)}/>
+          <NumInput label="CA BAR" value={formData.caDept.bar} onChange={v=>handleInputChange('caDept.bar',v)}/>
+        </div>
+        <div style={{background:'var(--gris-50)',padding:12,borderRadius:8,fontSize:13,fontWeight:600,marginTop:12,display:'flex',justifyContent:'space-between'}}>
+          <span>TOTAL CA NET:</span><span style={{fontSize:16,color:'var(--bordeaux)'}}>{eur(getCATotals().netTotal)}</span>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Rapprochement Domino vs Réel">
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',marginBottom:12}}>
+            <thead><tr style={{background:'var(--gris-50)',borderBottom:'2px solid var(--gris-200)'}}>
+              <th style={{padding:'8px',textAlign:'left',fontWeight:600,fontSize:11}}>Ligne</th>
+              <th style={{padding:'8px',textAlign:'right',fontWeight:600,fontSize:11}}>DOMINO</th>
+              <th style={{padding:'8px',textAlign:'right',fontWeight:600,fontSize:11}}>RÉEL</th>
+              <th style={{padding:'8px',textAlign:'right',fontWeight:600,fontSize:11}}>ÉCART</th>
+            </tr></thead>
+            <tbody>
+              {['especes','cb','amex','tipsCb','tipsAmex','entree','creditClient','virement','sevenroom'].map(key=>{
+                const d=formData.rapprochement.domino[key]||0;
+                const r=formData.rapprochement.reel[key]||0;
+                const ecart=r-d;
+                return(<tr key={key} style={{borderBottom:'1px solid var(--gris-100)'}}>
+                  <td style={{padding:'8px',fontSize:12,fontWeight:500}}>{key.replace(/([A-Z])/g,' $1').trim().toUpperCase()}</td>
+                  <td style={{padding:'8px',textAlign:'right',fontSize:12}}><input type="number" step="0.01" style={{width:'70px',padding:'4px',border:'1px solid var(--gris-200)',borderRadius:4,fontSize:11,textAlign:'right'}} value={d} onChange={e=>handleInputChange(`rapprochement.domino.${key}`,e.target.value)}/></td>
+                  <td style={{padding:'8px',textAlign:'right',fontSize:12}}><input type="number" step="0.01" style={{width:'70px',padding:'4px',border:'1px solid var(--gris-200)',borderRadius:4,fontSize:11,textAlign:'right'}} value={r} onChange={e=>handleInputChange(`rapprochement.reel.${key}`,e.target.value)}/></td>
+                  <td style={{padding:'8px',textAlign:'right',fontSize:12,fontWeight:600,color:ecart===0?'var(--vert)':'var(--rouge)',background:ecart===0?'var(--vert-light)':'var(--rouge-light)',borderRadius:4}}>{eur(ecart)}</td>
+                </tr>);
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div style={{background:'var(--gris-50)',padding:12,borderRadius:8,fontSize:13,fontWeight:600,display:'flex',justifyContent:'space-between'}}>
+          <span>TOTAL CA RECEIVED:</span><span style={{fontSize:16,color:'var(--bordeaux)'}}>{eur(getRapprochTotals().realTotal)}</span>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Tips">
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
+          <NumInput label="Tips Resto ESP" value={formData.tipsDetails.restoEsp} onChange={v=>handleInputChange('tipsDetails.restoEsp',v)}/>
+          <NumInput label="Tips Resto CB" value={formData.tipsDetails.restoCb} onChange={v=>handleInputChange('tipsDetails.restoCb',v)}/>
+          <NumInput label="Tips Club ESP" value={formData.tipsDetails.clubEsp} onChange={v=>handleInputChange('tipsDetails.clubEsp',v)}/>
+          <NumInput label="Tips Club CB" value={formData.tipsDetails.clubCb} onChange={v=>handleInputChange('tipsDetails.clubCb',v)}/>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Détails Espèces (Cash Counting)">
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',marginBottom:12}}>
+            <thead><tr style={{background:'var(--gris-50)',borderBottom:'2px solid var(--gris-200)'}}>
+              <th style={{padding:'8px',textAlign:'left',fontWeight:600,fontSize:11}}>Dénomination</th>
+              <th style={{padding:'8px',textAlign:'center',fontWeight:600,fontSize:11}}>NOMBRE</th>
+              <th style={{padding:'8px',textAlign:'right',fontWeight:600,fontSize:11}}>MONTANT</th>
+            </tr></thead>
+            <tbody>
+              {[500,200,100,50,20,10,5,2,1,0.50,0.20,0.10,0.05,0.02,0.01].map(denom=>{
+                const count=formData.detailEspeces[denom]||0;
+                const amount=count*denom;
+                return(<tr key={denom} style={{borderBottom:'1px solid var(--gris-100)'}}>
+                  <td style={{padding:'8px',fontSize:12,fontWeight:500}}>{denom>=1?'€'+denom.toFixed(0):'€'+denom.toFixed(2)}</td>
+                  <td style={{padding:'8px',textAlign:'center'}}><input type="number" style={{width:'60px',padding:'4px',border:'1px solid var(--gris-200)',borderRadius:4,fontSize:11,textAlign:'center'}} value={count} onChange={e=>handleInputChange(`detailEspeces.${denom}`,parseInt(e.target.value)||0)}/></td>
+                  <td style={{padding:'8px',textAlign:'right',fontSize:12,background:'var(--gris-50)',fontWeight:500}}>{eur(amount)}</td>
+                </tr>);
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div style={{background:'var(--gris-50)',padding:12,borderRadius:8,fontSize:13,fontWeight:600,display:'flex',justifyContent:'space-between'}}>
+          <span>TOTAL ESPÈCES:</span><span style={{fontSize:16,color:'var(--vert)'}}>{eur(getCashTotals())}</span>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Télécollecte">
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          <NumInput label="TELE CB" value={formData.teleCb} onChange={v=>handleInputChange('teleCb',v)}/>
+          <NumInput label="TELE AMEX" value={formData.teleAmex} onChange={v=>handleInputChange('teleAmex',v)}/>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Commentaires">
+        <textarea className="fi" style={{fontFamily:'inherit',minHeight:80,width:'100%',resize:'vertical',padding:12}} value={formData.commentaires} onChange={e=>handleInputChange('commentaires',e.target.value)} placeholder="Notes du jour..."/>
+      </SectionCard>
+
+      <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:16}}>
+        <button className="btn btn-primary" onClick={handleSaveEntry}>Enregistrer la saisie</button>
+      </div>
+    </div>}
+
+    {tab==='recap'&&<div>
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Récapitulatif Semaine</div><div className="card-st">Synthèse de la semaine en cours</div></div></div>
+        <div className="card-b"><div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+            <thead><tr style={{background:'var(--gris-50)',borderBottom:'2px solid var(--gris-200)'}}>
+              <th style={{padding:'10px',textAlign:'left',fontWeight:600,fontSize:11}}>Indicateur</th>
+              {days.map(d=><th key={d} style={{padding:'10px',textAlign:'right',fontWeight:600,fontSize:11}}>{d}</th>)}
+              <th style={{padding:'10px',textAlign:'right',fontWeight:600,fontSize:11,color:'var(--bordeaux)'}}>TOTAL</th>
+            </tr></thead>
+            <tbody>
+              {['TOTAL CA TTC','TOTAL CA NET','ENCAISSEMENT REEL','ECART REEL/DOMINO','ESPECES','CB','AMEX','CREDIT CLIENT','VIREMENT','SEVENROOM','TELE CB','TELE AMEX'].map(metric=>(
+                <tr key={metric} style={{borderBottom:'1px solid var(--gris-100)'}}>
+                  <td style={{padding:'10px',fontWeight:500}}>{metric}</td>
+                  {days.map(d=><td key={d} style={{padding:'10px',textAlign:'right',background:'var(--gris-50)'}}>—</td>)}
+                  <td style={{padding:'10px',textAlign:'right',fontWeight:600,color:'var(--bordeaux)'}}>—</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div></div>
+      </div>
+    </div>}
+
+    {tab==='historique'&&<div>
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Historique des Saisies</div><div className="card-st">{entries.length} enregistrements</div></div></div>
+        <div className="card-b">
+          {entries.length===0?<div style={{textAlign:'center',padding:40,color:'var(--gris-400)'}}>Aucune saisie enregistrée</div>:
+          <div className="tbl"><table>
+            <thead><tr><th>Date</th><th>Responsable</th><th style={{textAlign:'right'}}>CA TTC</th><th style={{textAlign:'right'}}>Total Réel</th><th style={{textAlign:'right'}}>Écart</th></tr></thead>
+            <tbody>
+              {entries.map(e=>{
+                const totals=getRapprochTotals();
+                return(<tr key={e.id} style={{cursor:'pointer'}}>
+                  <td style={{fontWeight:500}}>{new Date(e.date).toLocaleDateString('fr-FR')}</td>
+                  <td>{e.responsable}</td>
+                  <td style={{textAlign:'right'}}>{eur(getCATotals().total)}</td>
+                  <td style={{textAlign:'right'}}>{eur(totals.realTotal)}</td>
+                  <td style={{textAlign:'right',fontWeight:600,color:totals.ecart===0?'var(--vert)':'var(--rouge)'}}>{eur(totals.ecart)}</td>
+                </tr>);
+              })}
+            </tbody>
+          </table></div>}
+        </div>
+      </div>
+    </div>}
+  </div>);
+}
+
+// ===== TIPS PAGE =====
+function TipsPage(){
+  const[tab,setTab]=useState('salle');
+  const[params,setParams]=useState(()=>{
+    try{return JSON.parse(localStorage.getItem('ima_tips_params')||JSON.stringify({totalTipsWeek:0,cuisineSplit:15}));}catch(e){
+      return{totalTipsWeek:0,cuisineSplit:15};
+    }
+  });
+  const[joursTravailles,setJoursTravailles]=useState(()=>{
+    try{return JSON.parse(localStorage.getItem('ima_tips_period')||JSON.stringify({}));}catch(e){
+      return{};
+    }
+  });
+
+  const handleUpdateJours=(empId,value)=>{
+    const updated={...joursTravailles,[empId]:parseFloat(value)||0};
+    setJoursTravailles(updated);
+    localStorage.setItem('ima_tips_period',JSON.stringify(updated));
+  };
+
+  const calculateTotalsForSection=(section)=>{
+    let totalPoints=0;
+    StaffRegistry.getBySection(section).forEach(emp=>{
+      const days=joursTravailles[emp.id]||0;
+      totalPoints+=(emp.points||0)*days;
+    });
+    return totalPoints;
+  };
+
+  const getSectionTips=(section)=>{
+    if(section==='salle')return params.totalTipsWeek*(1-(params.cuisineSplit||15)/100);
+    return params.totalTipsWeek*(params.cuisineSplit||15)/100;
+  };
+
+  const SectionTab=({section})=>{
+    const employees=StaffRegistry.getBySection(section);
+    const tipsEligible=employees.filter(e=>e.tips);
+    const totalPtsSection=calculateTotalsForSection(section);
+    const sectionTips=getSectionTips(section);
+    const valPtJour=totalPtsSection>0?sectionTips/totalPtsSection:0;
+
+    const groupedByCategory={};
+    Object.keys(TIP_CATEGORIES[section]||{}).forEach(cat=>{
+      groupedByCategory[cat]=tipsEligible.filter(e=>e.tipCategory===cat);
+    });
+
+    return(
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Distribution Tips — {section==='salle'?'SALLE':'CUISINE'}</div><div className="card-st">{section==='salle'?'Restaurant, Bar, Accueil':'Kitchen staff'}</div></div></div>
+        <div className="card-b">
+          {Object.entries(groupedByCategory).map(([catKey,empList])=>{
+            const catData=TIP_CATEGORIES[section][catKey];
+            return(<div key={catKey} style={{marginBottom:24}}>
+              <div style={{background:catData.color,color:'white',padding:10,borderRadius:6,marginBottom:12,fontSize:12,fontWeight:600}}>{catData.label}</div>
+              {empList.length===0?<div style={{color:'var(--gris-400)',fontSize:12,padding:10}}>Aucun employé assigné</div>:(
+                <div style={{overflowX:'auto',marginBottom:12}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+                    <thead><tr style={{background:'var(--gris-100)',borderBottom:'1px solid var(--gris-300)'}}>
+                      <th style={{padding:'8px',textAlign:'left',fontWeight:600}}>NOM</th>
+                      <th style={{padding:'8px',textAlign:'center',fontWeight:600}}>POINTS</th>
+                      <th style={{padding:'8px',textAlign:'center',fontWeight:600}}>JOURS</th>
+                      <th style={{padding:'8px',textAlign:'right',fontWeight:600}}>POINTS/JOUR</th>
+                      <th style={{padding:'8px',textAlign:'right',fontWeight:600}}>MONTANT TIPS</th>
+                    </tr></thead>
+                    <tbody>
+                      {empList.map(emp=>{
+                        const days=joursTravailles[emp.id]||0;
+                        const ptsJour=emp.points*days;
+                        const montant=ptsJour*valPtJour;
+                        return(<tr key={emp.id} style={{borderBottom:'1px solid var(--gris-100)'}}>
+                          <td style={{padding:'8px',fontWeight:500}}>{emp.nom}</td>
+                          <td style={{padding:'8px',textAlign:'center',fontWeight:600}}>{emp.points}</td>
+                          <td style={{padding:'8px',textAlign:'center'}}><input type="number" step="0.5" min="0" max="7" style={{width:'50px',padding:'4px 6px',border:'1px solid var(--gris-200)',borderRadius:4,fontSize:11,textAlign:'center',fontFamily:'inherit'}} value={days} onChange={e=>handleUpdateJours(emp.id,e.target.value)}/></td>
+                          <td style={{padding:'8px',textAlign:'right',fontSize:11,fontWeight:600,background:'var(--gris-50)'}}>{ptsJour.toFixed(1)}</td>
+                          <td style={{padding:'8px',textAlign:'right',fontSize:11,fontWeight:600,background:'var(--vert-light)',color:'var(--vert)'}}>{eur(montant)}</td>
+                        </tr>);
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>);
+          })}
+          <div style={{marginTop:20,padding:'12px',background:'var(--gris-50)',borderRadius:8,fontSize:12}}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
+              <span style={{fontWeight:600}}>Total points-jours ({section}):</span>
+              <span style={{fontWeight:700}}>{totalPtsSection.toFixed(1)}</span>
+            </div>
+            <div style={{display:'flex',justifyContent:'space-between'}}>
+              <span style={{fontWeight:600}}>Valeur point/jour:</span>
+              <span style={{fontWeight:700}}>{eur(valPtJour)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return(<div className="fin">
+    <div className="card" style={{marginBottom:20}}>
+      <div className="card-h"><div><div className="card-t">Synthèse Tips Semaine</div></div></div>
+      <div className="card-b">
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14}}>
+          <div><div style={{fontSize:10,color:'var(--gris-500)',fontWeight:500,marginBottom:4,textTransform:'uppercase'}}>Total Tips Semaine</div><div style={{fontSize:18,fontWeight:700,color:'var(--vert)'}}>{eur(params.totalTipsWeek)}</div></div>
+          <div><div style={{fontSize:10,color:'var(--gris-500)',fontWeight:500,marginBottom:4,textTransform:'uppercase'}}>Tips Cuisine ({params.cuisineSplit}%)</div><div style={{fontSize:18,fontWeight:700,color:'var(--orange)'}}>{eur(getSectionTips('cuisine'))}</div></div>
+          <div><div style={{fontSize:10,color:'var(--gris-500)',fontWeight:500,marginBottom:4,textTransform:'uppercase'}}>Tips Salle ({100-params.cuisineSplit}%)</div><div style={{fontSize:18,fontWeight:700,color:'var(--bleu)'}}>{eur(getSectionTips('salle'))}</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div className="tabs">
+      <div className={`tab ${tab==='salle'?'active':''}`} onClick={()=>setTab('salle')}>Salle</div>
+      <div className={`tab ${tab==='cuisine'?'active':''}`} onClick={()=>setTab('cuisine')}>Cuisine</div>
+      <div className={`tab ${tab==='parametres'?'active':''}`} onClick={()=>setTab('parametres')}>Paramètres</div>
+    </div>
+
+    {tab==='salle'&&<SectionTab section="salle"/>}
+    {tab==='cuisine'&&<SectionTab section="cuisine"/>}
+
+    {tab==='parametres'&&<div className="card">
+      <div className="card-h"><div><div className="card-t">Paramètres Tips</div></div></div>
+      <div className="card-b">
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
+          <div className="fg">
+            <label className="fl">Total Tips Semaine (€)</label>
+            <input type="number" step="0.01" className="fi" value={params.totalTipsWeek} onChange={e=>{
+              const val=parseFloat(e.target.value)||0;
+              const newParams={...params,totalTipsWeek:val};
+              setParams(newParams);
+              localStorage.setItem('ima_tips_params',JSON.stringify(newParams));
+            }}/>
+          </div>
+          <div className="fg">
+            <label className="fl">Split Cuisine (%)</label>
+            <input type="number" step="1" className="fi" value={params.cuisineSplit} onChange={e=>{
+              const val=parseFloat(e.target.value)||15;
+              const newParams={...params,cuisineSplit:val};
+              setParams(newParams);
+              localStorage.setItem('ima_tips_params',JSON.stringify(newParams));
+            }}/>
+          </div>
+        </div>
+      </div>
+    </div>}
+  </div>);
+}
+
 // ===== SETTINGS =====
 function Settings(){
   const[token,setToken]=useState(PennylaneService.getToken()||'');
@@ -2053,20 +2518,22 @@ function App(){
       {id:'stocks',l:'Stocks',ic:<I.Stock/>},
       {id:'crm',l:'CRM & Réservations',ic:<I.CRM/>},
       {id:'pos',l:'Caisses (Trivec)',ic:<I.POS/>},
+      {id:'caisse',l:'Clôture Caisse',ic:<I.Cash/>},
+      {id:'tips',l:'Tips & Pourboires',ic:<I.Tips/>},
     ]},
     {sec:'Système',items:[
       {id:'settings',l:'Administration',ic:<I.Gear/>},
     ]},
   ];
 
-  const titles={dashboard:'Dashboard',finance:'Finance & P&L',costs:'Food & Bar Cost',staff:'Staff & RH',stocks:'Stocks & Inventaire',crm:'CRM & Réservations',pos:'Caisses (Trivec)',settings:'Administration'};
+  const titles={dashboard:'Dashboard',finance:'Finance & P&L',costs:'Food & Bar Cost',staff:'Staff & RH',stocks:'Stocks & Inventaire',crm:'CRM & Réservations',pos:'Caisses (Trivec)',caisse:'Clôture de Caisse',tips:'Tips & Pourboires',settings:'Administration'};
 
   if(!auth) return <Login onLogin={()=>setAuth(true)}/>;
 
   const P=()=>{switch(page){
     case 'dashboard':return <Dashboard/>;case 'finance':return <Finance/>;case 'costs':return <Costs/>;
     case 'staff':return <StaffPage/>;case 'stocks':return <Stocks/>;case 'crm':return <CRMPage/>;
-    case 'pos':return <POSPage/>;case 'settings':return <Settings/>;default:return <Dashboard/>;
+    case 'pos':return <POSPage/>;case 'caisse':return <CaissePage/>;case 'tips':return <TipsPage/>;case 'settings':return <Settings/>;default:return <Dashboard/>;
   }};
 
   return(
