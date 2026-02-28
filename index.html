@@ -610,37 +610,40 @@ const TrivecService={
         try{
           const wb=XLSX.read(e.target.result,{type:'array'});
           const ws=wb.Sheets[wb.SheetNames[0]];
-          const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
 
+          // Direct cell access to handle merged cells properly
+          const cell=(r,c)=>{const ref=XLSX.utils.encode_cell({r:r-1,c:c});const v=ws[ref];return v?v.v:null;};
+          const cellStr=(r,c)=>{const v=cell(r,c);return v!=null?String(v).trim():'';}
+          const cellNum=(r,c)=>{const v=cell(r,c);return typeof v==='number'?v:Number(v)||0;};
+
+          // Find date
           let dateStr='';
-          for(const row of rows){
-            for(const cell of row){
-              if(cell&&typeof cell==='string'&&cell.match(/\d{2}\/\d{2}\/\d{4}/)){
-                dateStr=cell.split(' - ')[0].trim();break;
-              }
-            }
-            if(dateStr)break;
-          }
+          for(let r=1;r<=10;r++){for(let c=0;c<=12;c++){const v=cellStr(r,c);if(v.match(/\d{2}\/\d{2}\/\d{4}/)){dateStr=v.split(' - ')[0].trim();break;}}if(dateStr)break;}
 
-          // Parse product hierarchy
+          // Find max row
+          const range=XLSX.utils.decode_range(ws['!ref']||'A1');
+          const maxRow=range.e.r+1;
+
+          // Parse product hierarchy using direct cell access
+          // Structure: C=cat1, D=cat2, E=cat3, F=product name, G=qty, H=price
           let products=[];
           let currentCat1='',currentCat2='',currentCat3='';
 
-          for(let i=10;i<rows.length;i++){
-            const r=rows[i];
-            // Level hierarchy: col0=top, col1=unused, col2=cat1, col3=cat2, col4=cat3, col5=product
-            if(r[0]&&String(r[0]).trim()==='Sales')continue;
+          for(let r=11;r<=maxRow;r++){
+            const colA=cellStr(r,0);
+            if(colA==='Sales'||colA==='Grand Total')continue;
 
-            if(r[2]&&typeof r[2]==='string'&&r[2].trim())currentCat1=String(r[2]).trim();
-            if(r[3]&&typeof r[3]==='string'&&r[3].trim())currentCat2=String(r[3]).trim();
-            if(r[4]&&typeof r[4]==='string'&&r[4].trim())currentCat3=String(r[4]).trim();
+            const c2=cellStr(r,2);if(c2&&c2!=='BOISSONS'&&c2.length>1)currentCat1=c2;
+            const c3=cellStr(r,3);if(c3)currentCat2=c3;
+            const c4=cellStr(r,4);if(c4)currentCat3=c4;
 
-            if(r[5]&&typeof r[5]==='string'&&r[5].trim()){
-              const qty=Number(r[6])||0;
-              const prix=Number(r[7])||0;
+            const prodName=cellStr(r,5);
+            if(prodName){
+              const qty=cellNum(r,6);
+              const prix=cellNum(r,7);
               if(qty>0||prix>0){
                 products.push({
-                  nom:String(r[5]).trim(),
+                  nom:prodName,
                   categorie1:currentCat1,
                   categorie2:currentCat2,
                   categorie3:currentCat3,
@@ -2129,64 +2132,145 @@ function CRMPage(){
 // ===== POS =====
 function POSPage(){
   const hasTrivec=TrivecService.isConnected();
-  const trivecMonth=TrivecService.getMonthData();
-  const latestDay=TrivecService.getLatestDay();
   const allDays=TrivecService.getAllDays();
+  const[viewMode,setViewMode]=useState('jour');
+
+  // Today's date in dd/mm/yyyy format
+  const now=new Date();
+  const todayStr=String(now.getDate()).padStart(2,'0')+'/'+String(now.getMonth()+1).padStart(2,'0')+'/'+now.getFullYear();
+
+  // Filter days based on viewMode
+  const filteredDays=useMemo(()=>{
+    const entries=Object.entries(allDays);
+    if(viewMode==='jour'){
+      // Show only today — day resets at 18h so today = current date
+      return entries.filter(([d])=>d===todayStr);
+    }
+    if(viewMode==='semaine'){
+      // Current week (Mon-Sun)
+      const d=new Date();
+      const dayOfWeek=d.getDay()||7;
+      const monday=new Date(d);monday.setDate(d.getDate()-(dayOfWeek-1));
+      monday.setHours(0,0,0,0);
+      return entries.filter(([dateStr])=>{
+        const p=dateStr.split('/');
+        const dt=new Date(parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));
+        return dt>=monday&&dt<=d;
+      });
+    }
+    if(viewMode==='mois'){
+      const m=now.getMonth()+1,y=now.getFullYear();
+      return entries.filter(([dateStr])=>{
+        const p=dateStr.split('/');
+        return parseInt(p[1])===m&&parseInt(p[2])===y;
+      });
+    }
+    // année
+    const y=now.getFullYear();
+    return entries.filter(([dateStr])=>{
+      const p=dateStr.split('/');
+      return parseInt(p[2])===y;
+    });
+  },[allDays,viewMode,todayStr]);
+
+  // Aggregate filtered data
+  const agg=useMemo(()=>{
+    let totalCA=0,totalCouverts=0,totalEspeces=0,totalCB=0,totalAmex=0,caResto=0,caClub=0,caBar=0,days=0;
+    filteredDays.forEach(([,d])=>{
+      totalCA+=d.ventes?.total||0;
+      totalCouverts+=(d.couverts?.restaurant?.total||0)+(d.couverts?.club?.total||0)+(d.couverts?.bar?.total||0);
+      totalEspeces+=d.paiements?.especes||0;
+      totalCB+=d.paiements?.cb||0;
+      totalAmex+=d.paiements?.amex||0;
+      caResto+=d.ventes?.restaurant||0;
+      caClub+=d.ventes?.club||0;
+      caBar+=d.ventes?.bar||0;
+      days++;
+    });
+    return{totalCA,totalCouverts,totalEspeces,totalCB,totalAmex,caResto,caClub,caBar,days,ticketMoyen:totalCouverts>0?totalCA/totalCouverts:0};
+  },[filteredDays]);
+
+  const viewLabels={jour:'Jour',semaine:'Semaine',mois:'Mois',annee:'Année'};
+  const periodLabel=viewMode==='jour'?todayStr:viewMode==='semaine'?'Cette semaine':viewMode==='mois'?now.toLocaleDateString('fr-FR',{month:'long',year:'numeric'}):''+now.getFullYear();
+
+  // For the detail card, show the day data if viewing a single day
+  const dayDetail=viewMode==='jour'?allDays[todayStr]:null;
 
   return(<div className="fin">
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
+      <div><span style={{fontSize:18,fontWeight:700}}>Caisses (Trivec)</span><span style={{fontSize:13,color:'var(--gris-500)',marginLeft:10}}>{periodLabel}</span></div>
+      <div style={{display:'flex',border:'1px solid var(--gris-200)',borderRadius:8,overflow:'hidden'}}>
+        {['jour','semaine','mois','annee'].map(m=>(
+          <button key={m} onClick={()=>setViewMode(m)} style={{padding:'6px 14px',fontSize:12,fontWeight:viewMode===m?600:400,background:viewMode===m?'var(--bordeaux)':'white',color:viewMode===m?'white':'var(--gris-600)',border:'none',cursor:'pointer',transition:'all .15s'}}>{viewLabels[m]}</button>
+        ))}
+      </div>
+    </div>
+
     {!hasTrivec&&<div style={{background:'var(--bleu-light)',border:'1px solid var(--bleu)',borderRadius:10,padding:16,marginBottom:20,fontSize:13,color:'var(--bleu)'}}>
       <strong>Caisses Trivec</strong> — Importez les fichiers Excel Trivec dans Administration pour voir les données.
     </div>}
+
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">CA POS (mois)</div><div className="kpi-val" style={{color:hasTrivec?'var(--gris-900)':'var(--gris-300)'}}>{hasTrivec?trivecMonth.totalCA.toLocaleString('fr-FR')+'€':'—'}</div><div className={`kpi-chg ${hasTrivec?'pos':'neu'}`}>{hasTrivec?`${trivecMonth.days} jours`:'En attente Trivec'}</div></div>
-      <div className="kpi"><div className="kpi-label">Ticket moyen</div><div className="kpi-val" style={{color:hasTrivec?'var(--gris-900)':'var(--gris-300)'}}>{hasTrivec?Math.round(trivecMonth.ticketMoyen)+'€':'—'}</div><div className={`kpi-chg ${hasTrivec?'pos':'neu'}`}>{hasTrivec?'Restaurant':'En attente'}</div></div>
-      <div className="kpi"><div className="kpi-label">Couverts (mois)</div><div className="kpi-val" style={{color:hasTrivec?'var(--gris-900)':'var(--gris-300)'}}>{hasTrivec?trivecMonth.totalCouverts.toLocaleString('fr-FR'):'—'}</div><div className={`kpi-chg ${hasTrivec?'pos':'neu'}`}>{hasTrivec?'Tous départements':'En attente'}</div></div>
-      <div className="kpi"><div className="kpi-label">CB / Espèces / Amex</div><div className="kpi-val" style={{fontSize:hasTrivec?14:24,color:hasTrivec?'var(--gris-900)':'var(--gris-300)'}}>{hasTrivec?`${Math.round(trivecMonth.totalCB/1000)}k / ${Math.round(trivecMonth.totalEspeces/1000)}k / ${Math.round(trivecMonth.totalAmex/1000)}k`:'—'}</div><div className={`kpi-chg ${hasTrivec?'pos':'neu'}`}>{hasTrivec?'Paiements':'En attente'}</div></div>
+      <div className="kpi"><div className="kpi-label">CA {viewLabels[viewMode]}</div><div className="kpi-val" style={{color:agg.totalCA>0?'var(--gris-900)':'var(--gris-300)'}}>{agg.totalCA>0?agg.totalCA.toLocaleString('fr-FR')+'€':'0€'}</div><div className={`kpi-chg ${agg.days>0?'pos':'neu'}`}>{agg.days>0?`${agg.days} jour(s)`:'Aucune donnée'}</div></div>
+      <div className="kpi"><div className="kpi-label">Ticket moyen</div><div className="kpi-val" style={{color:agg.ticketMoyen>0?'var(--gris-900)':'var(--gris-300)'}}>{agg.ticketMoyen>0?Math.round(agg.ticketMoyen)+'€':'0€'}</div><div className={`kpi-chg ${agg.ticketMoyen>0?'pos':'neu'}`}>{agg.ticketMoyen>0?'Restaurant':'—'}</div></div>
+      <div className="kpi"><div className="kpi-label">Couverts</div><div className="kpi-val" style={{color:agg.totalCouverts>0?'var(--gris-900)':'var(--gris-300)'}}>{agg.totalCouverts>0?agg.totalCouverts.toLocaleString('fr-FR'):'0'}</div><div className={`kpi-chg ${agg.totalCouverts>0?'pos':'neu'}`}>{agg.totalCouverts>0?'Tous départements':'—'}</div></div>
+      <div className="kpi"><div className="kpi-label">CB / Espèces / Amex</div><div className="kpi-val" style={{fontSize:agg.totalCA>0?14:24,color:agg.totalCA>0?'var(--gris-900)':'var(--gris-300)'}}>{agg.totalCA>0?`${Math.round(agg.totalCB).toLocaleString('fr-FR')}€ / ${Math.round(agg.totalEspeces).toLocaleString('fr-FR')}€ / ${Math.round(agg.totalAmex).toLocaleString('fr-FR')}€`:'0€'}</div><div className={`kpi-chg ${agg.totalCA>0?'pos':'neu'}`}>{agg.totalCA>0?'Paiements':'—'}</div></div>
     </div>
 
-    {hasTrivec&&latestDay&&<div className="card" style={{marginBottom:16}}>
-      <div className="card-h"><div><div className="card-t">Dernier jour importé — {latestDay.date}</div></div><span className="badge b-ok">Trivec</span></div>
+    {viewMode==='jour'&&!dayDetail&&hasTrivec&&<div style={{background:'var(--orange-light)',border:'1px solid var(--orange)',borderRadius:10,padding:16,marginBottom:16,fontSize:13,color:'var(--orange)'}}>
+      <strong>Pas de données pour le {todayStr}.</strong> La journée n'a pas encore été clôturée ou le fichier Trivec n'a pas été importé. La clôture a lieu à 18h.
+    </div>}
+
+    {dayDetail&&<div className="card" style={{marginBottom:16}}>
+      <div className="card-h"><div><div className="card-t">Détail — {todayStr}</div></div><span className="badge b-ok">Trivec</span></div>
       <div className="card-b">
         <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16,marginBottom:16}}>
-          <div style={{padding:14,background:'var(--gris-50)',borderRadius:8,textAlign:'center'}}>
-            <div style={{fontSize:10,color:'var(--gris-500)',textTransform:'uppercase',fontWeight:600}}>Restaurant</div>
-            <div style={{fontSize:20,fontWeight:700,color:'var(--bordeaux)'}}>{(latestDay.ventes?.restaurant||0).toLocaleString('fr-FR')}€</div>
-            <div style={{fontSize:11,color:'var(--gris-500)'}}>{latestDay.couverts?.restaurant?.total||0} couverts — TM {Math.round(latestDay.couverts?.restaurant?.avgCover||0)}€</div>
-          </div>
-          <div style={{padding:14,background:'var(--gris-50)',borderRadius:8,textAlign:'center'}}>
-            <div style={{fontSize:10,color:'var(--gris-500)',textTransform:'uppercase',fontWeight:600}}>Club</div>
-            <div style={{fontSize:20,fontWeight:700,color:'var(--bordeaux)'}}>{(latestDay.ventes?.club||0).toLocaleString('fr-FR')}€</div>
-            <div style={{fontSize:11,color:'var(--gris-500)'}}>{latestDay.couverts?.club?.total||0} couverts — TM {Math.round(latestDay.couverts?.club?.avgCover||0)}€</div>
-          </div>
-          <div style={{padding:14,background:'var(--gris-50)',borderRadius:8,textAlign:'center'}}>
-            <div style={{fontSize:10,color:'var(--gris-500)',textTransform:'uppercase',fontWeight:600}}>Bar</div>
-            <div style={{fontSize:20,fontWeight:700,color:'var(--bordeaux)'}}>{(latestDay.ventes?.bar||0).toLocaleString('fr-FR')}€</div>
-            <div style={{fontSize:11,color:'var(--gris-500)'}}>{latestDay.couverts?.bar?.total||0} couverts</div>
-          </div>
+          {[{l:'Restaurant',v:dayDetail.ventes?.restaurant,c:dayDetail.couverts?.restaurant},{l:'Club',v:dayDetail.ventes?.club,c:dayDetail.couverts?.club},{l:'Bar',v:dayDetail.ventes?.bar,c:dayDetail.couverts?.bar}].map((dept,i)=>
+            <div key={i} style={{padding:14,background:'var(--gris-50)',borderRadius:8,textAlign:'center'}}>
+              <div style={{fontSize:10,color:'var(--gris-500)',textTransform:'uppercase',fontWeight:600}}>{dept.l}</div>
+              <div style={{fontSize:20,fontWeight:700,color:'var(--bordeaux)'}}>{(dept.v||0).toLocaleString('fr-FR')}€</div>
+              <div style={{fontSize:11,color:'var(--gris-500)'}}>{dept.c?.total||0} couverts{dept.c?.avgCover?' — TM '+Math.round(dept.c.avgCover)+'€':''}</div>
+            </div>
+          )}
         </div>
         <div style={{fontSize:12,fontWeight:600,marginBottom:8}}>Paiements</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8,fontSize:11}}>
-          {[{l:'Espèces',v:latestDay.paiements?.especes},{l:'CB',v:latestDay.paiements?.cb},{l:'Amex',v:latestDay.paiements?.amex},{l:'Aucun',v:latestDay.paiements?.aucun},{l:'SevenRoom',v:latestDay.paiements?.sevenroom}].map((p,i)=>
+          {[{l:'Espèces',v:dayDetail.paiements?.especes},{l:'CB',v:dayDetail.paiements?.cb},{l:'Amex',v:dayDetail.paiements?.amex},{l:'Aucun',v:dayDetail.paiements?.aucun},{l:'SevenRoom',v:dayDetail.paiements?.sevenroom}].map((p,i)=>
             <div key={i} style={{padding:8,background:'var(--gris-50)',borderRadius:6,textAlign:'center'}}>
               <div style={{color:'var(--gris-500)',fontSize:9}}>{p.l}</div>
               <div style={{fontWeight:600}}>{(p.v||0).toLocaleString('fr-FR')}€</div>
             </div>
           )}
         </div>
-        {latestDay.internes?.details?.length>0&&<div style={{marginTop:12}}>
-          <div style={{fontSize:12,fontWeight:600,marginBottom:6}}>Comptes internes ({(latestDay.internes?.total||0).toLocaleString('fr-FR')}€)</div>
+        {dayDetail.internes?.details?.length>0&&<div style={{marginTop:12}}>
+          <div style={{fontSize:12,fontWeight:600,marginBottom:6}}>Comptes internes ({(dayDetail.internes?.total||0).toLocaleString('fr-FR')}€)</div>
           <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-            {latestDay.internes.details.map((c,i)=><div key={i} style={{padding:'3px 8px',background:'var(--orange-light)',borderRadius:4,fontSize:10}}>{c.nom}: {c.montant}€</div>)}
+            {dayDetail.internes.details.map((c,i)=><div key={i} style={{padding:'3px 8px',background:'var(--orange-light)',borderRadius:4,fontSize:10}}>{c.nom}: {c.montant}€</div>)}
           </div>
         </div>}
       </div>
     </div>}
 
-    <div className="card">
-      <div className="card-h"><div><div className="card-t">Historique journalier</div><div className="card-st">Trivec POS</div></div>{hasTrivec?<span className="badge b-ok">{Object.keys(allDays).length} jours</span>:<span className="badge b-warn">Non connecté</span>}</div>
+    {viewMode!=='jour'&&agg.days>0&&<div className="card" style={{marginBottom:16}}>
+      <div className="card-h"><div><div className="card-t">Répartition CA — {periodLabel}</div></div></div>
       <div className="card-b">
-        {hasTrivec?<table className="t-table"><thead><tr><th>Date</th><th style={{textAlign:'right'}}>CA Total</th><th style={{textAlign:'right'}}>Restaurant</th><th style={{textAlign:'right'}}>Club</th><th style={{textAlign:'right'}}>Bar</th><th style={{textAlign:'right'}}>Couverts</th><th style={{textAlign:'right'}}>TM Resto</th></tr></thead>
-        <tbody>{Object.entries(allDays).sort((a,b)=>{const pa=a[0].split('/').reverse().join('');const pb=b[0].split('/').reverse().join('');return pb.localeCompare(pa);}).map(([date,d])=>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16}}>
+          {[{l:'Restaurant',v:agg.caResto,pct:agg.totalCA>0?(agg.caResto/agg.totalCA*100):0},{l:'Club',v:agg.caClub,pct:agg.totalCA>0?(agg.caClub/agg.totalCA*100):0},{l:'Bar',v:agg.caBar,pct:agg.totalCA>0?(agg.caBar/agg.totalCA*100):0}].map((dept,i)=>
+            <div key={i} style={{padding:14,background:'var(--gris-50)',borderRadius:8,textAlign:'center'}}>
+              <div style={{fontSize:10,color:'var(--gris-500)',textTransform:'uppercase',fontWeight:600}}>{dept.l}</div>
+              <div style={{fontSize:20,fontWeight:700,color:'var(--bordeaux)'}}>{dept.v.toLocaleString('fr-FR')}€</div>
+              <div style={{fontSize:11,color:'var(--gris-500)'}}>{dept.pct.toFixed(1)}% du CA</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>}
+
+    <div className="card">
+      <div className="card-h"><div><div className="card-t">Historique journalier</div><div className="card-st">Trivec POS</div></div>{hasTrivec?<span className="badge b-ok">{filteredDays.length} jour(s)</span>:<span className="badge b-warn">Non connecté</span>}</div>
+      <div className="card-b">
+        {filteredDays.length>0?<table className="t-table"><thead><tr><th>Date</th><th style={{textAlign:'right'}}>CA Total</th><th style={{textAlign:'right'}}>Restaurant</th><th style={{textAlign:'right'}}>Club</th><th style={{textAlign:'right'}}>Bar</th><th style={{textAlign:'right'}}>Couverts</th><th style={{textAlign:'right'}}>TM Resto</th></tr></thead>
+        <tbody>{filteredDays.sort((a,b)=>{const pa=a[0].split('/').reverse().join('');const pb=b[0].split('/').reverse().join('');return pb.localeCompare(pa);}).map(([date,d])=>
           <tr key={date}><td style={{fontWeight:500}}>{date}</td>
             <td style={{textAlign:'right',fontWeight:600}}>{(d.caTotal||0).toLocaleString('fr-FR')}€</td>
             <td style={{textAlign:'right'}}>{(d.ventes?.restaurant||0).toLocaleString('fr-FR')}€</td>
@@ -2196,10 +2280,8 @@ function POSPage(){
             <td style={{textAlign:'right'}}>{Math.round(d.couverts?.restaurant?.avgCover||0)}€</td>
           </tr>
         )}</tbody></table>:
-        <div style={{padding:50,textAlign:'center',color:'var(--gris-400)'}}>
-          <div style={{fontSize:32,marginBottom:10}}>🧾</div>
-          <div style={{fontWeight:500,marginBottom:4}}>Importez les fichiers Trivec dans Administration</div>
-          <div style={{fontSize:11}}>Les ventes journalières apparaîtront ici</div>
+        <div style={{padding:40,textAlign:'center',color:'var(--gris-400)',fontSize:12}}>
+          {hasTrivec?`Aucune donnée pour cette période (${periodLabel})`:'Importez les fichiers Trivec dans Administration'}
         </div>}
       </div>
     </div>
