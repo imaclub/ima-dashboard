@@ -1331,23 +1331,39 @@ function StaffPage(){
   const[tab,setTab]=useState('equipe');
   const[showModal,setShowModal]=useState(false);
   const[editingId,setEditingId]=useState(null);
-  const[newEmp,setNewEmp]=useState({nom:'',poste:'Serveur',section:'salle',tipCategory:'FLOOR',points:4,contrat:'CDI',tel:'',dateEntree:new Date().toLocaleDateString('fr-FR'),tips:true,coutBrut:0,heures:0,extras:0});
+  const emptyEmp={nom:'',poste:'Serveur',section:'salle',tipCategory:'FLOOR',points:4,contrat:'CDI',tel:'',dateEntree:new Date().toLocaleDateString('fr-FR'),tips:true,coutBrut:0,heures:0,extras:0};
+  const[newEmp,setNewEmp]=useState(emptyEmp);
+  const[ver,setVer]=useState(0);
   const team=StaffRegistry.getActive();
   const tipsTeam=StaffRegistry.getTipsEligible();
 
-  const handleAddEmployee=()=>{
+  const handleAddOrSave=()=>{
     if(!newEmp.nom)return;
-    StaffRegistry.add(newEmp);
-    setNewEmp({nom:'',poste:'Serveur',section:'salle',tipCategory:'FLOOR',points:4,contrat:'CDI',tel:'',dateEntree:new Date().toLocaleDateString('fr-FR'),tips:true,coutBrut:0,heures:0,extras:0});
-    setShowModal(false);
+    if(editingId){
+      StaffRegistry.update(editingId,newEmp);
+      setEditingId(null);
+    }else{
+      StaffRegistry.add(newEmp);
+    }
+    setNewEmp({...emptyEmp});
+    setVer(v=>v+1);
+    setTab('equipe');
   };
 
-  const handleUpdateField=(id,field,value)=>{
-    StaffRegistry.update(id,{[field]:isNaN(value)?value:parseFloat(value)||0});
+  const handleEditEmployee=(emp)=>{
+    setEditingId(emp.id);
+    setNewEmp({nom:emp.nom,poste:emp.poste,section:emp.section||'salle',tipCategory:emp.tipCategory||'FLOOR',points:emp.points||3,contrat:emp.contrat||'CDI',tel:emp.tel||'',dateEntree:emp.dateEntree||'',tips:emp.tips!==false,coutBrut:emp.coutBrut||0,heures:emp.heures||0,extras:emp.extras||0});
+    setTab('ajouter');
+  };
+
+  const handleCancelEdit=()=>{
+    setEditingId(null);
+    setNewEmp({...emptyEmp});
   };
 
   const handleDeactivate=(id)=>{
-    if(confirm('Marquer comme inactif?'))StaffRegistry.deactivate(id);
+    if(confirm('Marquer comme inactif ?'))StaffRegistry.deactivate(id);
+    setVer(v=>v+1);
   };
 
   const totalMasseS=team.reduce((s,e)=>s+(e.coutBrut||0),0);
@@ -1389,7 +1405,7 @@ function StaffPage(){
             <td style={{textAlign:'right',color:e.extras>0?'var(--orange)':'var(--gris-400)'}}>{e.extras>0?e.extras+'h':'—'}</td>
             <td style={{textAlign:'right',fontWeight:600}}>{e.coutBrut>0?eur(e.coutBrut):'—'}</td>
             <td>{e.tips?<span className="badge b-ok" style={{fontSize:10}}>Oui</span>:<span className="badge" style={{background:'var(--gris-100)',color:'var(--gris-400)',fontSize:10}}>Non</span>}</td>
-            <td><button className="btn btn-sm" style={{background:'var(--rouge-light)',color:'var(--rouge)',border:'none',padding:'4px 8px',fontSize:10,cursor:'pointer'}} onClick={()=>handleDeactivate(e.id)}>Désactiver</button></td>
+            <td style={{whiteSpace:'nowrap'}}><button className="btn btn-sm" style={{background:'var(--bleu-light)',color:'var(--bleu)',border:'none',padding:'4px 8px',fontSize:10,cursor:'pointer',marginRight:4}} onClick={()=>handleEditEmployee(e)}>Modifier</button><button className="btn btn-sm" style={{background:'var(--rouge-light)',color:'var(--rouge)',border:'none',padding:'4px 8px',fontSize:10,cursor:'pointer'}} onClick={()=>handleDeactivate(e.id)}>Désactiver</button></td>
           </tr>)}</tbody>
         </table></div></div>
       </div>
@@ -1397,7 +1413,7 @@ function StaffPage(){
 
     {tab==='ajouter'&&<div>
       <div className="card">
-        <div className="card-h"><div><div className="card-t">Ajouter / Modifier un employé</div></div></div>
+        <div className="card-h"><div><div className="card-t">{editingId?`Modifier — ${newEmp.nom}`:'Ajouter un employé'}</div>{editingId&&<div className="card-st">Modifiez les champs puis cliquez Sauvegarder</div>}</div>{editingId&&<span className="badge b-warn">Mode édition</span>}</div>
         <div className="card-b">
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
             <div className="fg">
@@ -1471,8 +1487,9 @@ function StaffPage(){
           </div>
 
           <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
-            <button className="btn btn-secondary" onClick={()=>setNewEmp({nom:'',poste:'Serveur',section:'salle',tipCategory:'FLOOR',points:4,contrat:'CDI',tel:'',dateEntree:new Date().toLocaleDateString('fr-FR'),tips:true,coutBrut:0,heures:0,extras:0})}>Réinitialiser</button>
-            <button className="btn btn-primary" onClick={handleAddEmployee}>Ajouter l'employé</button>
+            {editingId&&<button className="btn btn-secondary" onClick={handleCancelEdit}>Annuler</button>}
+            {!editingId&&<button className="btn btn-secondary" onClick={()=>setNewEmp({...emptyEmp})}>Réinitialiser</button>}
+            <button className="btn btn-primary" onClick={handleAddOrSave}>{editingId?'Sauvegarder les modifications':'Ajouter l\'employé'}</button>
           </div>
         </div>
       </div>
