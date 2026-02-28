@@ -7,6 +7,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
@@ -470,6 +471,286 @@ const StaffRegistry={
 
 StaffRegistry.initDefaults();
 
+// ===== TRIVEC SERVICE =====
+const TrivecService={
+  _key:'ima_trivec_data_v1',
+  _getData(){try{return JSON.parse(localStorage.getItem(this._key)||'{}');}catch(e){return{};}},
+  _saveData(d){localStorage.setItem(this._key,JSON.stringify(d));},
+
+  // Parse "Suivi d'activité Journalier" Excel
+  parseSuiviJournalier(file){
+    return new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=(e)=>{
+        try{
+          const wb=XLSX.read(e.target.result,{type:'array'});
+          const ws=wb.Sheets[wb.SheetNames[0]];
+          const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+
+          // Find date
+          let dateStr='';
+          for(const row of rows){if(row[0]&&typeof row[0]==='string'&&row[0].match(/\d{2}\/\d{2}\/\d{4}/)){dateStr=row[0].split(' - ')[0].trim();break;}}
+
+          // Parse Ventes par Centre
+          let ventes={total:0,restaurant:0,club:0,bar:0,food10:0,food20:0,drink10:0,drink20:0};
+          let paiements={especes:0,cb:0,amex:0,aucun:0,sevenroom:0,total:0};
+          let internes={total:0,details:[]};
+          let couverts={restaurant:{total:0,avgCover:0},club:{total:0,avgCover:0},bar:{total:0,avgCover:0}};
+          let shifts=[];
+
+          let section='';
+          for(let i=0;i<rows.length;i++){
+            const r=rows[i];
+            const c0=r[0]!=null?String(r[0]).trim():'';
+
+            if(c0==='Ventes par Centre')section='ventes';
+            else if(c0==='Paiements')section='paiements';
+            else if(c0==='Comptes internes')section='internes';
+            else if(c0==='Analyse Couverts')section='couverts';
+
+            if(section==='ventes'){
+              if(c0==='Grand Total'){
+                ventes.total=Number(r[2])||0;
+                ventes.restaurant=Number(r[4])||0;
+                ventes.club=Number(r[6])||0;
+                ventes.bar=Number(r[8])||0;
+              }
+              if(c0==='10'){
+                const g1=r[1]!=null?String(r[1]).trim():'';
+                // TVA 10%
+                if(!g1){
+                  ventes.food10=Number(r[2])||0;
+                }
+              }
+              if(c0==='20'){
+                ventes.drink20=Number(r[2])||0;
+              }
+              // Sub-categories under TVA
+              if(!c0&&r[1]){
+                const g1=String(r[1]).trim();
+                if(g1==='NOURRITURE'&&section==='ventes'){
+                  // Nourriture line
+                }
+                if(g1==='BOISSONS SS ALCOOL'){
+                  ventes.drink10=Number(r[2])||0;
+                }
+                if(g1==='BOISSONS ALCOOLISEES'){
+                  // Already captured in drink20
+                }
+              }
+            }
+
+            if(section==='paiements'){
+              if(c0==='Especes')paiements.especes=Number(r[2])||0;
+              else if(c0==='CB')paiements.cb=Number(r[2])||0;
+              else if(c0==='Amex')paiements.amex=Number(r[2])||0;
+              else if(c0==='Aucun Paiement')paiements.aucun=Number(r[2])||0;
+              else if(c0==='SevenRoom')paiements.sevenroom=Number(r[2])||0;
+              else if(c0==='Grand Total')paiements.total=Number(r[2])||0;
+            }
+
+            if(section==='internes'){
+              if(c0==='Internal'){internes.total=Number(r[2])||0;}
+              else if(!c0&&r[1]&&typeof r[1]==='string'&&r[1].trim().startsWith('Comp')){
+                internes.details.push({nom:String(r[1]).trim(),montant:Number(r[2])||0});
+              }
+              else if(!c0&&r[1]&&typeof r[1]==='string'&&r[1].trim().startsWith('Conso')){
+                internes.details.push({nom:String(r[1]).trim(),montant:Number(r[2])||0});
+              }
+            }
+
+            if(section==='couverts'){
+              if(c0==='Sales'){
+                couverts.restaurant={total:Number(r[4])||0,avgCover:Number(r[5])||0};
+                couverts.club={total:Number(r[6])||0,avgCover:Number(r[7])||0};
+                couverts.bar={total:Number(r[8])||0,avgCover:Number(r[9])||0};
+              }
+              // Shifts
+              if(!c0&&r[1]&&typeof r[1]==='string'){
+                const shiftName=String(r[1]).trim();
+                if(['DEJ','18H-23H','CLUB'].includes(shiftName)){
+                  shifts.push({
+                    shift:shiftName,
+                    restaurant:{covers:Number(r[4])||0,avg:Number(r[5])||0},
+                    club:{covers:Number(r[6])||0,avg:Number(r[7])||0},
+                    bar:{covers:Number(r[8])||0,avg:Number(r[9])||0}
+                  });
+                }
+              }
+            }
+          }
+
+          const dayData={
+            date:dateStr,
+            parsedAt:new Date().toISOString(),
+            ventes,paiements,internes,couverts,shifts,
+            caTotal:ventes.total,
+            ticketMoyen:couverts.restaurant.avgCover
+          };
+
+          // Save to localStorage by date
+          const allData=this._getData();
+          if(!allData.jours)allData.jours={};
+          allData.jours[dateStr]=dayData;
+          allData.lastImport=new Date().toISOString();
+          this._saveData(allData);
+
+          resolve(dayData);
+        }catch(err){reject(err);}
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  },
+
+  // Parse "Rapport Assortiments de Produits" Excel
+  parseAssortiments(file){
+    return new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=(e)=>{
+        try{
+          const wb=XLSX.read(e.target.result,{type:'array'});
+          const ws=wb.Sheets[wb.SheetNames[0]];
+          const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+
+          let dateStr='';
+          for(const row of rows){
+            for(const cell of row){
+              if(cell&&typeof cell==='string'&&cell.match(/\d{2}\/\d{2}\/\d{4}/)){
+                dateStr=cell.split(' - ')[0].trim();break;
+              }
+            }
+            if(dateStr)break;
+          }
+
+          // Parse product hierarchy
+          let products=[];
+          let currentCat1='',currentCat2='',currentCat3='';
+
+          for(let i=10;i<rows.length;i++){
+            const r=rows[i];
+            // Level hierarchy: col0=top, col1=unused, col2=cat1, col3=cat2, col4=cat3, col5=product
+            if(r[0]&&String(r[0]).trim()==='Sales')continue;
+
+            if(r[2]&&typeof r[2]==='string'&&r[2].trim())currentCat1=String(r[2]).trim();
+            if(r[3]&&typeof r[3]==='string'&&r[3].trim())currentCat2=String(r[3]).trim();
+            if(r[4]&&typeof r[4]==='string'&&r[4].trim())currentCat3=String(r[4]).trim();
+
+            if(r[5]&&typeof r[5]==='string'&&r[5].trim()){
+              const qty=Number(r[6])||0;
+              const prix=Number(r[7])||0;
+              if(qty>0||prix>0){
+                products.push({
+                  nom:String(r[5]).trim(),
+                  categorie1:currentCat1,
+                  categorie2:currentCat2,
+                  categorie3:currentCat3,
+                  quantite:qty,
+                  prix:prix
+                });
+              }
+            }
+          }
+
+          // Aggregate by category
+          const byCat={};
+          products.forEach(p=>{
+            if(!byCat[p.categorie1])byCat[p.categorie1]={qty:0,total:0,items:[]};
+            byCat[p.categorie1].qty+=p.quantite;
+            byCat[p.categorie1].total+=p.prix;
+            byCat[p.categorie1].items.push(p);
+          });
+
+          const assortData={date:dateStr,parsedAt:new Date().toISOString(),products,byCat,totalProducts:products.length};
+
+          const allData=this._getData();
+          if(!allData.assortiments)allData.assortiments={};
+          allData.assortiments[dateStr]=assortData;
+          this._saveData(allData);
+
+          resolve(assortData);
+        }catch(err){reject(err);}
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  },
+
+  // Get all stored day data
+  getAllDays(){
+    const d=this._getData();
+    return d.jours||{};
+  },
+
+  // Get data for a specific date
+  getDay(dateStr){
+    const d=this._getData();
+    return(d.jours||{})[dateStr]||null;
+  },
+
+  // Get latest day data
+  getLatestDay(){
+    const jours=this.getAllDays();
+    const dates=Object.keys(jours).sort((a,b)=>{
+      const pa=a.split('/').reverse().join('');
+      const pb=b.split('/').reverse().join('');
+      return pb.localeCompare(pa);
+    });
+    return dates.length>0?jours[dates[0]]:null;
+  },
+
+  // Get aggregated data for current month
+  getMonthData(month,year){
+    const jours=this.getAllDays();
+    let totalCA=0,totalCouverts=0,days=0,totalEspeces=0,totalCB=0,totalAmex=0;
+    let caRestaurant=0,caClub=0,caBar=0;
+
+    for(const[dateStr,data]of Object.entries(jours)){
+      const parts=dateStr.split('/');
+      if(parts.length===3){
+        const m=parseInt(parts[1]);
+        const y=parseInt(parts[2]);
+        if((!month||m===month)&&(!year||y===year)){
+          totalCA+=data.ventes?.total||0;
+          totalCouverts+=(data.couverts?.restaurant?.total||0)+(data.couverts?.club?.total||0)+(data.couverts?.bar?.total||0);
+          totalEspeces+=data.paiements?.especes||0;
+          totalCB+=data.paiements?.cb||0;
+          totalAmex+=data.paiements?.amex||0;
+          caRestaurant+=data.ventes?.restaurant||0;
+          caClub+=data.ventes?.club||0;
+          caBar+=data.ventes?.bar||0;
+          days++;
+        }
+      }
+    }
+
+    return{totalCA,totalCouverts,days,totalEspeces,totalCB,totalAmex,caRestaurant,caClub,caBar,
+      ticketMoyen:totalCouverts>0?totalCA/totalCouverts:0};
+  },
+
+  // Get assortiment data
+  getAssortiment(dateStr){
+    const d=this._getData();
+    return(d.assortiments||{})[dateStr]||null;
+  },
+
+  getLastImport(){
+    const d=this._getData();
+    return d.lastImport||null;
+  },
+
+  isConnected(){
+    const d=this._getData();
+    return Object.keys(d.jours||{}).length>0;
+  },
+
+  getDayCount(){
+    return Object.keys(this.getAllDays()).length;
+  },
+
+  clearAll(){
+    localStorage.removeItem(this._key);
+  }
+};
+
 // ===== PENNYLANE SERVICE =====
 const PennylaneService={
   getToken:()=>localStorage.getItem('ima_pennylane_token'),
@@ -761,23 +1042,48 @@ function Login({onLogin}){
 function Dashboard(){
   const team=StaffRegistry.getActive();
   const tipsEligible=StaffRegistry.getTipsEligible();
+  const trivecMonth=TrivecService.getMonthData();
+  const latestDay=TrivecService.getLatestDay();
+  const hasTrivec=TrivecService.isConnected();
   return(<div className="fin">
-    <div style={{background:'var(--bleu-light)',border:'1px solid var(--bleu)',borderRadius:10,padding:16,marginBottom:20,fontSize:13,color:'var(--bleu)'}}>
+    {!hasTrivec&&<div style={{background:'var(--bleu-light)',border:'1px solid var(--bleu)',borderRadius:10,padding:16,marginBottom:20,fontSize:13,color:'var(--bleu)'}}>
       <strong>Bienvenue sur le tableau de bord IMA.</strong> Les données s'afficheront automatiquement lorsque vos services seront connectés. Rendez-vous dans <strong>Administration</strong> pour configurer Pennylane, Trivec et SevenRooms.
-    </div>
+    </div>}
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">CA du mois</div><div className="kpi-val" style={{color:'var(--gris-300)'}}>—</div><div className="kpi-chg neu">En attente Trivec</div></div>
-      <div className="kpi"><div className="kpi-label">Couverts</div><div className="kpi-val" style={{color:'var(--gris-300)'}}>—</div><div className="kpi-chg neu">En attente Trivec</div></div>
+      <div className="kpi"><div className="kpi-label">CA du mois</div><div className="kpi-val" style={{color:hasTrivec?'var(--gris-900)':'var(--gris-300)'}}>{hasTrivec?trivecMonth.totalCA.toLocaleString('fr-FR')+'€':'—'}</div><div className={`kpi-chg ${hasTrivec?'pos':'neu'}`}>{hasTrivec?`${trivecMonth.days} jour(s) importé(s)`:'En attente Trivec'}</div></div>
+      <div className="kpi"><div className="kpi-label">Couverts</div><div className="kpi-val" style={{color:hasTrivec?'var(--gris-900)':'var(--gris-300)'}}>{hasTrivec?trivecMonth.totalCouverts.toLocaleString('fr-FR'):'—'}</div><div className={`kpi-chg ${hasTrivec?'pos':'neu'}`}>{hasTrivec?`TM: ${Math.round(trivecMonth.ticketMoyen)}€`:'En attente Trivec'}</div></div>
       <div className="kpi"><div className="kpi-label">Effectif actif</div><div className="kpi-val">{team.length}</div><div className="kpi-chg neu">{tipsEligible.length} bénéf. tips</div></div>
       <div className="kpi"><div className="kpi-label">Pennylane</div><div className="kpi-val" style={{fontSize:16}}>{PennylaneService.getToken()?'Connecté':'Non configuré'}</div><div className={`kpi-chg ${PennylaneService.getToken()?'pos':'neg'}`}>{PennylaneService.getToken()?'API active':'Voir Administration'}</div></div>
     </div>
     <div className="cg">
       <div className="card">
-        <div className="card-h"><div><div className="card-t">Évolution du CA</div><div className="card-st">Données Trivec</div></div><span className="badge b-warn">Non connecté</span></div>
-        <div className="card-b" style={{padding:40,textAlign:'center',color:'var(--gris-400)'}}>
-          <div style={{fontSize:32,marginBottom:8}}>📊</div>
-          <div style={{fontWeight:500}}>Connectez Trivec pour voir l'évolution du chiffre d'affaires</div>
-          <div style={{fontSize:11,marginTop:4}}>Les graphiques s'afficheront automatiquement</div>
+        <div className="card-h"><div><div className="card-t">Évolution du CA</div><div className="card-st">Données Trivec</div></div>{hasTrivec?<span className="badge b-ok">Connecté</span>:<span className="badge b-warn">Non connecté</span>}</div>
+        <div className="card-b">
+          {hasTrivec?(()=>{
+            const days=TrivecService.getAllDays();
+            const sorted=Object.entries(days).sort((a,b)=>{const pa=a[0].split('/').reverse().join('');const pb=b[0].split('/').reverse().join('');return pa.localeCompare(pb);});
+            const maxCA=Math.max(...sorted.map(([,d])=>d.caTotal||0),1);
+            return<div>
+              <div style={{display:'flex',gap:2,alignItems:'flex-end',height:120,marginBottom:12}}>
+                {sorted.map(([date,d])=>{
+                  const h=Math.max(4,((d.caTotal||0)/maxCA)*100);
+                  return<div key={date} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2}} title={`${date}: ${(d.caTotal||0).toLocaleString('fr-FR')}€`}>
+                    <div style={{width:'100%',maxWidth:32,height:h+'%',background:'var(--bordeaux)',borderRadius:'4px 4px 0 0',minHeight:4,transition:'height .3s'}}/>
+                    <div style={{fontSize:8,color:'var(--gris-400)',transform:'rotate(-45deg)',transformOrigin:'center',whiteSpace:'nowrap'}}>{date.substring(0,5)}</div>
+                  </div>;
+                })}
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,fontSize:11,textAlign:'center',borderTop:'1px solid var(--gris-100)',paddingTop:10}}>
+                <div><div style={{color:'var(--gris-500)'}}>Restaurant</div><div style={{fontWeight:700}}>{trivecMonth.caRestaurant.toLocaleString('fr-FR')}€</div></div>
+                <div><div style={{color:'var(--gris-500)'}}>Club</div><div style={{fontWeight:700}}>{trivecMonth.caClub.toLocaleString('fr-FR')}€</div></div>
+                <div><div style={{color:'var(--gris-500)'}}>Bar</div><div style={{fontWeight:700}}>{trivecMonth.caBar.toLocaleString('fr-FR')}€</div></div>
+              </div>
+            </div>;
+          })():<div style={{padding:40,textAlign:'center',color:'var(--gris-400)'}}>
+            <div style={{fontSize:32,marginBottom:8}}>📊</div>
+            <div style={{fontWeight:500}}>Importez les fichiers Trivec dans Administration</div>
+            <div style={{fontSize:11,marginTop:4}}>Le graphique d'évolution du CA s'affichera automatiquement</div>
+          </div>}
         </div>
       </div>
       <div className="card">
@@ -841,10 +1147,11 @@ function Finance(){
   const groupTotals=useMemo(()=>SupplierMap.getGroupTotals(totals),[totals]);
   const totalCosts=Object.values(totals).reduce((s,v)=>s+v,0);
 
-  // Mock CA (from POS data, not real yet)
-  const caFood=0;
-  const caBar=0;
-  const caTotal=caFood+caBar;
+  // CA from Trivec data
+  const trivecMonth=useMemo(()=>TrivecService.getMonthData(),[]);
+  const caFood=trivecMonth.caRestaurant||0;
+  const caBar=(trivecMonth.caClub||0)+(trivecMonth.caBar||0);
+  const caTotal=trivecMonth.totalCA||0;
 
   // Calculate EBITDA
   const staffCosts=totals['Staff']||0;
@@ -854,8 +1161,9 @@ function Finance(){
 
   // Build P&L table data
   const plData=[];
-  plData.push({type:'revenue',label:'CA Food',amount:caFood,pct:100*(caFood/caTotal),isSubsection:false,isBold:true,color:'var(--vert)'});
-  plData.push({type:'revenue',label:'CA Bar',amount:caBar,pct:100*(caBar/caTotal),isSubsection:false,isBold:true,color:'var(--vert)'});
+  plData.push({type:'revenue',label:'CA Restaurant',amount:trivecMonth.caRestaurant||0,pct:caTotal>0?100*((trivecMonth.caRestaurant||0)/caTotal):0,isSubsection:false,isBold:true,color:'var(--vert)'});
+  plData.push({type:'revenue',label:'CA Club',amount:trivecMonth.caClub||0,pct:caTotal>0?100*((trivecMonth.caClub||0)/caTotal):0,isSubsection:false,isBold:false,color:'var(--bordeaux)'});
+  plData.push({type:'revenue',label:'CA Bar',amount:trivecMonth.caBar||0,pct:caTotal>0?100*((trivecMonth.caBar||0)/caTotal):0,isSubsection:false,isBold:false,color:'var(--orange)'});
   plData.push({type:'spacer'});
 
   for(const[groupName,groupInfo]of Object.entries(COST_GROUPS)){
@@ -1820,22 +2128,79 @@ function CRMPage(){
 
 // ===== POS =====
 function POSPage(){
+  const hasTrivec=TrivecService.isConnected();
+  const trivecMonth=TrivecService.getMonthData();
+  const latestDay=TrivecService.getLatestDay();
+  const allDays=TrivecService.getAllDays();
+
   return(<div className="fin">
-    <div style={{background:'var(--bleu-light)',border:'1px solid var(--bleu)',borderRadius:10,padding:16,marginBottom:20,fontSize:13,color:'var(--bleu)'}}>
-      <strong>Caisses Trivec</strong> — Cette page affichera les données de vente une fois Trivec connecté.
-    </div>
+    {!hasTrivec&&<div style={{background:'var(--bleu-light)',border:'1px solid var(--bleu)',borderRadius:10,padding:16,marginBottom:20,fontSize:13,color:'var(--bleu)'}}>
+      <strong>Caisses Trivec</strong> — Importez les fichiers Excel Trivec dans Administration pour voir les données.
+    </div>}
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">CA POS (mois)</div><div className="kpi-val" style={{color:'var(--gris-300)'}}>—</div><div className="kpi-chg neu">En attente Trivec</div></div>
-      <div className="kpi"><div className="kpi-label">Ticket moyen</div><div className="kpi-val" style={{color:'var(--gris-300)'}}>—</div><div className="kpi-chg neu">En attente</div></div>
-      <div className="kpi"><div className="kpi-label">Transactions</div><div className="kpi-val" style={{color:'var(--gris-300)'}}>—</div><div className="kpi-chg neu">En attente</div></div>
-      <div className="kpi"><div className="kpi-label">Panier bar moy.</div><div className="kpi-val" style={{color:'var(--gris-300)'}}>—</div><div className="kpi-chg neu">En attente</div></div>
+      <div className="kpi"><div className="kpi-label">CA POS (mois)</div><div className="kpi-val" style={{color:hasTrivec?'var(--gris-900)':'var(--gris-300)'}}>{hasTrivec?trivecMonth.totalCA.toLocaleString('fr-FR')+'€':'—'}</div><div className={`kpi-chg ${hasTrivec?'pos':'neu'}`}>{hasTrivec?`${trivecMonth.days} jours`:'En attente Trivec'}</div></div>
+      <div className="kpi"><div className="kpi-label">Ticket moyen</div><div className="kpi-val" style={{color:hasTrivec?'var(--gris-900)':'var(--gris-300)'}}>{hasTrivec?Math.round(trivecMonth.ticketMoyen)+'€':'—'}</div><div className={`kpi-chg ${hasTrivec?'pos':'neu'}`}>{hasTrivec?'Restaurant':'En attente'}</div></div>
+      <div className="kpi"><div className="kpi-label">Couverts (mois)</div><div className="kpi-val" style={{color:hasTrivec?'var(--gris-900)':'var(--gris-300)'}}>{hasTrivec?trivecMonth.totalCouverts.toLocaleString('fr-FR'):'—'}</div><div className={`kpi-chg ${hasTrivec?'pos':'neu'}`}>{hasTrivec?'Tous départements':'En attente'}</div></div>
+      <div className="kpi"><div className="kpi-label">CB / Espèces / Amex</div><div className="kpi-val" style={{fontSize:hasTrivec?14:24,color:hasTrivec?'var(--gris-900)':'var(--gris-300)'}}>{hasTrivec?`${Math.round(trivecMonth.totalCB/1000)}k / ${Math.round(trivecMonth.totalEspeces/1000)}k / ${Math.round(trivecMonth.totalAmex/1000)}k`:'—'}</div><div className={`kpi-chg ${hasTrivec?'pos':'neu'}`}>{hasTrivec?'Paiements':'En attente'}</div></div>
     </div>
+
+    {hasTrivec&&latestDay&&<div className="card" style={{marginBottom:16}}>
+      <div className="card-h"><div><div className="card-t">Dernier jour importé — {latestDay.date}</div></div><span className="badge b-ok">Trivec</span></div>
+      <div className="card-b">
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16,marginBottom:16}}>
+          <div style={{padding:14,background:'var(--gris-50)',borderRadius:8,textAlign:'center'}}>
+            <div style={{fontSize:10,color:'var(--gris-500)',textTransform:'uppercase',fontWeight:600}}>Restaurant</div>
+            <div style={{fontSize:20,fontWeight:700,color:'var(--bordeaux)'}}>{(latestDay.ventes?.restaurant||0).toLocaleString('fr-FR')}€</div>
+            <div style={{fontSize:11,color:'var(--gris-500)'}}>{latestDay.couverts?.restaurant?.total||0} couverts — TM {Math.round(latestDay.couverts?.restaurant?.avgCover||0)}€</div>
+          </div>
+          <div style={{padding:14,background:'var(--gris-50)',borderRadius:8,textAlign:'center'}}>
+            <div style={{fontSize:10,color:'var(--gris-500)',textTransform:'uppercase',fontWeight:600}}>Club</div>
+            <div style={{fontSize:20,fontWeight:700,color:'var(--bordeaux)'}}>{(latestDay.ventes?.club||0).toLocaleString('fr-FR')}€</div>
+            <div style={{fontSize:11,color:'var(--gris-500)'}}>{latestDay.couverts?.club?.total||0} couverts — TM {Math.round(latestDay.couverts?.club?.avgCover||0)}€</div>
+          </div>
+          <div style={{padding:14,background:'var(--gris-50)',borderRadius:8,textAlign:'center'}}>
+            <div style={{fontSize:10,color:'var(--gris-500)',textTransform:'uppercase',fontWeight:600}}>Bar</div>
+            <div style={{fontSize:20,fontWeight:700,color:'var(--bordeaux)'}}>{(latestDay.ventes?.bar||0).toLocaleString('fr-FR')}€</div>
+            <div style={{fontSize:11,color:'var(--gris-500)'}}>{latestDay.couverts?.bar?.total||0} couverts</div>
+          </div>
+        </div>
+        <div style={{fontSize:12,fontWeight:600,marginBottom:8}}>Paiements</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8,fontSize:11}}>
+          {[{l:'Espèces',v:latestDay.paiements?.especes},{l:'CB',v:latestDay.paiements?.cb},{l:'Amex',v:latestDay.paiements?.amex},{l:'Aucun',v:latestDay.paiements?.aucun},{l:'SevenRoom',v:latestDay.paiements?.sevenroom}].map((p,i)=>
+            <div key={i} style={{padding:8,background:'var(--gris-50)',borderRadius:6,textAlign:'center'}}>
+              <div style={{color:'var(--gris-500)',fontSize:9}}>{p.l}</div>
+              <div style={{fontWeight:600}}>{(p.v||0).toLocaleString('fr-FR')}€</div>
+            </div>
+          )}
+        </div>
+        {latestDay.internes?.details?.length>0&&<div style={{marginTop:12}}>
+          <div style={{fontSize:12,fontWeight:600,marginBottom:6}}>Comptes internes ({(latestDay.internes?.total||0).toLocaleString('fr-FR')}€)</div>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+            {latestDay.internes.details.map((c,i)=><div key={i} style={{padding:'3px 8px',background:'var(--orange-light)',borderRadius:4,fontSize:10}}>{c.nom}: {c.montant}€</div>)}
+          </div>
+        </div>}
+      </div>
+    </div>}
+
     <div className="card">
-      <div className="card-h"><div><div className="card-t">Ventes par catégorie</div><div className="card-st">Trivec POS</div></div><span className="badge b-warn">Non connecté</span></div>
-      <div className="card-b" style={{padding:50,textAlign:'center',color:'var(--gris-400)'}}>
-        <div style={{fontSize:32,marginBottom:10}}>🧾</div>
-        <div style={{fontWeight:500,marginBottom:4}}>Connectez Trivec pour afficher les ventes</div>
-        <div style={{fontSize:11}}>Rendez-vous dans Administration → Intégrations</div>
+      <div className="card-h"><div><div className="card-t">Historique journalier</div><div className="card-st">Trivec POS</div></div>{hasTrivec?<span className="badge b-ok">{Object.keys(allDays).length} jours</span>:<span className="badge b-warn">Non connecté</span>}</div>
+      <div className="card-b">
+        {hasTrivec?<table className="t-table"><thead><tr><th>Date</th><th style={{textAlign:'right'}}>CA Total</th><th style={{textAlign:'right'}}>Restaurant</th><th style={{textAlign:'right'}}>Club</th><th style={{textAlign:'right'}}>Bar</th><th style={{textAlign:'right'}}>Couverts</th><th style={{textAlign:'right'}}>TM Resto</th></tr></thead>
+        <tbody>{Object.entries(allDays).sort((a,b)=>{const pa=a[0].split('/').reverse().join('');const pb=b[0].split('/').reverse().join('');return pb.localeCompare(pa);}).map(([date,d])=>
+          <tr key={date}><td style={{fontWeight:500}}>{date}</td>
+            <td style={{textAlign:'right',fontWeight:600}}>{(d.caTotal||0).toLocaleString('fr-FR')}€</td>
+            <td style={{textAlign:'right'}}>{(d.ventes?.restaurant||0).toLocaleString('fr-FR')}€</td>
+            <td style={{textAlign:'right'}}>{(d.ventes?.club||0).toLocaleString('fr-FR')}€</td>
+            <td style={{textAlign:'right'}}>{(d.ventes?.bar||0).toLocaleString('fr-FR')}€</td>
+            <td style={{textAlign:'right'}}>{(d.couverts?.restaurant?.total||0)+(d.couverts?.club?.total||0)+(d.couverts?.bar?.total||0)}</td>
+            <td style={{textAlign:'right'}}>{Math.round(d.couverts?.restaurant?.avgCover||0)}€</td>
+          </tr>
+        )}</tbody></table>:
+        <div style={{padding:50,textAlign:'center',color:'var(--gris-400)'}}>
+          <div style={{fontSize:32,marginBottom:10}}>🧾</div>
+          <div style={{fontWeight:500,marginBottom:4}}>Importez les fichiers Trivec dans Administration</div>
+          <div style={{fontSize:11}}>Les ventes journalières apparaîtront ici</div>
+        </div>}
       </div>
     </div>
   </div>);
@@ -2254,6 +2619,39 @@ function Settings(){
   const[showInviteModal,setShowInviteModal]=useState(false);
   const[inviteData,setInviteData]=useState({nom:'',email:'',role:'Directeur',password:Math.random().toString(36).slice(-8)});
   const[inviteStatus,setInviteStatus]=useState(null);
+  const[trivecImporting,setTrivecImporting]=useState(false);
+  const[trivecStatus,setTrivecStatus]=useState(null);
+  const[trivecDays,setTrivecDays]=useState(TrivecService.getDayCount());
+  const trivecFileRef=React.useRef(null);
+  const trivecAssortRef=React.useRef(null);
+
+  const handleTrivecImport=async(e,type)=>{
+    const files=e.target.files;
+    if(!files||files.length===0)return;
+    setTrivecImporting(true);
+    setTrivecStatus(null);
+    let imported=0;let errors=[];
+    for(const file of files){
+      try{
+        if(type==='suivi'){
+          const result=await TrivecService.parseSuiviJournalier(file);
+          imported++;
+          setTrivecStatus({success:true,msg:`Import réussi : ${result.date} — CA ${result.caTotal.toLocaleString('fr-FR')}€, ${result.couverts.restaurant.total+result.couverts.club.total+result.couverts.bar.total} couverts`});
+        }else{
+          const result=await TrivecService.parseAssortiments(file);
+          imported++;
+          setTrivecStatus({success:true,msg:`Assortiment importé : ${result.date} — ${result.totalProducts} produits`});
+        }
+      }catch(err){
+        errors.push(file.name+': '+err.message);
+      }
+    }
+    if(errors.length>0)setTrivecStatus({success:false,msg:'Erreurs: '+errors.join(', ')});
+    setTrivecDays(TrivecService.getDayCount());
+    setTrivecImporting(false);
+    setConnectedIntegrations(prev=>({...prev,trivec:TrivecService.isConnected()}));
+    e.target.value='';
+  };
 
   const handleInviteUser=()=>{
     if(!inviteData.nom||!inviteData.email){setInviteStatus({success:false,msg:'Nom et email requis'});return;}
@@ -2296,7 +2694,7 @@ function Settings(){
   };
 
   const[connectedIntegrations,setConnectedIntegrations]=useState({
-    trivec:false,sevenrooms:false,pennylane:!!PennylaneService.getToken()
+    trivec:TrivecService.isConnected(),sevenrooms:false,pennylane:!!PennylaneService.getToken()
   });
 
   const handleClearToken=()=>{
@@ -2384,6 +2782,45 @@ function Settings(){
         </div>
       </div>
       <div className="card">
+        <div className="card-h"><div><div className="card-t">Import Trivec</div><div className="card-st">Fichiers Excel quotidiens</div></div>
+          {trivecDays>0&&<span className="badge b-ok">{trivecDays} jour(s) importé(s)</span>}
+        </div>
+        <div className="card-b">
+          <div style={{marginBottom:16,padding:14,background:'var(--gris-50)',borderRadius:8,fontSize:12,color:'var(--gris-600)'}}>
+            Importez les fichiers Excel envoyés par Trivec par email. Deux types de rapports sont supportés :
+            <ul style={{margin:'8px 0 0 16px',listStyle:'disc'}}>
+              <li><strong>Suivi d'activité Journalier</strong> — CA, paiements, couverts, comptes internes</li>
+              <li><strong>Rapport Assortiments de Produits</strong> — Détail des ventes par produit</li>
+            </ul>
+          </div>
+          <div style={{display:'flex',gap:10,marginBottom:12,flexWrap:'wrap'}}>
+            <input ref={trivecFileRef} type="file" accept=".xlsx,.xls" multiple style={{display:'none'}} onChange={e=>handleTrivecImport(e,'suivi')}/>
+            <button className="btn btn-primary" onClick={()=>trivecFileRef.current?.click()} disabled={trivecImporting}>
+              {trivecImporting?'Import en cours...':'Importer Suivi Journalier'}
+            </button>
+            <input ref={trivecAssortRef} type="file" accept=".xlsx,.xls" multiple style={{display:'none'}} onChange={e=>handleTrivecImport(e,'assortiment')}/>
+            <button className="btn btn-secondary" onClick={()=>trivecAssortRef.current?.click()} disabled={trivecImporting}>
+              Importer Assortiments
+            </button>
+          </div>
+          {trivecStatus&&<div className={trivecStatus.success?'success-msg':'error-msg'} style={{marginBottom:10}}>{trivecStatus.msg}</div>}
+          {trivecDays>0&&<div style={{marginTop:8}}>
+            <div style={{fontSize:12,fontWeight:600,marginBottom:8}}>Jours importés :</div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+              {Object.keys(TrivecService.getAllDays()).sort((a,b)=>{const pa=a.split('/').reverse().join('');const pb=b.split('/').reverse().join('');return pb.localeCompare(pa);}).map(d=>{
+                const day=TrivecService.getDay(d);
+                return<div key={d} style={{padding:'4px 10px',background:'var(--bordeaux-10)',borderRadius:6,fontSize:11,display:'flex',alignItems:'center',gap:6}}>
+                  <span style={{fontWeight:600}}>{d}</span>
+                  <span style={{color:'var(--gris-500)'}}>CA: {(day.caTotal||0).toLocaleString('fr-FR')}€</span>
+                </div>;
+              })}
+            </div>
+            <button className="btn btn-secondary" style={{marginTop:10,fontSize:10}} onClick={()=>{if(confirm('Supprimer toutes les données Trivec ?')){TrivecService.clearAll();setTrivecDays(0);setConnectedIntegrations(p=>({...p,trivec:false}));}}}>Réinitialiser les données Trivec</button>
+          </div>}
+          {TrivecService.getLastImport()&&<div style={{fontSize:10,color:'var(--gris-400)',marginTop:8}}>Dernier import : {new Date(TrivecService.getLastImport()).toLocaleString('fr-FR')}</div>}
+        </div>
+      </div>
+      <div className="card">
         <div className="card-h"><div><div className="card-t">Utilisateurs du dashboard</div><div className="card-st">{UserManager.getAll().length} compte(s)</div></div>
           <button className="btn btn-sm btn-primary" onClick={()=>setShowInviteModal(true)}>+ Inviter</button>
         </div>
@@ -2444,16 +2881,26 @@ function Settings(){
       <div className="card">
         <div className="card-h"><div><div className="card-t">Objectifs & Seuils</div></div></div>
         <div className="card-b">
-          {[{l:'Food Cost max',o:'28%',a:'26.5%',ok:true},{l:'Bar Cost max',o:'20%',a:'17.5%',ok:true},
-            {l:'Staff Cost max',o:'30%',a:'28.8%',ok:false},{l:'Prime Cost max',o:'65%',a:'55.3%',ok:true},
-            {l:'Ticket moyen min',o:'180€',a:'214€',ok:true}
-          ].map((o,i)=>(
+          {(()=>{
+            const tm=TrivecService.getMonthData();
+            const ca=tm.totalCA||0;
+            const hasCa=ca>0;
+            const tmVal=tm.ticketMoyen||0;
+            // Costs from Pennylane would need invoice data — show ticket moyen from Trivec at minimum
+            return[
+              {l:'Food Cost max',o:'28%',a:hasCa?'—':'—',ok:null},
+              {l:'Bar Cost max',o:'20%',a:hasCa?'—':'—',ok:null},
+              {l:'Staff Cost max',o:'30%',a:hasCa?'—':'—',ok:null},
+              {l:'Prime Cost max',o:'65%',a:hasCa?'—':'—',ok:null},
+              {l:'Ticket moyen min',o:'180€',a:hasCa?Math.round(tmVal)+'€':'—',ok:hasCa?(tmVal>=180?true:false):null}
+            ];
+          })().map((o,i)=>(
             <div key={i} style={{padding:'8px 0',borderBottom:'1px solid var(--gris-100)',display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:13}}>
               <div>{o.l}</div>
               <div style={{display:'flex',gap:14,alignItems:'center'}}>
                 <span style={{color:'var(--gris-500)'}}>Obj: {o.o}</span>
                 <span style={{fontWeight:600}}>Actuel: {o.a}</span>
-                <span className={`badge ${o.ok?'b-ok':'b-warn'}`}>{o.ok?'OK':'Attention'}</span>
+                {o.ok!==null&&<span className={`badge ${o.ok?'b-ok':'b-warn'}`}>{o.ok?'OK':'Attention'}</span>}{o.ok===null&&<span className="badge" style={{background:'var(--gris-100)',color:'var(--gris-500)'}}>En attente</span>}
               </div>
             </div>
           ))}
