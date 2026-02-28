@@ -1,0 +1,1512 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IMA Dashboard — Tour de Contrôle</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bordeaux: #581527;
+      --bordeaux-light: #7a2d42;
+      --bordeaux-dark: #3d0e1b;
+      --bordeaux-10: rgba(88,21,39,0.1);
+      --bordeaux-20: rgba(88,21,39,0.2);
+      --blanc: #FFFFFF;
+      --gris-50: #f9fafb; --gris-100: #f3f4f6; --gris-200: #e5e7eb;
+      --gris-300: #d1d5db; --gris-400: #9ca3af; --gris-500: #6b7280;
+      --gris-600: #4b5563; --gris-700: #374151; --gris-800: #1f2937; --gris-900: #111827;
+      --vert: #059669; --vert-light: #d1fae5;
+      --rouge: #dc2626; --rouge-light: #fee2e2;
+      --orange: #d97706; --orange-light: #fef3c7;
+      --bleu: #2563eb; --bleu-light: #dbeafe;
+      --sidebar-w: 256px;
+    }
+    body { font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; background:var(--gris-50); color:var(--gris-900); line-height:1.5; -webkit-font-smoothing:antialiased; }
+    ::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-track{background:transparent} ::-webkit-scrollbar-thumb{background:var(--gris-300);border-radius:3px}
+
+    /* Layout */
+    .app{display:flex;min-height:100vh}
+    .sidebar{width:var(--sidebar-w);background:var(--bordeaux);color:var(--blanc);position:fixed;top:0;left:0;bottom:0;display:flex;flex-direction:column;z-index:50}
+    .sidebar-logo{padding:24px 20px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;gap:2px}
+    .sidebar-logo h1{font-size:32px;font-weight:300;letter-spacing:6px}
+    .sidebar-logo span{font-size:10px;opacity:.5;letter-spacing:2px;text-transform:uppercase}
+    .sidebar-nav{flex:1;padding:16px 10px;overflow-y:auto}
+    .nav-sec{margin-bottom:20px}
+    .nav-sec-title{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.35);padding:0 12px;margin-bottom:6px;font-weight:600}
+    .nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;cursor:pointer;transition:all .15s;font-size:13px;color:rgba(255,255,255,.65);font-weight:400;margin-bottom:1px}
+    .nav-item:hover{background:rgba(255,255,255,.08);color:var(--blanc)}
+    .nav-item.active{background:rgba(255,255,255,.14);color:var(--blanc);font-weight:500}
+    .nav-item svg{width:17px;height:17px;opacity:.75;flex-shrink:0}
+    .nav-item.active svg{opacity:1}
+    .sidebar-foot{padding:14px 18px;border-top:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:10px}
+    .avatar{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600}
+    .uname{font-size:13px;font-weight:500}
+    .urole{font-size:10px;opacity:.5}
+
+    /* Main */
+    .main{margin-left:var(--sidebar-w);flex:1;min-height:100vh}
+    .header{background:var(--blanc);border-bottom:1px solid var(--gris-200);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40}
+    .header-l{display:flex;align-items:center;gap:14px}
+    .header-l h2{font-size:18px;font-weight:600}
+    .header-l .bc{font-size:12px;color:var(--gris-400)}
+    .header-r{display:flex;align-items:center;gap:14px}
+    .loc{display:flex;align-items:center;gap:6px;background:var(--gris-100);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:500;border:1px solid var(--gris-200)}
+    .loc:hover{border-color:var(--bordeaux)}
+    .loc-dot{width:7px;height:7px;border-radius:50%;background:var(--vert)}
+    .per{display:flex;background:var(--gris-100);border-radius:7px;padding:2px;border:1px solid var(--gris-200)}
+    .per-btn{padding:5px 12px;border-radius:5px;font-size:11px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--gris-500);font-family:inherit}
+    .per-btn.active{background:var(--blanc);color:var(--bordeaux);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+    .page{padding:22px 28px}
+
+    /* Cards */
+    .card{background:var(--blanc);border-radius:12px;border:1px solid var(--gris-200);margin-bottom:16px;overflow:hidden}
+    .card-h{padding:18px 22px 0;display:flex;justify-content:space-between;align-items:flex-start}
+    .card-t{font-size:14px;font-weight:600;color:var(--gris-800)}
+    .card-st{font-size:11px;color:var(--gris-400);margin-top:2px}
+    .card-b{padding:14px 22px 18px}
+
+    /* KPI */
+    .kpi-g{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+    .kpi{background:var(--blanc);border:1px solid var(--gris-200);border-radius:12px;padding:18px;transition:all .2s}
+    .kpi:hover{border-color:var(--bordeaux-20);box-shadow:0 4px 12px rgba(88,21,39,.06)}
+    .kpi-label{font-size:11px;font-weight:500;color:var(--gris-500);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+    .kpi-val{font-size:26px;font-weight:700;line-height:1.2}
+    .kpi-chg{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:500;margin-top:6px;padding:2px 8px;border-radius:20px}
+    .kpi-chg.pos{color:var(--vert);background:var(--vert-light)}
+    .kpi-chg.neg{color:var(--rouge);background:var(--rouge-light)}
+    .kpi-chg.neu{color:var(--orange);background:var(--orange-light)}
+
+    /* Charts grid */
+    .cg{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-bottom:20px}
+    .cg .fw{grid-column:1/-1}
+
+    /* Bar chart CSS */
+    .bars{display:flex;align-items:flex-end;gap:8px;height:180px;padding-top:10px}
+    .bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+    .bar-stack{width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:160px;gap:1px}
+    .bar-seg{border-radius:3px 3px 0 0;transition:height .5s ease;min-height:0;position:relative}
+    .bar-seg:hover{opacity:.85}
+    .bar-lbl{font-size:10px;color:var(--gris-500);font-weight:500}
+    .bar-val{font-size:9px;color:var(--gris-400);text-align:center}
+
+    /* Line chart CSS */
+    .line-chart{position:relative;height:180px}
+    .line-chart svg{width:100%;height:100%}
+
+    /* Donut */
+    .donut-wrap{display:flex;align-items:center;justify-content:center;gap:24px;padding:10px 0}
+    .donut{position:relative;width:140px;height:140px}
+    .donut svg{transform:rotate(-90deg)}
+    .donut-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center}
+    .donut-center .dv{font-size:22px;font-weight:700}
+    .donut-center .dl{font-size:10px;color:var(--gris-500)}
+    .donut-legend{display:flex;flex-direction:column;gap:8px}
+    .donut-legend-item{display:flex;align-items:center;gap:8px;font-size:12px}
+    .donut-legend-dot{width:10px;height:10px;border-radius:3px}
+
+    /* Cost cards */
+    .cost-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}
+    .cost-c{background:var(--blanc);border:1px solid var(--gris-200);border-radius:12px;padding:20px;text-align:center}
+    .cost-c .cl{font-size:12px;color:var(--gris-500);margin-bottom:6px;font-weight:500}
+    .cost-c .cv{font-size:32px;font-weight:700;color:var(--bordeaux)}
+    .cost-c .ct{font-size:11px;color:var(--gris-400);margin-top:4px}
+    .pbar{height:6px;background:var(--gris-100);border-radius:3px;overflow:hidden;margin-top:8px}
+    .pfill{height:100%;border-radius:3px;transition:width .5s ease}
+
+    /* Tables */
+    .tbl{overflow-x:auto}
+    table{width:100%;border-collapse:collapse}
+    th{text-align:left;padding:10px 14px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-500);border-bottom:1px solid var(--gris-200);background:var(--gris-50)}
+    td{padding:10px 14px;font-size:13px;border-bottom:1px solid var(--gris-100);color:var(--gris-700)}
+    tr:hover td{background:var(--gris-50)}
+
+    /* Badges */
+    .badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:500}
+    .b-ok{background:var(--vert-light);color:var(--vert)}
+    .b-err{background:var(--rouge-light);color:var(--rouge)}
+    .b-warn{background:var(--orange-light);color:var(--orange)}
+    .b-info{background:var(--bleu-light);color:var(--bleu)}
+    .b-ima{background:var(--bordeaux-10);color:var(--bordeaux)}
+
+    /* Tabs */
+    .tabs{display:flex;border-bottom:1px solid var(--gris-200);margin-bottom:20px}
+    .tab{padding:10px 18px;font-size:13px;font-weight:500;color:var(--gris-500);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+    .tab:hover{color:var(--gris-700)}
+    .tab.active{color:var(--bordeaux);border-bottom-color:var(--bordeaux)}
+
+    /* Alert items */
+    .alert-i{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-radius:8px;margin-bottom:6px;font-size:12px}
+    .alert-i.a-err{background:var(--rouge-light)}
+    .alert-i.a-warn{background:var(--orange-light)}
+    .alert-i.a-info{background:var(--bleu-light)}
+    .alert-i .at{font-weight:500;font-size:13px}
+    .alert-i .as{font-size:11px;opacity:.7;margin-top:2px}
+
+    /* Reservation item */
+    .resa{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--gris-100)}
+    .resa:last-child{border:none}
+    .resa-l{display:flex;align-items:center;gap:10px}
+    .resa-av{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--blanc)}
+    .resa-name{font-size:13px;font-weight:500}
+    .resa-det{font-size:11px;color:var(--gris-400)}
+    .resa-r{text-align:right}
+    .resa-time{font-size:14px;font-weight:600;color:var(--gris-700)}
+    .resa-pax{font-size:11px;color:var(--gris-400)}
+
+    /* Notif */
+    .notif{position:relative;cursor:pointer;padding:6px}
+    .notif::after{content:'3';position:absolute;top:0;right:0;width:15px;height:15px;border-radius:50%;background:var(--rouge);color:white;font-size:8px;display:flex;align-items:center;justify-content:center;font-weight:700}
+
+    /* Login */
+    .login{min-height:100vh;display:flex;background:var(--bordeaux)}
+    .login-c{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:40px}
+    .login-logo{font-size:64px;font-weight:300;letter-spacing:12px;color:var(--blanc);margin-bottom:6px}
+    .login-tag{font-size:12px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:40px}
+    .login-form{width:100%;max-width:360px;background:var(--blanc);border-radius:14px;padding:36px}
+    .login-form h3{font-size:18px;font-weight:600;margin-bottom:20px}
+    .fg{margin-bottom:16px}
+    .fl{display:block;font-size:11px;font-weight:500;color:var(--gris-600);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+    .fi{width:100%;padding:10px 14px;border:1px solid var(--gris-200);border-radius:8px;font-size:14px;font-family:inherit;outline:none;transition:all .15s}
+    .fi:focus{border-color:var(--bordeaux);box-shadow:0 0 0 3px var(--bordeaux-10)}
+    .login-btn{width:100%;padding:11px;background:var(--bordeaux);color:var(--blanc);border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;letter-spacing:.5px;transition:all .15s}
+    .login-btn:hover{background:var(--bordeaux-light)}
+
+    /* Anim */
+    @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+    .fin{animation:fadeIn .3s ease}
+
+    /* Modal */
+    .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:100}
+    .modal{background:var(--blanc);border-radius:14px;padding:28px;width:480px;max-width:90vw;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+    .modal h3{font-size:17px;font-weight:600;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center}
+    .modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:var(--gris-400);padding:4px 8px}
+    .modal-close:hover{color:var(--gris-700)}
+    .fg-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .btn{padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border:none;transition:all .15s}
+    .btn-primary{background:var(--bordeaux);color:var(--blanc)}
+    .btn-primary:hover{background:var(--bordeaux-light)}
+    .btn-secondary{background:var(--gris-100);color:var(--gris-700);border:1px solid var(--gris-200)}
+    .btn-secondary:hover{background:var(--gris-200)}
+    .btn-sm{padding:6px 12px;font-size:11px}
+
+    /* Tips table */
+    .tips-grid{overflow-x:auto}
+    .tips-grid table th,.tips-grid table td{padding:8px 10px;font-size:12px;text-align:center;white-space:nowrap}
+    .tips-grid table th{font-size:10px}
+    .tips-grid table td input{width:55px;padding:4px 6px;border:1px solid var(--gris-200);border-radius:5px;font-size:12px;text-align:center;font-family:inherit;outline:none}
+    .tips-grid table td input:focus{border-color:var(--bordeaux);box-shadow:0 0 0 2px var(--bordeaux-10)}
+    .tips-grid .day-header{background:var(--bordeaux);color:white;font-weight:600;font-size:11px}
+    .tips-grid .total-row td{background:var(--gris-50);font-weight:700;border-top:2px solid var(--gris-300)}
+    .tips-grid .penalty-cell{color:var(--rouge);font-weight:600}
+    .tips-grid .bonus-cell{color:var(--vert);font-weight:600}
+    .presence-dot{width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;cursor:pointer;font-weight:700;transition:all .15s}
+    .presence-dot.present{background:var(--vert-light);color:var(--vert)}
+    .presence-dot.absent{background:var(--rouge-light);color:var(--rouge)}
+
+    /* Select */
+    .fi-select{width:100%;padding:10px 14px;border:1px solid var(--gris-200);border-radius:8px;font-size:14px;font-family:inherit;outline:none;background:var(--blanc);transition:all .15s;appearance:none;cursor:pointer}
+    .fi-select:focus{border-color:var(--bordeaux);box-shadow:0 0 0 3px var(--bordeaux-10)}
+
+    @media(max-width:1100px){.cg{grid-template-columns:1fr}.kpi-g{grid-template-columns:repeat(2,1fr)}}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const{useState,useEffect,useMemo}=React;
+
+// ===== SVG ICONS =====
+const I={
+  Dash:()=><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>,
+  Fin:()=><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
+  Cost:()=><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>,
+  Staff:()=><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+  Stock:()=><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>,
+  CRM:()=><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+  POS:()=><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,
+  Gear:()=><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+  Bell:()=><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
+  Up:()=><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
+  Down:()=><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>,
+  Chev:()=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>,
+  Pin:()=><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>,
+  Warn:()=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+};
+
+// ===== FORMATTERS =====
+const fmt=n=>new Intl.NumberFormat('fr-FR').format(n);
+const eur=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n);
+
+// ===== CSS BAR CHART =====
+function BarChart({data,keys,colors,height=180,labels}){
+  const max=Math.max(...data.map(d=>keys.reduce((s,k)=>s+(d[k]||0),0)));
+  return(
+    <div style={{display:'flex',alignItems:'flex-end',gap:6,height,paddingTop:10}}>
+      {data.map((d,i)=>(
+        <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
+          <div style={{fontSize:9,color:'var(--gris-400)',fontWeight:500}}>{eur(keys.reduce((s,k)=>s+(d[k]||0),0))}</div>
+          <div style={{width:'100%',display:'flex',flexDirection:'column',justifyContent:'flex-end',height:height-30,gap:1}}>
+            {keys.map((k,ki)=>{
+              const h=max>0?((d[k]||0)/max)*(height-40):0;
+              return <div key={ki} style={{height:h,background:colors[ki],borderRadius:ki===0?'4px 4px 0 0':'0',minHeight:d[k]?2:0}} title={`${labels?labels[ki]:k}: ${eur(d[k]||0)}`}/>;
+            })}
+          </div>
+          <div style={{fontSize:10,color:'var(--gris-500)',fontWeight:500}}>{d.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ===== CSS HORIZONTAL BAR =====
+function HBar({data,maxVal,color='var(--bordeaux)'}){
+  return(
+    <div style={{display:'flex',flexDirection:'column',gap:10}}>
+      {data.map((d,i)=>(
+        <div key={i} style={{display:'flex',alignItems:'center',gap:10}}>
+          <div style={{width:90,fontSize:12,fontWeight:500,color:'var(--gris-700)',textAlign:'right'}}>{d.label}</div>
+          <div style={{flex:1,height:22,background:'var(--gris-100)',borderRadius:4,overflow:'hidden',position:'relative'}}>
+            <div style={{height:'100%',width:`${(d.value/maxVal)*100}%`,background:color,borderRadius:4,transition:'width .5s ease'}}/>
+          </div>
+          <div style={{width:70,fontSize:12,fontWeight:600,textAlign:'right'}}>{d.display||eur(d.value)}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ===== DONUT CHART =====
+function Donut({segments,size=130,thickness=20,centerLabel,centerValue}){
+  const r=(size-thickness)/2;
+  const c=2*Math.PI*r;
+  let offset=0;
+  return(
+    <div className="donut" style={{width:size,height:size}}>
+      <svg width={size} height={size}>
+        {segments.map((s,i)=>{
+          const dash=(s.value/100)*c;
+          const o=offset;
+          offset+=dash;
+          return <circle key={i} cx={size/2} cy={size/2} r={r} fill="none" stroke={s.color} strokeWidth={thickness} strokeDasharray={`${dash} ${c-dash}`} strokeDashoffset={-o}/>;
+        })}
+      </svg>
+      <div className="donut-center">
+        <div className="dv">{centerValue}</div>
+        <div className="dl">{centerLabel}</div>
+      </div>
+    </div>
+  );
+}
+
+// ===== SPARKLINE =====
+function Spark({data,color='var(--bordeaux)',w=120,h=32}){
+  const max=Math.max(...data);const min=Math.min(...data);const range=max-min||1;
+  const pts=data.map((v,i)=>`${(i/(data.length-1))*w},${h-((v-min)/range)*h}`).join(' ');
+  return(<svg width={w} height={h}><polyline points={pts} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>);
+}
+
+// ===== MOCK DATA =====
+const revData=[
+  {label:'Sep',ca:285000,prev:260000,food:170000,bar:115000},
+  {label:'Oct',ca:195000,prev:180000,food:115000,bar:80000},
+  {label:'Nov',ca:220000,prev:195000,food:130000,bar:90000},
+  {label:'Déc',ca:520000,prev:480000,food:310000,bar:210000},
+  {label:'Jan',ca:580000,prev:530000,food:345000,bar:235000},
+  {label:'Fév',ca:610000,prev:545000,food:365000,bar:245000},
+];
+const weekData=[
+  {label:'Lun',midi:4200,soir:12800},
+  {label:'Mar',midi:3800,soir:11500},
+  {label:'Mer',midi:5100,soir:14200},
+  {label:'Jeu',midi:4900,soir:15800},
+  {label:'Ven',midi:6200,soir:22500},
+  {label:'Sam',midi:8500,soir:28800},
+  {label:'Dim',midi:7200,soir:18500},
+];
+const costTrend=[28.5,29.1,27.8,26.2,25.8,26.5];
+const barTrend=[18.2,17.8,18.5,16.9,17.1,17.5];
+const staffTrend=[32.1,33.5,31.8,28.5,27.2,28.8];
+
+const mockPL=[
+  {cat:'CA Food',m:365000,p:59.8},
+  {cat:'CA Bar',m:245000,p:40.2},
+  {cat:'Achats Food',m:-96725,p:-26.5},
+  {cat:'Achats Bar',m:-42875,p:-17.5},
+  {cat:'Masse salariale',m:-175680,p:-28.8},
+  {cat:'Loyer & charges',m:-48000,p:-7.9},
+  {cat:'Énergie',m:-18300,p:-3.0},
+  {cat:'Marketing',m:-6100,p:-1.0},
+  {cat:'Divers',m:-12200,p:-2.0},
+];
+
+const staff=[
+  {n:'Marco Rossi',p:'Chef de cuisine',h:196,x:12,c:6800},
+  {n:'Julie Martin',p:'Sous-chef',h:184,x:8,c:4200},
+  {n:'Thomas Berger',p:'Resp. salle',h:180,x:15,c:4500},
+  {n:'Emma Dubois',p:'Chef barman',h:176,x:20,c:4100},
+  {n:'Pierre Leroy',p:'Sommelier',h:168,x:4,c:3800},
+  {n:'Sofia Moreau',p:'Commis cuisine',h:160,x:0,c:2400},
+  {n:'Lucas Petit',p:'Serveur',h:156,x:8,c:2200},
+  {n:'Chloé Bernard',p:'Serveuse',h:152,x:6,c:2100},
+];
+
+const stockAlerts=[
+  {p:'Truffe noire (Périgord)',s:120,u:'g',t:200,st:'critique'},
+  {p:'Caviar Osciètre',s:85,u:'g',t:150,st:'critique'},
+  {p:'Wagyu A5',s:1.2,u:'kg',t:2,st:'alerte'},
+  {p:'Champagne Krug',s:3,u:'bt',t:6,st:'alerte'},
+  {p:'Homard breton',s:4,u:'pcs',t:8,st:'alerte'},
+];
+
+const resas=[
+  {n:'Famille Arnault',h:'12:30',c:6,t:'T1 - Salon privé',st:'confirmée',vip:true,note:'Anniversaire'},
+  {n:'M. & Mme Pinault',h:'13:00',c:4,t:'T5 - Vue montagne',st:'confirmée',vip:true,note:'Sans gluten'},
+  {n:'Groupe Rothschild',h:'19:30',c:8,t:'T2 - Grande table',st:'confirmée',vip:true,note:'Carte vins premium'},
+  {n:'M. Durand',h:'20:00',c:2,t:'T8 - Bar',st:'confirmée',vip:false,note:''},
+  {n:'Mme Chen',h:'20:30',c:4,t:'T12',st:'confirmée',vip:false,note:'Allergie fruits de mer'},
+  {n:'M. Smith',h:'21:00',c:2,t:'T9',st:'en attente',vip:false,note:''},
+  {n:'Famille Al-Rashid',h:'21:00',c:6,t:'T3 - Salon',st:'confirmée',vip:true,note:'Halal'},
+];
+
+const posItems=[
+  {cat:'Entrées',ca:45200,q:320,tm:141},
+  {cat:'Plats',ca:128500,q:485,tm:265},
+  {cat:'Desserts',ca:32800,q:280,tm:117},
+  {cat:'Cocktails',ca:68500,q:620,tm:110},
+  {cat:'Vins',ca:125000,q:380,tm:329},
+  {cat:'Spiritueux',ca:42000,q:190,tm:221},
+  {cat:'Soft drinks',ca:8200,q:240,tm:34},
+];
+
+const suppliers=[
+  {n:'Maison Troisgros',t:'Viandes premium',d:'25/02/2026',m:8450,s:'Payée'},
+  {n:'Rungis Express',t:'Légumes & Fruits',d:'26/02/2026',m:3200,s:'En attente'},
+  {n:'Petrossian',t:'Caviar & Saumon',d:'24/02/2026',m:5800,s:'Payée'},
+  {n:'Maison Perrier',t:'Fromages affinés',d:'22/02/2026',m:1850,s:'Payée'},
+  {n:'Cave de Bourgogne',t:'Vins & Champagnes',d:'20/02/2026',m:12400,s:'En attente'},
+  {n:'Lavazza Pro',t:'Café & Thés',d:'18/02/2026',m:680,s:'Payée'},
+];
+
+// ===== LOGIN =====
+function Login({onLogin}){
+  return(
+    <div className="login">
+      <div className="login-c">
+        <div className="login-logo">IMa</div>
+        <div className="login-tag">Tour de contrôle</div>
+        <div className="login-form">
+          <h3>Connexion</h3>
+          <div className="fg"><label className="fl">Email</label><input className="fi" type="email" defaultValue="nicolas@ima-club.com"/></div>
+          <div className="fg"><label className="fl">Mot de passe</label><input className="fi" type="password" placeholder="••••••••"/></div>
+          <button className="login-btn" onClick={onLogin}>Se connecter</button>
+          <p style={{fontSize:10,color:'var(--gris-400)',textAlign:'center',marginTop:14}}>dashboard.ima-club.com</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== DASHBOARD =====
+function Dashboard(){
+  return(<div className="fin">
+    <div className="kpi-g">
+      <div className="kpi">
+        <div className="kpi-label">CA du mois</div>
+        <div className="kpi-val">{eur(610000)}</div>
+        <div className="kpi-chg pos"><I.Up/> +11.9% vs N-1</div>
+      </div>
+      <div className="kpi">
+        <div className="kpi-label">Couverts</div>
+        <div className="kpi-val">{fmt(2850)}</div>
+        <div className="kpi-chg pos"><I.Up/> +8.2% vs N-1</div>
+      </div>
+      <div className="kpi">
+        <div className="kpi-label">Ticket moyen</div>
+        <div className="kpi-val">{eur(214)}</div>
+        <div className="kpi-chg pos"><I.Up/> +3.4%</div>
+      </div>
+      <div className="kpi">
+        <div className="kpi-label">Taux occupation</div>
+        <div className="kpi-val">87%</div>
+        <div className="kpi-chg pos"><I.Up/> +5pts</div>
+      </div>
+    </div>
+
+    <div className="cost-row">
+      <div className="cost-c">
+        <div className="cl">Food Cost</div><div className="cv">26.5%</div><div className="ct">Objectif: 28%</div>
+        <div className="pbar"><div className="pfill" style={{width:'94.6%',background:'var(--vert)'}}/></div>
+      </div>
+      <div className="cost-c">
+        <div className="cl">Bar Cost</div><div className="cv">17.5%</div><div className="ct">Objectif: 20%</div>
+        <div className="pbar"><div className="pfill" style={{width:'87.5%',background:'var(--vert)'}}/></div>
+      </div>
+      <div className="cost-c">
+        <div className="cl">Staff Cost</div><div className="cv">28.8%</div><div className="ct">Objectif: 30%</div>
+        <div className="pbar"><div className="pfill" style={{width:'96%',background:'var(--orange)'}}/></div>
+      </div>
+    </div>
+
+    <div className="cg">
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Évolution du CA</div><div className="card-st">Saison 2025-2026</div></div></div>
+        <div className="card-b">
+          <BarChart data={revData} keys={['food','bar']} colors={['#581527','#c46880']} labels={['Food','Bar']} height={200}/>
+        </div>
+      </div>
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">CA par jour (cette semaine)</div><div className="card-st">Midi vs Soir</div></div></div>
+        <div className="card-b">
+          <BarChart data={weekData} keys={['soir','midi']} colors={['#581527','#c46880']} labels={['Soir','Midi']} height={200}/>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Répartition CA</div><div className="card-st">Food vs Bar</div></div></div>
+        <div className="card-b">
+          <div className="donut-wrap">
+            <Donut segments={[{value:59.8,color:'#581527'},{value:40.2,color:'#c46880'}]} centerValue="610k" centerLabel="CA total"/>
+            <div className="donut-legend">
+              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#581527'}}/> Food — 59.8% ({eur(365000)})</div>
+              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#c46880'}}/> Bar — 40.2% ({eur(245000)})</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Alertes du jour</div><div className="card-st">4 alertes actives</div></div></div>
+        <div className="card-b">
+          <div className="alert-i a-err"><I.Warn/><div><div className="at">Stock critique : Truffe noire</div><div className="as">Reste 120g — seuil 200g</div></div></div>
+          <div className="alert-i a-err"><I.Warn/><div><div className="at">Stock critique : Caviar Osciètre</div><div className="as">Reste 85g — seuil 150g</div></div></div>
+          <div className="alert-i a-warn"><I.Warn/><div><div className="at">Staff cost en hausse</div><div className="as">28.8% — proche de l'objectif 30%</div></div></div>
+          <div className="alert-i a-info"><I.Warn/><div><div className="at">7 réservations ce soir</div><div className="as">dont 4 VIP — 32 couverts prévus</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div className="card">
+      <div className="card-h"><div><div className="card-t">Réservations du jour</div><div className="card-st">7 réservations — 32 couverts</div></div><span className="badge b-ima">SevenRooms</span></div>
+      <div className="card-b">
+        {resas.slice(0,5).map((r,i)=>(
+          <div className="resa" key={i}>
+            <div className="resa-l">
+              <div className="resa-av" style={{background:r.vip?'var(--bordeaux)':'var(--gris-400)'}}>{r.n[0]}</div>
+              <div><div className="resa-name">{r.n} {r.vip&&<span className="badge b-ima" style={{marginLeft:6}}>VIP</span>}</div><div className="resa-det">{r.note||r.t}</div></div>
+            </div>
+            <div className="resa-r"><div className="resa-time">{r.h}</div><div className="resa-pax">{r.c} couverts — {r.t}</div></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>);
+}
+
+// ===== FINANCE =====
+function Finance(){
+  const ebitda=mockPL.reduce((s,l)=>s+l.m,0);
+  return(<div className="fin">
+    <div className="kpi-g">
+      <div className="kpi"><div className="kpi-label">CA Total</div><div className="kpi-val">{eur(610000)}</div><div className="kpi-chg pos"><I.Up/> +11.9%</div></div>
+      <div className="kpi"><div className="kpi-label">Marge brute</div><div className="kpi-val">{eur(470400)}</div><div className="kpi-chg pos"><I.Up/> +9.2%</div></div>
+      <div className="kpi"><div className="kpi-label">EBITDA</div><div className="kpi-val">{eur(ebitda)}</div><div className="kpi-chg pos"><I.Up/> +15.3%</div></div>
+      <div className="kpi"><div className="kpi-label">Prime cost</div><div className="kpi-val">55.3%</div><div className="kpi-chg pos"><I.Up/> -2.1pts</div></div>
+    </div>
+    <div className="card">
+      <div className="card-h"><div><div className="card-t">Compte de résultat — Février 2026</div><div className="card-st">Données Pennylane</div></div><span className="badge b-ima">Pennylane</span></div>
+      <div className="card-b"><div className="tbl"><table>
+        <thead><tr><th>Catégorie</th><th style={{textAlign:'right'}}>Montant</th><th style={{textAlign:'right'}}>% CA</th><th style={{width:180}}>Répartition</th></tr></thead>
+        <tbody>
+          {mockPL.map((l,i)=><tr key={i} style={{fontWeight:i<2?600:400}}>
+            <td>{l.cat}</td>
+            <td style={{textAlign:'right',color:l.m>0?'var(--vert)':'var(--gris-700)'}}>{eur(l.m)}</td>
+            <td style={{textAlign:'right'}}>{Math.abs(l.p).toFixed(1)}%</td>
+            <td><div className="pbar"><div className="pfill" style={{width:`${Math.abs(l.p)*1.5}%`,background:l.m>0?'var(--vert)':'var(--bordeaux)'}}/></div></td>
+          </tr>)}
+          <tr style={{fontWeight:700,borderTop:'2px solid var(--gris-300)'}}>
+            <td>Résultat net</td>
+            <td style={{textAlign:'right',color:'var(--vert)',fontSize:16}}>{eur(ebitda)}</td>
+            <td style={{textAlign:'right'}}>{(ebitda/610000*100).toFixed(1)}%</td>
+            <td/>
+          </tr>
+        </tbody>
+      </table></div></div>
+    </div>
+    <div className="cg" style={{marginTop:16}}>
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Répartition des charges</div></div></div>
+        <div className="card-b">
+          <div className="donut-wrap">
+            <Donut segments={[
+              {value:26.5,color:'#581527'},{value:17.5,color:'#7a2d42'},
+              {value:28.8,color:'#a04560'},{value:12.9,color:'#c46880'},
+              {value:14.3,color:'#059669'}
+            ]} size={150} thickness={22} centerValue="14.3%" centerLabel="Résultat"/>
+            <div className="donut-legend">
+              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#581527'}}/> Food Cost — 26.5%</div>
+              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#7a2d42'}}/> Bar Cost — 17.5%</div>
+              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#a04560'}}/> Staff Cost — 28.8%</div>
+              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#c46880'}}/> Charges fixes — 12.9%</div>
+              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#059669'}}/> Résultat — 14.3%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Évolution CA Food vs Bar</div></div></div>
+        <div className="card-b"><BarChart data={revData} keys={['food','bar']} colors={['#581527','#c46880']} labels={['Food','Bar']} height={220}/></div>
+      </div>
+    </div>
+  </div>);
+}
+
+// ===== COSTS =====
+function Costs(){
+  return(<div className="fin">
+    <div className="tabs">
+      <div className="tab active">Food Cost</div><div className="tab">Bar Cost</div><div className="tab">Prime Cost</div><div className="tab">Fournisseurs</div>
+    </div>
+    <div className="kpi-g">
+      <div className="kpi"><div className="kpi-label">Food Cost réel</div><div className="kpi-val">26.5%</div><div className="kpi-chg pos"><I.Up/> -0.7pts vs M-1</div></div>
+      <div className="kpi"><div className="kpi-label">Food Cost théorique</div><div className="kpi-val">24.8%</div><div className="kpi-chg pos">Obj: 28%</div></div>
+      <div className="kpi"><div className="kpi-label">Écart réel/théorique</div><div className="kpi-val">1.7pts</div><div className="kpi-chg neu">Coulage potentiel</div></div>
+      <div className="kpi"><div className="kpi-label">Achats du mois</div><div className="kpi-val">{eur(139600)}</div><div className="kpi-chg pos">Pennylane</div></div>
+    </div>
+    <div className="cg">
+      <div className="card fw">
+        <div className="card-h"><div><div className="card-t">Tendance des ratios (6 mois)</div></div></div>
+        <div className="card-b">
+          <div style={{display:'flex',gap:20,marginBottom:12}}>
+            <div style={{display:'flex',alignItems:'center',gap:6,fontSize:12}}><div style={{width:12,height:3,background:'#581527',borderRadius:2}}/> Food Cost</div>
+            <div style={{display:'flex',alignItems:'center',gap:6,fontSize:12}}><div style={{width:12,height:3,background:'#c46880',borderRadius:2}}/> Bar Cost</div>
+            <div style={{display:'flex',alignItems:'center',gap:6,fontSize:12}}><div style={{width:12,height:3,background:'#000',borderRadius:2}}/> Staff Cost</div>
+          </div>
+          <div style={{display:'flex',gap:10}}>
+            <div style={{flex:1}}><Spark data={costTrend} color="#581527" w={300} h={60}/><div style={{fontSize:11,color:'var(--gris-500)',marginTop:4}}>Food Cost: 28.5% → 26.5%</div></div>
+            <div style={{flex:1}}><Spark data={barTrend} color="#c46880" w={300} h={60}/><div style={{fontSize:11,color:'var(--gris-500)',marginTop:4}}>Bar Cost: 18.2% → 17.5%</div></div>
+            <div style={{flex:1}}><Spark data={staffTrend} color="#000" w={300} h={60}/><div style={{fontSize:11,color:'var(--gris-500)',marginTop:4}}>Staff Cost: 32.1% → 28.8%</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div className="card">
+      <div className="card-h"><div><div className="card-t">Factures fournisseurs</div><div className="card-st">Synchronisées depuis Pennylane</div></div><span className="badge b-ima">Pennylane</span></div>
+      <div className="card-b"><div className="tbl"><table>
+        <thead><tr><th>Fournisseur</th><th>Type</th><th>Date</th><th style={{textAlign:'right'}}>Montant</th><th>Statut</th></tr></thead>
+        <tbody>{suppliers.map((s,i)=><tr key={i}>
+          <td style={{fontWeight:500}}>{s.n}</td><td>{s.t}</td><td>{s.d}</td>
+          <td style={{textAlign:'right',fontWeight:600}}>{eur(s.m)}</td>
+          <td><span className={`badge ${s.s==='Payée'?'b-ok':'b-warn'}`}>{s.s}</span></td>
+        </tr>)}</tbody>
+      </table></div></div>
+    </div>
+  </div>);
+}
+
+// ===== STAFF =====
+// Points system per role (for tip distribution)
+const ROLE_POINTS={
+  'Chef de cuisine':0,'Sous-chef':0,'Commis cuisine':0,
+  'Resp. salle':10,'Chef barman':9,'Sommelier':8,
+  'Serveur':7,'Serveuse':7,'Barman':8,'Runner':5,'Hôtesse':6,'Plongeur':0
+};
+const PENALTY_TYPES=[
+  {id:'retard',label:'Retard',pts:-1},
+  {id:'absent',label:'Absence injustifiée',pts:-3},
+  {id:'tenue',label:'Tenue non conforme',pts:-1},
+  {id:'service',label:'Erreur de service',pts:-2},
+  {id:'bonus',label:'Bonus (excellent service)',pts:2},
+];
+const JOURS=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+
+function StaffPage(){
+  const[tab,setTab]=useState('equipe');
+  const[showModal,setShowModal]=useState(false);
+  const[team,setTeam]=useState([
+    {id:1,n:'Marco Rossi',p:'Chef de cuisine',h:196,x:12,c:6800,tel:'06 12 34 56 78',contrat:'CDI',dateEntree:'15/09/2024',tips:false},
+    {id:2,n:'Julie Martin',p:'Sous-chef',h:184,x:8,c:4200,tel:'06 23 45 67 89',contrat:'CDI',dateEntree:'01/10/2024',tips:false},
+    {id:3,n:'Thomas Berger',p:'Resp. salle',h:180,x:15,c:4500,tel:'06 34 56 78 90',contrat:'CDI',dateEntree:'20/09/2024',tips:true},
+    {id:4,n:'Emma Dubois',p:'Chef barman',h:176,x:20,c:4100,tel:'06 45 67 89 01',contrat:'CDI',dateEntree:'15/09/2024',tips:true},
+    {id:5,n:'Pierre Leroy',p:'Sommelier',h:168,x:4,c:3800,tel:'06 56 78 90 12',contrat:'CDI',dateEntree:'01/12/2024',tips:true},
+    {id:6,n:'Sofia Moreau',p:'Commis cuisine',h:160,x:0,c:2400,tel:'06 67 89 01 23',contrat:'CDD',dateEntree:'15/12/2025',tips:false},
+    {id:7,n:'Lucas Petit',p:'Serveur',h:156,x:8,c:2200,tel:'06 78 90 12 34',contrat:'CDI',dateEntree:'10/10/2024',tips:true},
+    {id:8,n:'Chloé Bernard',p:'Serveuse',h:152,x:6,c:2100,tel:'06 89 01 23 45',contrat:'CDD',dateEntree:'01/01/2026',tips:true},
+  ]);
+
+  // New employee form
+  const[newEmp,setNewEmp]=useState({n:'',p:'Serveur',tel:'',contrat:'CDI',tips:true});
+
+  // Tips: daily amounts
+  const[dailyTips,setDailyTips]=useState({
+    Lun:850,Mar:720,Mer:980,Jeu:1120,Ven:1850,Sam:2400,Dim:1350
+  });
+
+  // Presence grid: {empId: {Lun:true,...}}
+  const tipsTeam=team.filter(e=>e.tips);
+  const[presence,setPresence]=useState(()=>{
+    const p={};
+    tipsTeam.forEach(e=>{
+      p[e.id]={};
+      JOURS.forEach(j=>{p[e.id][j]=true;});
+    });
+    // some absences
+    if(tipsTeam.length>2){p[tipsTeam[2].id]={...p[tipsTeam[2].id],Mer:false};}
+    return p;
+  });
+
+  // Penalties: {empId: [{jour,type,pts}]}
+  const[penalties,setPenalties]=useState(()=>{
+    const pen={};
+    tipsTeam.forEach(e=>{pen[e.id]=[];});
+    if(tipsTeam.length>3){
+      pen[tipsTeam[3].id]=[{jour:'Ven',type:'retard',pts:-1}];
+      pen[tipsTeam[1].id]=[{jour:'Sam',type:'bonus',pts:2}];
+    }
+    return pen;
+  });
+
+  const togglePresence=(eid,jour)=>{
+    setPresence(prev=>({...prev,[eid]:{...prev[eid],[jour]:!prev[eid]?.[jour]}}));
+  };
+
+  const addEmployee=()=>{
+    if(!newEmp.n)return;
+    const id=Math.max(...team.map(e=>e.id))+1;
+    setTeam(prev=>[...prev,{id,n:newEmp.n,p:newEmp.p,h:0,x:0,c:0,tel:newEmp.tel,contrat:newEmp.contrat,dateEntree:'28/02/2026',tips:newEmp.tips}]);
+    // init presence & penalties for new tip employee
+    if(newEmp.tips){
+      setPresence(prev=>{const p={...prev};p[id]={};JOURS.forEach(j=>{p[id][j]=true;});return p;});
+      setPenalties(prev=>({...prev,[id]:[]}));
+    }
+    setNewEmp({n:'',p:'Serveur',tel:'',contrat:'CDI',tips:true});
+    setShowModal(false);
+  };
+
+  // Calculate tip distribution
+  const calcTips=()=>{
+    const totalWeekTips=JOURS.reduce((s,j)=>s+(dailyTips[j]||0),0);
+    const rows=tipsTeam.map(e=>{
+      const basePoints=ROLE_POINTS[e.p]||6;
+      const daysPresent=JOURS.filter(j=>presence[e.id]?.[j]).length;
+      const penaltyPts=(penalties[e.id]||[]).reduce((s,p)=>s+p.pts,0);
+      const totalPts=Math.max(0,(basePoints*daysPresent)+penaltyPts);
+      return{id:e.id,nom:e.n,poste:e.p,basePoints,daysPresent,penaltyPts,totalPts,
+        presenceByDay:JOURS.map(j=>!!presence[e.id]?.[j])};
+    });
+    const grandTotalPts=rows.reduce((s,r)=>s+r.totalPts,0);
+    return rows.map(r=>({
+      ...r,
+      share:grandTotalPts>0?r.totalPts/grandTotalPts:0,
+      amount:grandTotalPts>0?Math.round((r.totalPts/grandTotalPts)*totalWeekTips):0
+    }));
+  };
+  const tipRows=calcTips();
+  const totalWeekTips=JOURS.reduce((s,j)=>s+(dailyTips[j]||0),0);
+
+  return(<div className="fin">
+    <div className="kpi-g">
+      <div className="kpi"><div className="kpi-label">Masse salariale</div><div className="kpi-val">{eur(175680)}</div><div className="kpi-chg neg"><I.Down/> +3.2%</div></div>
+      <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val">28.8%</div><div className="kpi-chg pos">Obj: 30%</div></div>
+      <div className="kpi"><div className="kpi-label">Effectif</div><div className="kpi-val">{team.length}</div><div className="kpi-chg neu">dont {team.filter(e=>e.contrat==='CDD').length} CDD</div></div>
+      <div className="kpi"><div className="kpi-label">Tips semaine</div><div className="kpi-val">{eur(totalWeekTips)}</div><div className="kpi-chg pos">{tipsTeam.length} bénéficiaires</div></div>
+    </div>
+
+    <div className="tabs">
+      <div className={`tab ${tab==='equipe'?'active':''}`} onClick={()=>setTab('equipe')}>Équipe</div>
+      <div className={`tab ${tab==='tips'?'active':''}`} onClick={()=>setTab('tips')}>Tips & Répartition</div>
+      <div className={`tab ${tab==='repartition'?'active':''}`} onClick={()=>setTab('repartition')}>Répartition par pôle</div>
+    </div>
+
+    {/* ===== TAB: ÉQUIPE ===== */}
+    {tab==='equipe'&&<div>
+      <div style={{display:'flex',justifyContent:'flex-end',marginBottom:14}}>
+        <button className="btn btn-primary" onClick={()=>setShowModal(true)}>+ Ajouter un collaborateur</button>
+      </div>
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Équipe — Février 2026</div><div className="card-st">{team.length} collaborateurs</div></div></div>
+        <div className="card-b"><div className="tbl"><table>
+          <thead><tr><th>Nom</th><th>Poste</th><th>Contrat</th><th>Entrée</th><th style={{textAlign:'right'}}>Heures</th><th style={{textAlign:'right'}}>Extras</th><th style={{textAlign:'right'}}>Coût brut</th><th style={{textAlign:'center'}}>Tips</th><th style={{width:80}}>Charge</th></tr></thead>
+          <tbody>{team.map((e,i)=><tr key={e.id}>
+            <td><div style={{display:'flex',alignItems:'center',gap:8}}>
+              <div style={{width:28,height:28,borderRadius:'50%',background:'var(--bordeaux)',color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:600}}>{e.n.split(' ').map(w=>w[0]).join('')}</div>
+              <div><div style={{fontWeight:500}}>{e.n}</div><div style={{fontSize:10,color:'var(--gris-400)'}}>{e.tel}</div></div>
+            </div></td>
+            <td><span className="badge b-ima">{e.p}</span></td>
+            <td><span className={`badge ${e.contrat==='CDI'?'b-ok':'b-info'}`}>{e.contrat}</span></td>
+            <td style={{fontSize:12}}>{e.dateEntree}</td>
+            <td style={{textAlign:'right'}}>{e.h}h</td>
+            <td style={{textAlign:'right'}}>{e.x>0?<span style={{color:e.x>10?'var(--rouge)':'var(--orange)'}}>{e.x}h</span>:'—'}</td>
+            <td style={{textAlign:'right',fontWeight:600}}>{e.c>0?eur(e.c):'—'}</td>
+            <td style={{textAlign:'center'}}>{e.tips?<span className="badge b-ok">Oui</span>:<span className="badge" style={{background:'var(--gris-100)',color:'var(--gris-400)'}}>Non</span>}</td>
+            <td><div className="pbar"><div className="pfill" style={{width:`${(e.c/7000)*100}%`,background:'var(--bordeaux)'}}/></div></td>
+          </tr>)}</tbody>
+        </table></div></div>
+      </div>
+    </div>}
+
+    {/* ===== TAB: TIPS ===== */}
+    {tab==='tips'&&<div>
+      {/* Daily tips input */}
+      <div className="card" style={{marginBottom:16}}>
+        <div className="card-h"><div><div className="card-t">Tips du jour — Saisie quotidienne</div><div className="card-st">Semaine du 24 au 28 février 2026</div></div></div>
+        <div className="card-b">
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            {JOURS.map(j=>(
+              <div key={j} style={{flex:1,minWidth:80,background:'var(--gris-50)',borderRadius:10,padding:12,textAlign:'center',border:'1px solid var(--gris-200)'}}>
+                <div style={{fontSize:11,fontWeight:600,color:'var(--bordeaux)',marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>{j}</div>
+                <input type="number" value={dailyTips[j]||''} onChange={e=>{const v=parseInt(e.target.value)||0;setDailyTips(prev=>({...prev,[j]:v}));}}
+                  style={{width:'100%',padding:'8px 4px',border:'1px solid var(--gris-200)',borderRadius:6,fontSize:16,textAlign:'center',fontWeight:700,fontFamily:'inherit',outline:'none'}}
+                  placeholder="0"/>
+                <div style={{fontSize:10,color:'var(--gris-400)',marginTop:4}}>euros</div>
+              </div>
+            ))}
+            <div style={{flex:1,minWidth:80,background:'var(--bordeaux-10)',borderRadius:10,padding:12,textAlign:'center',border:'1px solid var(--bordeaux-20)'}}>
+              <div style={{fontSize:11,fontWeight:600,color:'var(--bordeaux)',marginBottom:6,letterSpacing:1}}>TOTAL</div>
+              <div style={{fontSize:22,fontWeight:700,color:'var(--bordeaux)'}}>{eur(totalWeekTips)}</div>
+              <div style={{fontSize:10,color:'var(--bordeaux-light)',marginTop:4}}>semaine</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Presence + Penalties grid */}
+      <div className="card" style={{marginBottom:16}}>
+        <div className="card-h"><div><div className="card-t">Présence & Pénalités / Bonus</div><div className="card-st">Cliquez sur les pastilles pour marquer absent — Points par poste appliqués automatiquement</div></div></div>
+        <div className="card-b tips-grid"><table>
+          <thead>
+            <tr>
+              <th style={{textAlign:'left',minWidth:130}}>Collaborateur</th>
+              <th>Poste</th>
+              <th>Pts/jour</th>
+              {JOURS.map(j=><th key={j} className="day-header">{j}</th>)}
+              <th>Jours</th>
+              <th>Pénalités</th>
+              <th style={{fontWeight:700}}>Total pts</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tipRows.map(r=>{
+              const emp=team.find(e=>e.id===r.id);
+              const empPen=penalties[r.id]||[];
+              return(<tr key={r.id}>
+                <td style={{textAlign:'left',fontWeight:500}}>{r.nom}</td>
+                <td><span className="badge b-ima" style={{fontSize:9}}>{r.poste}</span></td>
+                <td style={{fontWeight:600}}>{r.basePoints}</td>
+                {JOURS.map((j,ji)=>(
+                  <td key={j}>
+                    <div className={`presence-dot ${r.presenceByDay[ji]?'present':'absent'}`}
+                      onClick={()=>togglePresence(r.id,j)}
+                      title={r.presenceByDay[ji]?'Présent — cliquer pour marquer absent':'Absent — cliquer pour marquer présent'}>
+                      {r.presenceByDay[ji]?'✓':'✗'}
+                    </div>
+                  </td>
+                ))}
+                <td style={{fontWeight:600}}>{r.daysPresent}/7</td>
+                <td>
+                  {r.penaltyPts!==0&&<span className={r.penaltyPts>0?'bonus-cell':'penalty-cell'}>
+                    {r.penaltyPts>0?'+':''}{r.penaltyPts}
+                  </span>}
+                  {r.penaltyPts===0&&<span style={{color:'var(--gris-400)'}}>—</span>}
+                </td>
+                <td style={{fontWeight:700,fontSize:14}}>{r.totalPts}</td>
+              </tr>);
+            })}
+          </tbody>
+        </table></div>
+      </div>
+
+      {/* Tip distribution table */}
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Répartition des tips — Semaine</div><div className="card-st">Calcul: (Points base × jours présents + pénalités) / total points × tips total</div></div></div>
+        <div className="card-b"><div className="tbl"><table>
+          <thead><tr>
+            <th style={{textAlign:'left'}}>Collaborateur</th>
+            <th>Poste</th>
+            <th style={{textAlign:'center'}}>Pts base/jour</th>
+            <th style={{textAlign:'center'}}>Jours</th>
+            <th style={{textAlign:'center'}}>Pénalités</th>
+            <th style={{textAlign:'center'}}>Total points</th>
+            <th style={{textAlign:'center'}}>Part (%)</th>
+            <th style={{textAlign:'right'}}>Montant</th>
+          </tr></thead>
+          <tbody>
+            {tipRows.sort((a,b)=>b.amount-a.amount).map(r=>(
+              <tr key={r.id}>
+                <td style={{fontWeight:500}}>{r.nom}</td>
+                <td><span className="badge b-ima">{r.poste}</span></td>
+                <td style={{textAlign:'center'}}>{r.basePoints}</td>
+                <td style={{textAlign:'center'}}>{r.daysPresent}/7</td>
+                <td style={{textAlign:'center'}}>
+                  {r.penaltyPts!==0?<span className={r.penaltyPts>0?'bonus-cell':'penalty-cell'}>{r.penaltyPts>0?'+':''}{r.penaltyPts}</span>:'—'}
+                </td>
+                <td style={{textAlign:'center',fontWeight:600,fontSize:15}}>{r.totalPts}</td>
+                <td style={{textAlign:'center'}}>{(r.share*100).toFixed(1)}%</td>
+                <td style={{textAlign:'right',fontWeight:700,fontSize:15,color:'var(--bordeaux)'}}>{eur(r.amount)}</td>
+              </tr>
+            ))}
+            <tr className="total-row">
+              <td style={{fontWeight:700}}>TOTAL</td>
+              <td/>
+              <td/>
+              <td/>
+              <td/>
+              <td style={{textAlign:'center',fontWeight:700}}>{tipRows.reduce((s,r)=>s+r.totalPts,0)}</td>
+              <td style={{textAlign:'center',fontWeight:700}}>100%</td>
+              <td style={{textAlign:'right',fontWeight:700,fontSize:15,color:'var(--bordeaux)'}}>{eur(totalWeekTips)}</td>
+            </tr>
+          </tbody>
+        </table></div></div>
+      </div>
+
+      {/* Penalty legend */}
+      <div className="card" style={{marginTop:16}}>
+        <div className="card-h"><div><div className="card-t">Barème des pénalités & bonus</div></div></div>
+        <div className="card-b">
+          <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+            {PENALTY_TYPES.map(p=>(
+              <div key={p.id} style={{padding:'8px 14px',borderRadius:8,background:p.pts>0?'var(--vert-light)':'var(--rouge-light)',fontSize:12,display:'flex',gap:8,alignItems:'center'}}>
+                <span style={{fontWeight:700,color:p.pts>0?'var(--vert)':'var(--rouge)'}}>{p.pts>0?'+':''}{p.pts} pt{Math.abs(p.pts)>1?'s':''}</span>
+                <span>{p.label}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{marginTop:12,fontSize:12,color:'var(--gris-500)'}}>
+            <strong>Points par poste :</strong> {Object.entries(ROLE_POINTS).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k} (${v}pts)`).join(' · ')}
+          </div>
+        </div>
+      </div>
+    </div>}
+
+    {/* ===== TAB: RÉPARTITION ===== */}
+    {tab==='repartition'&&<div>
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Répartition par pôle</div></div></div>
+        <div className="card-b">
+          <HBar data={[
+            {label:'Cuisine',value:13400},{label:'Salle',value:8800},{label:'Bar',value:4100},
+            {label:'Sommellerie',value:3800},{label:'Plonge',value:2200}
+          ]} maxVal={14000}/>
+        </div>
+      </div>
+      <div className="card" style={{marginTop:16}}>
+        <div className="card-h"><div><div className="card-t">Coût par service</div></div></div>
+        <div className="card-b">
+          <HBar data={[
+            {label:'Midi',value:4200},{label:'Soir',value:8100},{label:'Coupure',value:1500}
+          ]} maxVal={8500}/>
+        </div>
+      </div>
+    </div>}
+
+    {/* ===== MODAL: AJOUTER COLLABORATEUR ===== */}
+    {showModal&&<div className="modal-overlay" onClick={()=>setShowModal(false)}>
+      <div className="modal" onClick={e=>e.stopPropagation()}>
+        <h3>Ajouter un collaborateur <button className="modal-close" onClick={()=>setShowModal(false)}>×</button></h3>
+        <div className="fg">
+          <label className="fl">Nom complet</label>
+          <input className="fi" value={newEmp.n} onChange={e=>setNewEmp(p=>({...p,n:e.target.value}))} placeholder="Prénom Nom"/>
+        </div>
+        <div className="fg-row">
+          <div className="fg">
+            <label className="fl">Poste</label>
+            <select className="fi-select" value={newEmp.p} onChange={e=>setNewEmp(p=>({...p,p:e.target.value}))}>
+              {Object.keys(ROLE_POINTS).map(r=><option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <div className="fg">
+            <label className="fl">Contrat</label>
+            <select className="fi-select" value={newEmp.contrat} onChange={e=>setNewEmp(p=>({...p,contrat:e.target.value}))}>
+              <option value="CDI">CDI</option>
+              <option value="CDD">CDD</option>
+              <option value="Extra">Extra</option>
+              <option value="Stage">Stage</option>
+            </select>
+          </div>
+        </div>
+        <div className="fg">
+          <label className="fl">Téléphone</label>
+          <input className="fi" value={newEmp.tel} onChange={e=>setNewEmp(p=>({...p,tel:e.target.value}))} placeholder="06 XX XX XX XX"/>
+        </div>
+        <div className="fg" style={{display:'flex',alignItems:'center',gap:10}}>
+          <input type="checkbox" id="tips-check" checked={newEmp.tips} onChange={e=>setNewEmp(p=>({...p,tips:e.target.checked}))} style={{width:16,height:16,accentColor:'var(--bordeaux)'}}/>
+          <label htmlFor="tips-check" style={{fontSize:13,fontWeight:500,cursor:'pointer'}}>Éligible aux tips (service en salle / bar)</label>
+        </div>
+        <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:20}}>
+          <button className="btn btn-secondary" onClick={()=>setShowModal(false)}>Annuler</button>
+          <button className="btn btn-primary" onClick={addEmployee}>Ajouter</button>
+        </div>
+      </div>
+    </div>}
+  </div>);
+}
+
+// ===== STOCKS =====
+function Stocks(){
+  const[tab,setTab]=useState('inventaire');
+  const[filterCat,setFilterCat]=useState('Tous');
+  const[showAddModal,setShowAddModal]=useState(false);
+  const[newItem,setNewItem]=useState({nom:'',cat:'Viandes',unite:'kg',prixUnit:0,seuil:0});
+
+  // Full inventory with counted qty, theoretical stock, Trivec sales
+  const[inventory,setInventory]=useState([
+    // Viandes
+    {id:1,nom:'Wagyu A5 (striploin)',cat:'Viandes',unite:'kg',prixUnit:380,seuil:2,stockPrec:5.5,achats:8,ventesTrivec:12.3,compteInventaire:1.2},
+    {id:2,nom:'Côte de boeuf Salers',cat:'Viandes',unite:'kg',prixUnit:52,seuil:5,stockPrec:12,achats:25,ventesTrivec:28.5,compteInventaire:7.8},
+    {id:3,nom:'Agneau de lait Pyrénées',cat:'Viandes',unite:'kg',prixUnit:38,seuil:3,stockPrec:8,achats:15,ventesTrivec:18,compteInventaire:4.5},
+    {id:4,nom:'Canard (magret)',cat:'Viandes',unite:'kg',prixUnit:28,seuil:4,stockPrec:6,achats:20,ventesTrivec:21,compteInventaire:4.2},
+    // Poissons
+    {id:5,nom:'Bar de ligne',cat:'Poissons',unite:'kg',prixUnit:45,seuil:3,stockPrec:4,achats:18,ventesTrivec:17.5,compteInventaire:4.2},
+    {id:6,nom:'Homard breton',cat:'Poissons',unite:'pcs',prixUnit:32,seuil:8,stockPrec:10,achats:20,ventesTrivec:26,compteInventaire:4},
+    {id:7,nom:'Saint-Jacques (Normandie)',cat:'Poissons',unite:'kg',prixUnit:65,seuil:2,stockPrec:3,achats:12,ventesTrivec:12.5,compteInventaire:2.1},
+    // Épicerie fine
+    {id:8,nom:'Truffe noire (Périgord)',cat:'Épicerie fine',unite:'g',prixUnit:8.5,seuil:200,stockPrec:250,achats:400,ventesTrivec:530,compteInventaire:120},
+    {id:9,nom:'Caviar Osciètre',cat:'Épicerie fine',unite:'g',prixUnit:12,seuil:150,stockPrec:180,achats:200,ventesTrivec:295,compteInventaire:85},
+    {id:10,nom:'Huile truffe blanche',cat:'Épicerie fine',unite:'L',prixUnit:120,seuil:1,stockPrec:2,achats:3,ventesTrivec:3.2,compteInventaire:1.5},
+    // Vins
+    {id:11,nom:'Champagne Krug Grande Cuvée',cat:'Vins',unite:'bt',prixUnit:155,seuil:6,stockPrec:12,achats:12,ventesTrivec:21,compteInventaire:3},
+    {id:12,nom:'Meursault 1er Cru Perrières',cat:'Vins',unite:'bt',prixUnit:85,seuil:4,stockPrec:8,achats:12,ventesTrivec:14,compteInventaire:5.5},
+    {id:13,nom:'Châteauneuf-du-Pape',cat:'Vins',unite:'bt',prixUnit:42,seuil:6,stockPrec:15,achats:18,ventesTrivec:22,compteInventaire:10},
+    {id:14,nom:'Sancerre blanc',cat:'Vins',unite:'bt',prixUnit:22,seuil:8,stockPrec:18,achats:24,ventesTrivec:30,compteInventaire:11},
+    // Spiritueux
+    {id:15,nom:'Vodka Beluga Noble',cat:'Spiritueux',unite:'bt',prixUnit:48,seuil:3,stockPrec:5,achats:6,ventesTrivec:7.5,compteInventaire:3.2},
+    {id:16,nom:'Whisky Macallan 18',cat:'Spiritueux',unite:'bt',prixUnit:195,seuil:2,stockPrec:4,achats:3,ventesTrivec:5,compteInventaire:1.8},
+    {id:17,nom:'Gin Hendrick\'s',cat:'Spiritueux',unite:'bt',prixUnit:35,seuil:3,stockPrec:6,achats:8,ventesTrivec:10,compteInventaire:3.5},
+    // Légumes & Fruits
+    {id:18,nom:'Asperges vertes bio',cat:'Légumes',unite:'botte',prixUnit:6,seuil:10,stockPrec:15,achats:40,ventesTrivec:42,compteInventaire:12},
+    {id:19,nom:'Morilles séchées',cat:'Légumes',unite:'g',prixUnit:3.5,seuil:100,stockPrec:150,achats:200,ventesTrivec:260,compteInventaire:80},
+  ]);
+
+  const cats=['Tous','Viandes','Poissons','Épicerie fine','Vins','Spiritueux','Légumes'];
+  const filtered=filterCat==='Tous'?inventory:inventory.filter(i=>i.cat===filterCat);
+
+  // Calculate theoretical stock: stockPrec + achats - ventesTrivec
+  const calcTheorique=(item)=>Math.round((item.stockPrec+item.achats-item.ventesTrivec)*100)/100;
+  // Ecart: compteInventaire - théorique
+  const calcEcart=(item)=>Math.round((item.compteInventaire-calcTheorique(item))*100)/100;
+  const calcEcartPct=(item)=>{const th=calcTheorique(item);return th!==0?Math.round((calcEcart(item)/th)*10000)/100:0;};
+  const calcEcartValeur=(item)=>Math.round(calcEcart(item)*item.prixUnit*100)/100;
+
+  const updateCompte=(id,val)=>{
+    setInventory(prev=>prev.map(i=>i.id===id?{...i,compteInventaire:parseFloat(val)||0}:i));
+  };
+
+  const addItem=()=>{
+    if(!newItem.nom)return;
+    const id=Math.max(...inventory.map(i=>i.id))+1;
+    setInventory(prev=>[...prev,{id,nom:newItem.nom,cat:newItem.cat,unite:newItem.unite,prixUnit:parseFloat(newItem.prixUnit)||0,seuil:parseFloat(newItem.seuil)||0,stockPrec:0,achats:0,ventesTrivec:0,compteInventaire:0}]);
+    setNewItem({nom:'',cat:'Viandes',unite:'kg',prixUnit:0,seuil:0});
+    setShowAddModal(false);
+  };
+
+  // Aggregated stats
+  const totalEcartValeur=inventory.reduce((s,i)=>s+calcEcartValeur(i),0);
+  const totalValeurStock=inventory.reduce((s,i)=>s+(i.compteInventaire*i.prixUnit),0);
+  const itemsWithEcart=inventory.filter(i=>Math.abs(calcEcartPct(i))>5).length;
+  const alertItems=inventory.filter(i=>i.compteInventaire<i.seuil);
+
+  return(<div className="fin">
+    <div className="kpi-g">
+      <div className="kpi"><div className="kpi-label">Valeur stock</div><div className="kpi-val">{eur(totalValeurStock)}</div><div className="kpi-chg neu">{inventory.length} références</div></div>
+      <div className="kpi"><div className="kpi-label">Écart total</div><div className="kpi-val" style={{color:totalEcartValeur<0?'var(--rouge)':'var(--vert)'}}>{eur(totalEcartValeur)}</div><div className={`kpi-chg ${totalEcartValeur<0?'neg':'pos'}`}>{totalEcartValeur<0?'Coulage potentiel':'Excédent'}</div></div>
+      <div className="kpi"><div className="kpi-label">Produits en écart (&gt;5%)</div><div className="kpi-val">{itemsWithEcart}</div><div className="kpi-chg neg">sur {inventory.length} réf.</div></div>
+      <div className="kpi"><div className="kpi-label">Alertes stock bas</div><div className="kpi-val">{alertItems.length}</div><div className="kpi-chg neg">{alertItems.filter(i=>i.compteInventaire<i.seuil*0.5).length} critiques</div></div>
+    </div>
+
+    <div className="tabs">
+      <div className={`tab ${tab==='inventaire'?'active':''}`} onClick={()=>setTab('inventaire')}>Faire l'inventaire</div>
+      <div className={`tab ${tab==='analyse'?'active':''}`} onClick={()=>setTab('analyse')}>Analyse écarts (Trivec)</div>
+      <div className={`tab ${tab==='alertes'?'active':''}`} onClick={()=>setTab('alertes')}>Alertes stock</div>
+      <div className={`tab ${tab==='valeur'?'active':''}`} onClick={()=>setTab('valeur')}>Valeur par catégorie</div>
+    </div>
+
+    {/* ===== TAB: INVENTAIRE ===== */}
+    {tab==='inventaire'&&<div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+        <div style={{display:'flex',gap:6}}>
+          {cats.map(c=>(
+            <button key={c} className={`btn btn-sm ${filterCat===c?'btn-primary':'btn-secondary'}`} onClick={()=>setFilterCat(c)}>{c}</button>
+          ))}
+        </div>
+        <button className="btn btn-primary" onClick={()=>setShowAddModal(true)}>+ Ajouter un produit</button>
+      </div>
+      <div className="card">
+        <div className="card-h">
+          <div><div className="card-t">Inventaire — Saisie des quantités</div><div className="card-st">Renseignez les quantités comptées physiquement. L'écart avec le stock théorique (ventes Trivec) est calculé automatiquement.</div></div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <span className="badge b-ima">Trivec sync</span>
+            <span className="badge b-info">28/02/2026</span>
+          </div>
+        </div>
+        <div className="card-b tips-grid"><table>
+          <thead><tr>
+            <th style={{textAlign:'left',minWidth:180}}>Produit</th>
+            <th>Catégorie</th>
+            <th>Unité</th>
+            <th style={{textAlign:'right'}}>Prix unit.</th>
+            <th style={{textAlign:'right',background:'var(--gris-100)'}}>Stock préc.</th>
+            <th style={{textAlign:'right',background:'var(--vert-light)'}}>Achats</th>
+            <th style={{textAlign:'right',background:'var(--bleu-light)'}}>Ventes Trivec</th>
+            <th style={{textAlign:'right',background:'var(--orange-light)'}}>Théorique</th>
+            <th style={{textAlign:'center',background:'var(--bordeaux-10)',minWidth:80}}>Compté</th>
+            <th style={{textAlign:'right'}}>Écart</th>
+            <th style={{textAlign:'right'}}>Écart (€)</th>
+            <th>Statut</th>
+          </tr></thead>
+          <tbody>
+            {filtered.map(item=>{
+              const theo=calcTheorique(item);
+              const ecart=calcEcart(item);
+              const ecartPct=calcEcartPct(item);
+              const ecartVal=calcEcartValeur(item);
+              const isBad=Math.abs(ecartPct)>5;
+              const isVeryBad=Math.abs(ecartPct)>15;
+              return(<tr key={item.id} style={{background:isVeryBad?'rgba(220,38,38,.04)':isBad?'rgba(217,119,6,.03)':'transparent'}}>
+                <td style={{textAlign:'left',fontWeight:500}}>{item.nom}</td>
+                <td><span className="badge b-ima" style={{fontSize:9}}>{item.cat}</span></td>
+                <td style={{textAlign:'center',fontSize:11,color:'var(--gris-500)'}}>{item.unite}</td>
+                <td style={{textAlign:'right',fontSize:12}}>{item.prixUnit}€</td>
+                <td style={{textAlign:'right',background:'var(--gris-50)'}}>{item.stockPrec}</td>
+                <td style={{textAlign:'right',color:'var(--vert)',fontWeight:500}}>+{item.achats}</td>
+                <td style={{textAlign:'right',color:'var(--bleu)',fontWeight:500}}>-{item.ventesTrivec}</td>
+                <td style={{textAlign:'right',fontWeight:600}}>{theo}</td>
+                <td style={{textAlign:'center',background:'rgba(88,21,39,.03)'}}>
+                  <input type="number" step="0.1" value={item.compteInventaire} onChange={e=>updateCompte(item.id,e.target.value)}
+                    style={{width:65,padding:'5px 6px',border:`2px solid ${isBad?'var(--rouge)':'var(--gris-200)'}`,borderRadius:6,fontSize:13,textAlign:'center',fontWeight:700,fontFamily:'inherit',outline:'none',background:isBad?'var(--rouge-light)':'white'}}/>
+                </td>
+                <td style={{textAlign:'right',fontWeight:700,color:ecart<0?'var(--rouge)':ecart>0?'var(--vert)':'var(--gris-400)'}}>
+                  {ecart>0?'+':''}{ecart} {item.unite}
+                  <div style={{fontSize:9,fontWeight:500}}>({ecartPct>0?'+':''}{ecartPct}%)</div>
+                </td>
+                <td style={{textAlign:'right',fontWeight:600,color:ecartVal<0?'var(--rouge)':ecartVal>0?'var(--vert)':'var(--gris-400)'}}>
+                  {ecartVal>0?'+':''}{eur(ecartVal)}
+                </td>
+                <td>
+                  {isVeryBad?<span className="badge b-err">Écart critique</span>:
+                   isBad?<span className="badge b-warn">À vérifier</span>:
+                   <span className="badge b-ok">OK</span>}
+                </td>
+              </tr>);
+            })}
+          </tbody>
+          <tfoot>
+            <tr style={{fontWeight:700,background:'var(--gris-50)',borderTop:'2px solid var(--gris-300)'}}>
+              <td style={{textAlign:'left'}}>TOTAL ({filtered.length} réf.)</td>
+              <td/><td/><td/>
+              <td style={{textAlign:'right'}}>{eur(filtered.reduce((s,i)=>s+(i.stockPrec*i.prixUnit),0))}</td>
+              <td style={{textAlign:'right',color:'var(--vert)'}}>{eur(filtered.reduce((s,i)=>s+(i.achats*i.prixUnit),0))}</td>
+              <td style={{textAlign:'right',color:'var(--bleu)'}}>{eur(filtered.reduce((s,i)=>s+(i.ventesTrivec*i.prixUnit),0))}</td>
+              <td style={{textAlign:'right'}}>{eur(filtered.reduce((s,i)=>s+(calcTheorique(i)*i.prixUnit),0))}</td>
+              <td style={{textAlign:'center'}}>{eur(filtered.reduce((s,i)=>s+(i.compteInventaire*i.prixUnit),0))}</td>
+              <td colSpan="2" style={{textAlign:'right',color:totalEcartValeur<0?'var(--rouge)':'var(--vert)',fontSize:15}}>
+                {totalEcartValeur>0?'+':''}{eur(totalEcartValeur)}
+              </td>
+              <td/>
+            </tr>
+          </tfoot>
+        </table></div>
+        <div style={{marginTop:14,padding:'10px 14px',background:'var(--gris-50)',borderRadius:8,fontSize:12,color:'var(--gris-600)'}}>
+          <strong>Formule :</strong> Stock théorique = Stock précédent + Achats (Pennylane) − Ventes (Trivec) · <strong>Écart</strong> = Compté − Théorique · Un écart négatif indique un <strong style={{color:'var(--rouge)'}}>coulage potentiel</strong> (vol, casse, perte non déclarée)
+        </div>
+      </div>
+    </div>}
+
+    {/* ===== TAB: ANALYSE ÉCARTS ===== */}
+    {tab==='analyse'&&<div>
+      <div className="card" style={{marginBottom:16}}>
+        <div className="card-h"><div><div className="card-t">Analyse des écarts — Inventaire vs Ventes Trivec</div><div className="card-st">Produits avec un écart supérieur à 5% entre le stock compté et le stock théorique</div></div><span className="badge b-ima">Trivec × Pennylane</span></div>
+        <div className="card-b">
+          {(()=>{
+            const problemItems=inventory.filter(i=>Math.abs(calcEcartPct(i))>5).sort((a,b)=>calcEcartValeur(a)-calcEcartValeur(b));
+            const totalPerte=problemItems.reduce((s,i)=>s+calcEcartValeur(i),0);
+            return(<div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14,marginBottom:20}}>
+                <div className="cost-c">
+                  <div className="cl">Produits en écart</div>
+                  <div className="cv" style={{color:'var(--rouge)'}}>{problemItems.length}</div>
+                  <div className="ct">sur {inventory.length} références</div>
+                </div>
+                <div className="cost-c">
+                  <div className="cl">Perte estimée (coulage)</div>
+                  <div className="cv" style={{color:'var(--rouge)'}}>{eur(totalPerte)}</div>
+                  <div className="ct">à investiguer</div>
+                </div>
+                <div className="cost-c">
+                  <div className="cl">Taux de coulage</div>
+                  <div className="cv" style={{color:Math.abs(totalPerte/totalValeurStock*100)>3?'var(--rouge)':'var(--orange)'}}>{Math.abs(totalPerte/totalValeurStock*100).toFixed(1)}%</div>
+                  <div className="ct">Seuil acceptable : 2-3%</div>
+                </div>
+              </div>
+              <div className="tbl"><table>
+                <thead><tr>
+                  <th style={{textAlign:'left'}}>Produit</th><th>Catégorie</th>
+                  <th style={{textAlign:'right'}}>Théorique</th><th style={{textAlign:'right'}}>Compté</th>
+                  <th style={{textAlign:'right'}}>Écart (qty)</th><th style={{textAlign:'right'}}>Écart (%)</th>
+                  <th style={{textAlign:'right'}}>Perte (€)</th><th>Diagnostic</th>
+                </tr></thead>
+                <tbody>
+                  {problemItems.map(item=>{
+                    const theo=calcTheorique(item);
+                    const ecart=calcEcart(item);
+                    const ecartPct=calcEcartPct(item);
+                    const ecartVal=calcEcartValeur(item);
+                    const isVeryBad=Math.abs(ecartPct)>15;
+                    // Auto-diagnosis
+                    let diag='';let diagColor='';
+                    if(ecart<0&&Math.abs(ecartPct)>15){diag='Coulage probable';diagColor='var(--rouge)';}
+                    else if(ecart<0&&Math.abs(ecartPct)>5){diag='Perte / casse ?';diagColor='var(--orange)';}
+                    else if(ecart>0&&ecartPct>10){diag='Erreur saisie ?';diagColor='var(--bleu)';}
+                    else{diag='À vérifier';diagColor='var(--orange)';}
+                    return(<tr key={item.id} style={{background:isVeryBad?'rgba(220,38,38,.04)':'transparent'}}>
+                      <td style={{textAlign:'left',fontWeight:600}}>{item.nom}</td>
+                      <td><span className="badge b-ima" style={{fontSize:9}}>{item.cat}</span></td>
+                      <td style={{textAlign:'right'}}>{theo} {item.unite}</td>
+                      <td style={{textAlign:'right',fontWeight:600}}>{item.compteInventaire} {item.unite}</td>
+                      <td style={{textAlign:'right',fontWeight:700,color:ecart<0?'var(--rouge)':'var(--vert)'}}>
+                        {ecart>0?'+':''}{ecart} {item.unite}
+                      </td>
+                      <td style={{textAlign:'right',fontWeight:700,color:ecartPct<-5?'var(--rouge)':'var(--orange)'}}>
+                        {ecartPct>0?'+':''}{ecartPct}%
+                      </td>
+                      <td style={{textAlign:'right',fontWeight:700,color:ecartVal<0?'var(--rouge)':'var(--vert)'}}>
+                        {ecartVal>0?'+':''}{eur(ecartVal)}
+                      </td>
+                      <td><span style={{fontSize:12,fontWeight:600,color:diagColor}}>{diag}</span></td>
+                    </tr>);
+                  })}
+                </tbody>
+                <tfoot><tr style={{fontWeight:700,background:'var(--gris-50)',borderTop:'2px solid var(--gris-300)'}}>
+                  <td style={{textAlign:'left'}}>TOTAL PERTES</td><td/><td/><td/><td/><td/>
+                  <td style={{textAlign:'right',color:'var(--rouge)',fontSize:16}}>{eur(totalPerte)}</td><td/>
+                </tr></tfoot>
+              </table></div>
+            </div>);
+          })()}
+        </div>
+      </div>
+
+      {/* Écarts par catégorie */}
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Écarts par catégorie</div><div className="card-st">Valeur des écarts agrégés par famille de produits</div></div></div>
+        <div className="card-b">
+          <HBar data={cats.filter(c=>c!=='Tous').map(c=>{
+            const items=inventory.filter(i=>i.cat===c);
+            const ecartTotal=items.reduce((s,i)=>s+calcEcartValeur(i),0);
+            return{label:c,value:Math.abs(ecartTotal),display:`${ecartTotal>0?'+':''}${eur(ecartTotal)}`};
+          }).sort((a,b)=>b.value-a.value)} maxVal={Math.max(...cats.filter(c=>c!=='Tous').map(c=>Math.abs(inventory.filter(i=>i.cat===c).reduce((s,i)=>s+calcEcartValeur(i),0))))} color="var(--rouge)"/>
+        </div>
+      </div>
+    </div>}
+
+    {/* ===== TAB: ALERTES ===== */}
+    {tab==='alertes'&&<div>
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Alertes stock bas</div><div className="card-st">Produits sous le seuil minimum de réapprovisionnement</div></div></div>
+        <div className="card-b"><div className="tbl"><table>
+          <thead><tr><th style={{textAlign:'left'}}>Produit</th><th>Catégorie</th><th style={{textAlign:'right'}}>Stock actuel</th><th style={{textAlign:'right'}}>Seuil</th><th style={{width:120}}>Niveau</th><th>Urgence</th></tr></thead>
+          <tbody>
+            {alertItems.sort((a,b)=>(a.compteInventaire/a.seuil)-(b.compteInventaire/b.seuil)).map(item=>{
+              const pct=item.compteInventaire/item.seuil;
+              const critique=pct<0.5;
+              return(<tr key={item.id}>
+                <td style={{textAlign:'left',fontWeight:500}}>{item.nom}</td>
+                <td><span className="badge b-ima" style={{fontSize:9}}>{item.cat}</span></td>
+                <td style={{textAlign:'right',fontWeight:700,color:critique?'var(--rouge)':'var(--orange)'}}>{item.compteInventaire} {item.unite}</td>
+                <td style={{textAlign:'right'}}>{item.seuil} {item.unite}</td>
+                <td><div className="pbar"><div className="pfill" style={{width:`${Math.min(pct*100,100)}%`,background:critique?'var(--rouge)':'var(--orange)'}}/></div></td>
+                <td><span className={`badge ${critique?'b-err':'b-warn'}`}>{critique?'Critique':'Alerte'}</span></td>
+              </tr>);
+            })}
+          </tbody>
+        </table></div></div>
+      </div>
+    </div>}
+
+    {/* ===== TAB: VALEUR ===== */}
+    {tab==='valeur'&&<div>
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Valeur stock par catégorie</div></div></div>
+        <div className="card-b">
+          <HBar data={cats.filter(c=>c!=='Tous').map(c=>{
+            const v=inventory.filter(i=>i.cat===c).reduce((s,i)=>s+(i.compteInventaire*i.prixUnit),0);
+            return{label:c,value:v};
+          }).sort((a,b)=>b.value-a.value)} maxVal={Math.max(...cats.filter(c=>c!=='Tous').map(c=>inventory.filter(i=>i.cat===c).reduce((s,i)=>s+(i.compteInventaire*i.prixUnit),0)))}/>
+        </div>
+      </div>
+    </div>}
+
+    {/* ===== MODAL: AJOUTER PRODUIT ===== */}
+    {showAddModal&&<div className="modal-overlay" onClick={()=>setShowAddModal(false)}>
+      <div className="modal" onClick={e=>e.stopPropagation()}>
+        <h3>Ajouter un produit <button className="modal-close" onClick={()=>setShowAddModal(false)}>×</button></h3>
+        <div className="fg"><label className="fl">Nom du produit</label><input className="fi" value={newItem.nom} onChange={e=>setNewItem(p=>({...p,nom:e.target.value}))} placeholder="Ex: Truffe noire Périgord"/></div>
+        <div className="fg-row">
+          <div className="fg"><label className="fl">Catégorie</label>
+            <select className="fi-select" value={newItem.cat} onChange={e=>setNewItem(p=>({...p,cat:e.target.value}))}>
+              {cats.filter(c=>c!=='Tous').map(c=><option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="fg"><label className="fl">Unité</label>
+            <select className="fi-select" value={newItem.unite} onChange={e=>setNewItem(p=>({...p,unite:e.target.value}))}>
+              {['kg','g','L','cl','bt','pcs','botte'].map(u=><option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="fg-row">
+          <div className="fg"><label className="fl">Prix unitaire (€)</label><input className="fi" type="number" step="0.01" value={newItem.prixUnit||''} onChange={e=>setNewItem(p=>({...p,prixUnit:e.target.value}))} placeholder="0.00"/></div>
+          <div className="fg"><label className="fl">Seuil d'alerte</label><input className="fi" type="number" step="0.1" value={newItem.seuil||''} onChange={e=>setNewItem(p=>({...p,seuil:e.target.value}))} placeholder="0"/></div>
+        </div>
+        <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:20}}>
+          <button className="btn btn-secondary" onClick={()=>setShowAddModal(false)}>Annuler</button>
+          <button className="btn btn-primary" onClick={addItem}>Ajouter</button>
+        </div>
+      </div>
+    </div>}
+  </div>);
+}
+
+// ===== CRM =====
+function CRMPage(){
+  return(<div className="fin">
+    <div className="kpi-g">
+      <div className="kpi"><div className="kpi-label">Réservations</div><div className="kpi-val">7</div><div className="kpi-chg pos">32 couverts</div></div>
+      <div className="kpi"><div className="kpi-label">Taux occupation</div><div className="kpi-val">87%</div><div className="kpi-chg pos"><I.Up/> +5pts</div></div>
+      <div className="kpi"><div className="kpi-label">Clients VIP</div><div className="kpi-val">4</div><div className="kpi-chg pos">sur 7 résa</div></div>
+      <div className="kpi"><div className="kpi-label">Note moyenne</div><div className="kpi-val">4.8/5</div><div className="kpi-chg pos">SevenRooms</div></div>
+    </div>
+    <div className="card">
+      <div className="card-h"><div><div className="card-t">Réservations — 28 février 2026</div><div className="card-st">Synchronisé avec SevenRooms</div></div><span className="badge b-ima">SevenRooms</span></div>
+      <div className="card-b"><div className="tbl"><table>
+        <thead><tr><th>Client</th><th>Heure</th><th style={{textAlign:'center'}}>Couverts</th><th>Table</th><th>Notes</th><th>Statut</th></tr></thead>
+        <tbody>{resas.map((r,i)=><tr key={i}>
+          <td><div style={{display:'flex',alignItems:'center',gap:8}}>
+            <div style={{width:26,height:26,borderRadius:'50%',background:r.vip?'var(--bordeaux)':'var(--gris-300)',color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:600}}>{r.n[0]}</div>
+            <span style={{fontWeight:500}}>{r.n}</span>{r.vip&&<span className="badge b-ima">VIP</span>}
+          </div></td>
+          <td style={{fontWeight:600}}>{r.h}</td>
+          <td style={{textAlign:'center',fontWeight:600}}>{r.c}</td>
+          <td>{r.t}</td>
+          <td style={{fontSize:11,color:'var(--gris-500)'}}>{r.note||'—'}</td>
+          <td><span className={`badge ${r.st==='confirmée'?'b-ok':'b-warn'}`}>{r.st}</span></td>
+        </tr>)}</tbody>
+      </table></div></div>
+    </div>
+    <div className="cg" style={{marginTop:16}}>
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Occupation par service</div></div></div>
+        <div className="card-b">
+          <BarChart data={[
+            {label:'Lun',midi:65,soir:78},{label:'Mar',midi:55,soir:72},{label:'Mer',midi:70,soir:85},
+            {label:'Jeu',midi:72,soir:90},{label:'Ven',midi:85,soir:98},{label:'Sam',midi:95,soir:100},{label:'Dim',midi:80,soir:60}
+          ]} keys={['soir','midi']} colors={['#581527','#c46880']} labels={['Soir','Midi']} height={180}/>
+        </div>
+      </div>
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Profil clients</div></div></div>
+        <div className="card-b">
+          <div className="donut-wrap">
+            <Donut segments={[{value:35,color:'#581527'},{value:40,color:'#7a2d42'},{value:15,color:'#a04560'},{value:10,color:'#c46880'}]} centerValue="87%" centerLabel="Occupation"/>
+            <div className="donut-legend">
+              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#581527'}}/> VIP réguliers — 35%</div>
+              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#7a2d42'}}/> Touristes — 40%</div>
+              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#a04560'}}/> Locaux — 15%</div>
+              <div className="donut-legend-item"><div className="donut-legend-dot" style={{background:'#c46880'}}/> Corporate — 10%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>);
+}
+
+// ===== POS =====
+function POSPage(){
+  const total=posItems.reduce((s,i)=>s+i.ca,0);
+  return(<div className="fin">
+    <div className="kpi-g">
+      <div className="kpi"><div className="kpi-label">CA POS (mois)</div><div className="kpi-val">{eur(total)}</div><div className="kpi-chg pos">Trivec</div></div>
+      <div className="kpi"><div className="kpi-label">Ticket moyen</div><div className="kpi-val">{eur(214)}</div><div className="kpi-chg pos"><I.Up/> +8.1%</div></div>
+      <div className="kpi"><div className="kpi-label">Transactions</div><div className="kpi-val">{fmt(2515)}</div><div className="kpi-chg pos"><I.Up/> +5.3%</div></div>
+      <div className="kpi"><div className="kpi-label">Panier bar moy.</div><div className="kpi-val">{eur(89)}</div><div className="kpi-chg pos"><I.Up/> +12.4%</div></div>
+    </div>
+    <div className="card">
+      <div className="card-h"><div><div className="card-t">Ventes par catégorie — Février 2026</div><div className="card-st">Caisses Trivec</div></div><span className="badge b-ima">Trivec</span></div>
+      <div className="card-b"><div className="tbl"><table>
+        <thead><tr><th>Catégorie</th><th style={{textAlign:'right'}}>CA</th><th style={{textAlign:'right'}}>Qtés</th><th style={{textAlign:'right'}}>Ticket moy.</th><th style={{width:160}}>Part CA</th></tr></thead>
+        <tbody>{posItems.map((it,i)=><tr key={i}>
+          <td style={{fontWeight:500}}>{it.cat}</td>
+          <td style={{textAlign:'right',fontWeight:600}}>{eur(it.ca)}</td>
+          <td style={{textAlign:'right'}}>{fmt(it.q)}</td>
+          <td style={{textAlign:'right'}}>{eur(it.tm)}</td>
+          <td><div style={{display:'flex',alignItems:'center',gap:6}}>
+            <div className="pbar" style={{flex:1}}><div className="pfill" style={{width:`${(it.ca/total)*200}%`,background:'var(--bordeaux)'}}/></div>
+            <span style={{fontSize:11,fontWeight:500,minWidth:35}}>{((it.ca/total)*100).toFixed(1)}%</span>
+          </div></td>
+        </tr>)}</tbody>
+      </table></div></div>
+    </div>
+    <div className="card" style={{marginTop:16}}>
+      <div className="card-h"><div><div className="card-t">CA par catégorie</div></div></div>
+      <div className="card-b">
+        <HBar data={posItems.map(i=>({label:i.cat,value:i.ca}))} maxVal={130000}/>
+      </div>
+    </div>
+  </div>);
+}
+
+// ===== SETTINGS =====
+function Settings(){
+  return(<div className="fin">
+    <div className="tabs"><div className="tab active">Général</div><div className="tab">Utilisateurs</div><div className="tab">Établissements</div><div className="tab">Intégrations</div></div>
+    <div className="cg">
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Établissements</div></div></div>
+        <div className="card-b">
+          <div style={{padding:'14px 0',borderBottom:'1px solid var(--gris-100)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div><div style={{fontWeight:600}}>IMA — Val d'Isère</div><div style={{fontSize:11,color:'var(--gris-400)'}}>Restaurant gastronomique & bar</div></div>
+            <span className="badge b-ok">Actif</span>
+          </div>
+          <div style={{padding:'14px 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div><div style={{fontWeight:600,color:'var(--gris-400)'}}>IMA — Saint-Tropez</div><div style={{fontSize:11,color:'var(--gris-400)'}}>Ouverture prévue été 2026</div></div>
+            <span className="badge b-warn">En préparation</span>
+          </div>
+        </div>
+      </div>
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Intégrations</div></div></div>
+        <div className="card-b">
+          {[{n:'Trivec',d:'Caisses & POS',c:'T',bg:'var(--bordeaux-10)',co:'var(--bordeaux)'},
+            {n:'SevenRooms',d:'CRM & Réservations',c:'7R',bg:'var(--bleu-light)',co:'var(--bleu)'},
+            {n:'Pennylane',d:'Comptabilité & Factures',c:'PL',bg:'var(--vert-light)',co:'var(--vert)'}
+          ].map((x,i)=>(
+            <div key={i} style={{padding:'10px 0',borderBottom:i<2?'1px solid var(--gris-100)':'none',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <div style={{width:34,height:34,borderRadius:8,background:x.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:x.co}}>{x.c}</div>
+                <div><div style={{fontWeight:500,fontSize:13}}>{x.n}</div><div style={{fontSize:10,color:'var(--gris-400)'}}>{x.d}</div></div>
+              </div>
+              <span className="badge b-ok">Connecté</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Utilisateurs</div></div></div>
+        <div className="card-b">
+          {[{n:'Nicolas Spielmann',r:'Associé — Admin',e:'nicolas@ima-club.com'},
+            {n:'Laurent Attias',r:'Associé — Admin',e:'laurent@ima-club.com'},
+            {n:'Marco Rossi',r:'Directeur',e:'marco@ima-club.com'}
+          ].map((u,i)=>(
+            <div key={i} style={{padding:'10px 0',borderBottom:i<2?'1px solid var(--gris-100)':'none',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <div style={{width:32,height:32,borderRadius:'50%',background:'var(--bordeaux)',color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600}}>{u.n[0]}</div>
+                <div><div style={{fontWeight:500,fontSize:13}}>{u.n}</div><div style={{fontSize:10,color:'var(--gris-400)'}}>{u.e}</div></div>
+              </div>
+              <span className="badge b-ima">{u.r}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Objectifs & Seuils</div></div></div>
+        <div className="card-b">
+          {[{l:'Food Cost max',o:'28%',a:'26.5%',ok:true},{l:'Bar Cost max',o:'20%',a:'17.5%',ok:true},
+            {l:'Staff Cost max',o:'30%',a:'28.8%',ok:false},{l:'Prime Cost max',o:'65%',a:'55.3%',ok:true},
+            {l:'Ticket moyen min',o:'180€',a:'214€',ok:true}
+          ].map((o,i)=>(
+            <div key={i} style={{padding:'8px 0',borderBottom:'1px solid var(--gris-100)',display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:13}}>
+              <div>{o.l}</div>
+              <div style={{display:'flex',gap:14,alignItems:'center'}}>
+                <span style={{color:'var(--gris-500)'}}>Obj: {o.o}</span>
+                <span style={{fontWeight:600}}>Actuel: {o.a}</span>
+                <span className={`badge ${o.ok?'b-ok':'b-warn'}`}>{o.ok?'OK':'Attention'}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </div>);
+}
+
+// ===== APP =====
+function App(){
+  const[auth,setAuth]=useState(false);
+  const[page,setPage]=useState('dashboard');
+  const[period,setPeriod]=useState('mois');
+
+  const nav=[
+    {sec:'Pilotage',items:[
+      {id:'dashboard',l:'Dashboard',ic:<I.Dash/>},
+      {id:'finance',l:'Finance & P&L',ic:<I.Fin/>},
+      {id:'costs',l:'Food & Bar Cost',ic:<I.Cost/>},
+      {id:'staff',l:'Staff & RH',ic:<I.Staff/>},
+    ]},
+    {sec:'Opérations',items:[
+      {id:'stocks',l:'Stocks',ic:<I.Stock/>},
+      {id:'crm',l:'CRM & Réservations',ic:<I.CRM/>},
+      {id:'pos',l:'Caisses (Trivec)',ic:<I.POS/>},
+    ]},
+    {sec:'Système',items:[
+      {id:'settings',l:'Administration',ic:<I.Gear/>},
+    ]},
+  ];
+
+  const titles={dashboard:'Dashboard',finance:'Finance & P&L',costs:'Food & Bar Cost',staff:'Staff & RH',stocks:'Stocks & Inventaire',crm:'CRM & Réservations',pos:'Caisses (Trivec)',settings:'Administration'};
+
+  if(!auth) return <Login onLogin={()=>setAuth(true)}/>;
+
+  const P=()=>{switch(page){
+    case 'dashboard':return <Dashboard/>;case 'finance':return <Finance/>;case 'costs':return <Costs/>;
+    case 'staff':return <StaffPage/>;case 'stocks':return <Stocks/>;case 'crm':return <CRMPage/>;
+    case 'pos':return <POSPage/>;case 'settings':return <Settings/>;default:return <Dashboard/>;
+  }};
+
+  return(
+    <div className="app">
+      <aside className="sidebar">
+        <div className="sidebar-logo"><h1>IMa</h1><span>Tour de contrôle</span></div>
+        <nav className="sidebar-nav">
+          {nav.map(s=>(
+            <div className="nav-sec" key={s.sec}>
+              <div className="nav-sec-title">{s.sec}</div>
+              {s.items.map(it=>(
+                <div key={it.id} className={`nav-item ${page===it.id?'active':''}`} onClick={()=>setPage(it.id)}>
+                  {it.ic}{it.l}
+                </div>
+              ))}
+            </div>
+          ))}
+        </nav>
+        <div className="sidebar-foot">
+          <div className="avatar">NS</div>
+          <div><div className="uname">Nicolas S.</div><div className="urole">Associé — Admin</div></div>
+        </div>
+      </aside>
+      <main className="main">
+        <header className="header">
+          <div className="header-l"><h2>{titles[page]}</h2><span className="bc">Février 2026</span></div>
+          <div className="header-r">
+            <div className="per">
+              {['jour','semaine','mois','année'].map(p=>(
+                <button key={p} className={`per-btn ${period===p?'active':''}`} onClick={()=>setPeriod(p)}>{p[0].toUpperCase()+p.slice(1)}</button>
+              ))}
+            </div>
+            <div className="loc"><I.Pin/><div className="loc-dot"/>Val d'Isère<I.Chev/></div>
+            <div className="notif"><I.Bell/></div>
+          </div>
+        </header>
+        <div className="page"><P/></div>
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.render(<App/>,document.getElementById('root'));
+</script>
+</body>
+</html>
