@@ -1810,15 +1810,51 @@ function StaffPage(){
 
 // ===== STOCKS =====
 function Stocks(){
-  const[tab,setTab]=useState('inventaire');
+  const[tab,setTab]=useState('ventes');
   const[filterCat,setFilterCat]=useState('Tous');
   const[showAddModal,setShowAddModal]=useState(false);
   const[newItem,setNewItem]=useState({nom:'',cat:'Viandes',unite:'kg',prixUnit:0,seuil:0});
+  const[searchTerm,setSearchTerm]=useState('');
 
   // Full inventory with counted qty, theoretical stock, Trivec sales
-  const[inventory,setInventory]=useState([]);
+  const[inventory,setInventory]=useState(()=>{
+    try{return JSON.parse(localStorage.getItem('ima_inventory_v1')||'[]');}catch(e){return[];}
+  });
 
-  const cats=['Tous','Viandes','Poissons','Épicerie fine','Vins','Spiritueux','Légumes'];
+  // Save inventory to localStorage
+  useEffect(()=>{
+    localStorage.setItem('ima_inventory_v1',JSON.stringify(inventory));
+  },[inventory]);
+
+  // Aggregate all assortiment data from Trivec
+  const trivecProducts=useMemo(()=>{
+    const data=TrivecService._getData();
+    const assorts=data.assortiments||{};
+    const productMap={};
+    for(const[dateStr,assort]of Object.entries(assorts)){
+      (assort.products||[]).forEach(p=>{
+        const key=p.nom;
+        if(!productMap[key]){productMap[key]={nom:p.nom,categorie1:p.categorie1,categorie2:p.categorie2,categorie3:p.categorie3,totalQty:0,totalPrix:0,jours:[]};}
+        productMap[key].totalQty+=p.quantite;
+        productMap[key].totalPrix+=p.prix;
+        productMap[key].jours.push({date:dateStr,qty:p.quantite,prix:p.prix});
+      });
+    }
+    return Object.values(productMap).sort((a,b)=>b.totalPrix-a.totalPrix);
+  },[]);
+
+  // Map Trivec categories to stock categories
+  const trivecCatToStockCat=(cat1)=>{
+    if(!cat1)return'Épicerie fine';
+    const c=cat1.toUpperCase();
+    if(c.includes('VIN')||c.includes('CHAMPAGNE'))return'Vins';
+    if(c.includes('ALCOOL')||c.includes('RHUM')||c.includes('TEQUILA')||c.includes('VODKA')||c.includes('GIN')||c.includes('WHISKY'))return'Spiritueux';
+    if(c.includes('NOURRITURE')||c.includes('FOOD'))return'Épicerie fine';
+    if(c.includes('BOISSON'))return'Épicerie fine';
+    return'Épicerie fine';
+  };
+
+  const cats=['Tous','Viandes','Poissons','Épicerie fine','Vins','Spiritueux','Légumes','Boissons'];
   const filtered=filterCat==='Tous'?inventory:inventory.filter(i=>i.cat===filterCat);
 
   // Calculate theoretical stock: stockPrec + achats - ventesTrivec
@@ -1834,7 +1870,7 @@ function Stocks(){
 
   const addItem=()=>{
     if(!newItem.nom)return;
-    const id=Math.max(...inventory.map(i=>i.id))+1;
+    const id=inventory.length>0?Math.max(...inventory.map(i=>i.id))+1:1;
     setInventory(prev=>[...prev,{id,nom:newItem.nom,cat:newItem.cat,unite:newItem.unite,prixUnit:parseFloat(newItem.prixUnit)||0,seuil:parseFloat(newItem.seuil)||0,stockPrec:0,achats:0,ventesTrivec:0,compteInventaire:0}]);
     setNewItem({nom:'',cat:'Viandes',unite:'kg',prixUnit:0,seuil:0});
     setShowAddModal(false);
@@ -1855,11 +1891,102 @@ function Stocks(){
     </div>
 
     <div className="tabs">
+      <div className={`tab ${tab==='ventes'?'active':''}`} onClick={()=>setTab('ventes')}>Ventes Trivec</div>
       <div className={`tab ${tab==='inventaire'?'active':''}`} onClick={()=>setTab('inventaire')}>Faire l'inventaire</div>
-      <div className={`tab ${tab==='analyse'?'active':''}`} onClick={()=>setTab('analyse')}>Analyse écarts (Trivec)</div>
+      <div className={`tab ${tab==='analyse'?'active':''}`} onClick={()=>setTab('analyse')}>Analyse écarts</div>
       <div className={`tab ${tab==='alertes'?'active':''}`} onClick={()=>setTab('alertes')}>Alertes stock</div>
       <div className={`tab ${tab==='valeur'?'active':''}`} onClick={()=>setTab('valeur')}>Valeur par catégorie</div>
     </div>
+
+    {/* ===== TAB: VENTES TRIVEC ===== */}
+    {tab==='ventes'&&<div>
+      {trivecProducts.length===0?<div className="card">
+        <div className="card-b" style={{padding:50,textAlign:'center',color:'var(--gris-400)'}}>
+          <div style={{fontSize:32,marginBottom:10}}>📦</div>
+          <div style={{fontWeight:500,marginBottom:4}}>Aucun produit importé depuis Trivec</div>
+          <div style={{fontSize:11}}>Importez un "Rapport Assortiments de Produits" dans Administration → Import Trivec</div>
+        </div>
+      </div>:<div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+          <div style={{fontSize:13,color:'var(--gris-500)'}}>{trivecProducts.length} produits détectés depuis les imports Trivec</div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <input className="fi" type="text" placeholder="Rechercher un produit..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} style={{width:220,fontSize:12,padding:'6px 10px'}}/>
+          </div>
+        </div>
+
+        {/* Résumé par catégorie Trivec */}
+        <div className="card" style={{marginBottom:16}}>
+          <div className="card-h"><div><div className="card-t">Ventes par catégorie</div><div className="card-st">Cumul des imports Assortiments Trivec</div></div><span className="badge b-ok">{Object.keys(TrivecService._getData().assortiments||{}).length} jour(s)</span></div>
+          <div className="card-b">
+            {(()=>{
+              const byCat={};
+              trivecProducts.forEach(p=>{
+                const cat=p.categorie1||'Autre';
+                if(!byCat[cat])byCat[cat]={qty:0,total:0,count:0};
+                byCat[cat].qty+=p.totalQty;
+                byCat[cat].total+=p.totalPrix;
+                byCat[cat].count++;
+              });
+              const sorted=Object.entries(byCat).sort((a,b)=>b[1].total-a[1].total);
+              const maxVal=sorted.length>0?sorted[0][1].total:1;
+              return<div style={{display:'grid',gap:8}}>
+                {sorted.map(([cat,data])=>(
+                  <div key={cat} style={{display:'flex',alignItems:'center',gap:12,fontSize:12}}>
+                    <div style={{width:180,fontWeight:500,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{cat}</div>
+                    <div style={{flex:1,height:20,background:'var(--gris-100)',borderRadius:4,overflow:'hidden'}}>
+                      <div style={{height:'100%',width:`${(data.total/maxVal)*100}%`,background:'var(--bordeaux)',borderRadius:4,transition:'width .3s'}}/>
+                    </div>
+                    <div style={{width:80,textAlign:'right',fontWeight:600}}>{data.total.toLocaleString('fr-FR')}€</div>
+                    <div style={{width:60,textAlign:'right',color:'var(--gris-500)'}}>{data.qty} unités</div>
+                    <div style={{width:50,textAlign:'right',color:'var(--gris-400)',fontSize:10}}>{data.count} réf.</div>
+                  </div>
+                ))}
+              </div>;
+            })()}
+          </div>
+        </div>
+
+        {/* Tableau détaillé des produits */}
+        <div className="card">
+          <div className="card-h"><div><div className="card-t">Détail produits vendus</div><div className="card-st">Cliquez sur "+ Suivre" pour ajouter un produit à l'inventaire</div></div></div>
+          <div className="card-b"><div className="tbl"><table>
+            <thead><tr>
+              <th style={{textAlign:'left',minWidth:200}}>Produit</th>
+              <th style={{textAlign:'left'}}>Catégorie</th>
+              <th style={{textAlign:'left'}}>Sous-catégorie</th>
+              <th style={{textAlign:'right'}}>Qté vendue</th>
+              <th style={{textAlign:'right'}}>CA</th>
+              <th style={{textAlign:'right'}}>Prix moyen</th>
+              <th style={{textAlign:'center'}}>Jours</th>
+              <th style={{textAlign:'center'}}>Suivi stock</th>
+            </tr></thead>
+            <tbody>
+              {trivecProducts.filter(p=>!searchTerm||p.nom.toLowerCase().includes(searchTerm.toLowerCase())||p.categorie1?.toLowerCase().includes(searchTerm.toLowerCase())||p.categorie2?.toLowerCase().includes(searchTerm.toLowerCase())).map((p,i)=>{
+                const inInventory=inventory.some(inv=>inv.nom===p.nom);
+                const prixMoyen=p.totalQty>0?(p.totalPrix/p.totalQty):0;
+                return<tr key={i}>
+                  <td style={{textAlign:'left',fontWeight:500}}>{p.nom}</td>
+                  <td style={{textAlign:'left'}}><span className="badge b-ima" style={{fontSize:9}}>{p.categorie1||'—'}</span></td>
+                  <td style={{textAlign:'left',fontSize:11,color:'var(--gris-500)'}}>{p.categorie2||'—'}{p.categorie3?' / '+p.categorie3:''}</td>
+                  <td style={{textAlign:'right',fontWeight:600}}>{p.totalQty}</td>
+                  <td style={{textAlign:'right',fontWeight:600}}>{p.totalPrix.toLocaleString('fr-FR')}€</td>
+                  <td style={{textAlign:'right',color:'var(--gris-500)'}}>{Math.round(prixMoyen)}€</td>
+                  <td style={{textAlign:'center'}}><span className="badge" style={{background:'var(--gris-100)',fontSize:9}}>{p.jours.length}j</span></td>
+                  <td style={{textAlign:'center'}}>
+                    {inInventory?<span className="badge b-ok" style={{fontSize:9}}>Suivi</span>:
+                    <button className="btn btn-sm btn-primary" style={{fontSize:9,padding:'2px 8px'}} onClick={()=>{
+                      const cat=trivecCatToStockCat(p.categorie1);
+                      const newId=inventory.length>0?Math.max(...inventory.map(x=>x.id))+1:1;
+                      setInventory(prev=>[...prev,{id:newId,nom:p.nom,cat:cat,unite:'bt',prixUnit:Math.round(prixMoyen*100)/100,seuil:0,stockPrec:0,achats:0,ventesTrivec:p.totalQty,compteInventaire:0}]);
+                    }}>+ Suivre</button>}
+                  </td>
+                </tr>;
+              })}
+            </tbody>
+          </table></div></div>
+        </div>
+      </div>}
+    </div>}
 
     {/* ===== TAB: INVENTAIRE ===== */}
     {tab==='inventaire'&&<div>
