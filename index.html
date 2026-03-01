@@ -4304,7 +4304,26 @@ function App(){
   );
 }
 
-ReactDOM.render(<App/>,document.getElementById('root'));
+// ErrorBoundary to prevent blank pages on crash
+class ErrorBoundary extends React.Component{
+  constructor(props){super(props);this.state={hasError:false,error:null};}
+  static getDerivedStateFromError(error){return{hasError:true,error};}
+  componentDidCatch(error,info){console.error('[IMA Dashboard Error]',error,info);}
+  render(){
+    if(this.state.hasError){
+      return React.createElement('div',{style:{padding:40,textAlign:'center',fontFamily:'Inter,system-ui,sans-serif'}},
+        React.createElement('div',{style:{fontSize:24,fontWeight:700,color:'#B91C1C',marginBottom:12}},'Erreur'),
+        React.createElement('div',{style:{fontSize:14,color:'#6B7280',marginBottom:8}},this.state.error?.message||'Une erreur est survenue'),
+        React.createElement('div',{style:{fontSize:12,color:'#9CA3AF',marginBottom:20}},'Vérifiez la console (F12) pour plus de détails'),
+        React.createElement('button',{onClick:()=>this.setState({hasError:false,error:null}),style:{padding:'8px 20px',background:'#581527',color:'white',border:'none',borderRadius:8,cursor:'pointer',fontSize:13}},'Réessayer'),
+        React.createElement('button',{onClick:()=>window.location.reload(),style:{padding:'8px 20px',background:'#E5E7EB',color:'#374151',border:'none',borderRadius:8,cursor:'pointer',fontSize:13,marginLeft:8}},'Recharger la page')
+      );
+    }
+    return this.props.children;
+  }
+}
+
+ReactDOM.render(<ErrorBoundary><App/></ErrorBoundary>,document.getElementById('root'));
 </script>
 </body>
 </html>
