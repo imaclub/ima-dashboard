@@ -4060,6 +4060,66 @@ function Settings(){
           {TrivecService.getLastImport()&&<div style={{fontSize:10,color:'var(--gris-400)',marginTop:8}}>Dernier import : {new Date(TrivecService.getLastImport()).toLocaleString('fr-FR')}</div>}
         </div>
       </div>
+
+      {/* ===== BACKUP / RESTORE ===== */}
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Sauvegarde & Restauration</div><div className="card-st">Exportez vos données pour les conserver entre les mises à jour</div></div></div>
+        <div className="card-b">
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+            <div style={{padding:16,background:'var(--gris-50)',borderRadius:8}}>
+              <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>Exporter les données</div>
+              <div style={{fontSize:11,color:'var(--gris-500)',marginBottom:12}}>Télécharge un fichier JSON contenant toutes vos données locales (Trivec, inventaire, prix, token Pennylane).</div>
+              <button className="btn btn-primary" style={{fontSize:12}} onClick={()=>{
+                const backup={};
+                const keys=['ima_trivec_data_v1','ima_inventory_v1','ima_pennylane_token','ima_users','ima_price_history'];
+                keys.forEach(k=>{const v=localStorage.getItem(k);if(v)backup[k]=v;});
+                // Also grab any other ima_ keys
+                for(let i=0;i<localStorage.length;i++){
+                  const k=localStorage.key(i);
+                  if(k&&k.startsWith('ima_')&&!backup[k])backup[k]=localStorage.getItem(k);
+                }
+                const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+                const url=URL.createObjectURL(blob);
+                const a=document.createElement('a');
+                a.href=url;a.download=`ima-backup-${new Date().toISOString().slice(0,10)}.json`;
+                a.click();URL.revokeObjectURL(url);
+              }}>Exporter (.json)</button>
+              {(()=>{
+                let totalSize=0;
+                for(let i=0;i<localStorage.length;i++){
+                  const k=localStorage.key(i);
+                  if(k&&k.startsWith('ima_'))totalSize+=localStorage.getItem(k).length;
+                }
+                return<div style={{fontSize:10,color:'var(--gris-400)',marginTop:8}}>Taille estimée : {(totalSize/1024).toFixed(0)} Ko</div>;
+              })()}
+            </div>
+            <div style={{padding:16,background:'var(--vert-light)',borderRadius:8}}>
+              <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>Restaurer les données</div>
+              <div style={{fontSize:11,color:'var(--gris-500)',marginBottom:12}}>Importez un fichier de sauvegarde pour restaurer vos données Trivec, inventaire et configurations.</div>
+              <input type="file" accept=".json" style={{display:'none'}} id="ima-restore-input" onChange={e=>{
+                const file=e.target.files[0];
+                if(!file)return;
+                const reader=new FileReader();
+                reader.onload=ev=>{
+                  try{
+                    const backup=JSON.parse(ev.target.result);
+                    let restored=0;
+                    Object.entries(backup).forEach(([k,v])=>{
+                      if(k.startsWith('ima_')){localStorage.setItem(k,v);restored++;}
+                    });
+                    alert(`Restauration réussie ! ${restored} clé(s) restaurée(s). La page va se recharger.`);
+                    window.location.reload();
+                  }catch(err){alert('Erreur: fichier invalide. '+err.message);}
+                };
+                reader.readAsText(file);
+                e.target.value='';
+              }}/>
+              <button className="btn btn-primary" style={{fontSize:12,background:'var(--vert)'}} onClick={()=>document.getElementById('ima-restore-input').click()}>Restaurer (.json)</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="card">
         <div className="card-h"><div><div className="card-t">Utilisateurs du dashboard</div><div className="card-st">{UserManager.getAll().length} compte(s)</div></div>
           <button className="btn btn-sm btn-primary" onClick={()=>setShowInviteModal(true)}>+ Inviter</button>
