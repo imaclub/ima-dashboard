@@ -2725,6 +2725,12 @@ function Stocks(){
   const[achatSearch,setAchatSearch]=useState('');
   const[editingPrix,setEditingPrix]=useState(null); // {name, prix}
   const[priceVersion,setPriceVersion]=useState(0); // force re-render after price edit
+  // Sort state for all tables: {col:'fieldName', dir:'asc'|'desc'}
+  const[ventesSort,setVentesSort]=useState({col:'totalPrix',dir:'desc'});
+  const[achatsSort,setAchatsSort]=useState({col:'n',dir:'asc'});
+  const[invSort,setInvSort]=useState({col:'nom',dir:'asc'});
+  // Category filter for Ventes Trivec tab
+  const[ventesCat,setVentesCat]=useState('Tous');
 
   // Full inventory with counted qty, theoretical stock, Trivec sales
   const[inventory,setInventory]=useState(()=>{
@@ -2786,6 +2792,32 @@ function Stocks(){
     setShowAddModal(false);
   };
 
+  // Sortable column header component
+  const SortTh=({label,field,sort,setSort,align='left',style={}})=>{
+    const active=sort.col===field;
+    return<th style={{textAlign:align,cursor:'pointer',userSelect:'none',whiteSpace:'nowrap',...style}} onClick={()=>setSort(prev=>({col:field,dir:prev.col===field&&prev.dir==='asc'?'desc':'asc'}))}>
+      {label}{active?<span style={{marginLeft:4,fontSize:10,opacity:.7}}>{sort.dir==='asc'?'▲':'▼'}</span>:<span style={{marginLeft:4,fontSize:10,opacity:.25}}>⇅</span>}
+    </th>;
+  };
+  // Generic sort helper
+  const sortItems=(items,sort,getVal)=>{
+    return[...items].sort((a,b)=>{
+      let va=getVal(a,sort.col),vb=getVal(b,sort.col);
+      if(typeof va==='string')va=va.toLowerCase();
+      if(typeof vb==='string')vb=vb.toLowerCase();
+      if(va<vb)return sort.dir==='asc'?-1:1;
+      if(va>vb)return sort.dir==='asc'?1:-1;
+      return 0;
+    });
+  };
+
+  // Unique Trivec categories for filter
+  const trivecCategories=useMemo(()=>{
+    const s=new Set();
+    trivecProducts.forEach(p=>{if(p.categorie1)s.add(p.categorie1);});
+    return['Tous',...[...s].sort()];
+  },[trivecProducts]);
+
   // Aggregated stats
   const totalEcartValeur=inventory.reduce((s,i)=>s+calcEcartValeur(i),0);
   const totalValeurStock=inventory.reduce((s,i)=>s+(i.compteInventaire*i.prixUnit),0);
@@ -2818,11 +2850,11 @@ function Stocks(){
           <div style={{fontSize:11}}>Importez un "Rapport Assortiments de Produits" dans Administration → Import Trivec</div>
         </div>
       </div>:<div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
-          <div style={{fontSize:13,color:'var(--gris-500)'}}>{trivecProducts.length} produits détectés depuis les imports Trivec</div>
-          <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            <input className="fi" type="text" placeholder="Rechercher un produit..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} style={{width:220,fontSize:12,padding:'6px 10px'}}/>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14,flexWrap:'wrap',gap:8}}>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+            {trivecCategories.map(c=><button key={c} className={`btn btn-sm ${ventesCat===c?'btn-primary':'btn-secondary'}`} onClick={()=>setVentesCat(c)} style={{fontSize:11}}>{c==='Tous'?`Tous (${trivecProducts.length})`:c}</button>)}
           </div>
+          <input className="fi" type="text" placeholder="Rechercher un produit..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} style={{width:220,fontSize:12,padding:'6px 10px'}}/>
         </div>
 
         {/* Résumé par catégorie Trivec */}
@@ -2862,17 +2894,25 @@ function Stocks(){
           <div className="card-h"><div><div className="card-t">Détail produits vendus</div><div className="card-st">Cliquez sur "+ Suivre" pour ajouter un produit à l'inventaire</div></div></div>
           <div className="card-b"><div className="tbl"><table>
             <thead><tr>
-              <th style={{textAlign:'left',minWidth:200}}>Produit</th>
-              <th style={{textAlign:'left'}}>Catégorie</th>
-              <th style={{textAlign:'left'}}>Sous-catégorie</th>
-              <th style={{textAlign:'right'}}>Qté vendue</th>
-              <th style={{textAlign:'right'}}>CA</th>
-              <th style={{textAlign:'right'}}>Prix moyen</th>
-              <th style={{textAlign:'center'}}>Jours</th>
+              <SortTh label="Produit" field="nom" sort={ventesSort} setSort={setVentesSort} style={{minWidth:200}}/>
+              <SortTh label="Catégorie" field="categorie1" sort={ventesSort} setSort={setVentesSort}/>
+              <SortTh label="Sous-catégorie" field="categorie2" sort={ventesSort} setSort={setVentesSort}/>
+              <SortTh label="Qté vendue" field="totalQty" sort={ventesSort} setSort={setVentesSort} align="right"/>
+              <SortTh label="CA" field="totalPrix" sort={ventesSort} setSort={setVentesSort} align="right"/>
+              <SortTh label="Prix moyen" field="prixMoyen" sort={ventesSort} setSort={setVentesSort} align="right"/>
+              <SortTh label="Jours" field="jours" sort={ventesSort} setSort={setVentesSort} align="center"/>
               <th style={{textAlign:'center'}}>Suivi stock</th>
             </tr></thead>
             <tbody>
-              {trivecProducts.filter(p=>!searchTerm||p.nom.toLowerCase().includes(searchTerm.toLowerCase())||p.categorie1?.toLowerCase().includes(searchTerm.toLowerCase())||p.categorie2?.toLowerCase().includes(searchTerm.toLowerCase())).map((p,i)=>{
+              {sortItems(trivecProducts.filter(p=>{
+                if(ventesCat!=='Tous'&&p.categorie1!==ventesCat)return false;
+                if(searchTerm&&!p.nom.toLowerCase().includes(searchTerm.toLowerCase())&&!p.categorie1?.toLowerCase().includes(searchTerm.toLowerCase())&&!p.categorie2?.toLowerCase().includes(searchTerm.toLowerCase()))return false;
+                return true;
+              }),ventesSort,(item,col)=>{
+                if(col==='prixMoyen')return item.totalQty>0?item.totalPrix/item.totalQty:0;
+                if(col==='jours')return item.jours.length;
+                return item[col]||'';
+              }).map((p,i)=>{
                 const inInventory=inventory.some(inv=>inv.nom===p.nom);
                 const prixMoyen=p.totalQty>0?(p.totalPrix/p.totalQty):0;
                 return<tr key={i}>
@@ -2926,15 +2966,15 @@ function Stocks(){
           <div className="card-h"><div><div className="card-t">Référentiel prix d'achat</div><div className="card-st">418 produits • Source: inventaires Janvier 2026 (Food, Vins, Spiritueux)</div></div></div>
           <div className="card-b"><div className="tbl"><table>
             <thead><tr>
-              <th style={{textAlign:'left',minWidth:200}}>Produit</th>
-              <th style={{textAlign:'left'}}>Catégorie</th>
-              <th style={{textAlign:'left'}}>Sous-catégorie</th>
-              <th style={{textAlign:'right'}}>Prix d'achat HT</th>
+              <SortTh label="Produit" field="n" sort={achatsSort} setSort={setAchatsSort} style={{minWidth:200}}/>
+              <SortTh label="Catégorie" field="p" sort={achatsSort} setSort={setAchatsSort}/>
+              <SortTh label="Sous-catégorie" field="s" sort={achatsSort} setSort={setAchatsSort}/>
+              <SortTh label="Prix d'achat HT" field="x" sort={achatsSort} setSort={setAchatsSort} align="right"/>
               <th style={{textAlign:'center'}}>Historique</th>
               <th style={{textAlign:'center'}}>Marge Trivec</th>
             </tr></thead>
             <tbody>
-              {filteredProducts.slice(0,200).map((p,i)=>{
+              {sortItems(filteredProducts,achatsSort,(item,col)=>item[col]||'').slice(0,200).map((p,i)=>{
                 const trivecMatch=trivecProducts.find(tp=>tp.nom.toLowerCase().includes(p.n.toLowerCase().split(' ')[0]));
                 const prixVente=trivecMatch&&trivecMatch.totalQty>0?trivecMatch.totalPrix/trivecMatch.totalQty:null;
                 const marge=prixVente?Math.round((1-p.x/prixVente)*100):null;
@@ -2984,21 +3024,26 @@ function Stocks(){
         </div>
         <div className="card-b tips-grid"><table>
           <thead><tr>
-            <th style={{textAlign:'left',minWidth:180}}>Produit</th>
-            <th>Catégorie</th>
-            <th>Unité</th>
-            <th style={{textAlign:'right'}}>Prix unit.</th>
-            <th style={{textAlign:'right',background:'var(--gris-100)'}}>Stock préc.</th>
-            <th style={{textAlign:'right',background:'var(--vert-light)'}}>Achats</th>
-            <th style={{textAlign:'right',background:'var(--bleu-light)'}}>Ventes Trivec</th>
-            <th style={{textAlign:'right',background:'var(--orange-light)'}}>Théorique</th>
-            <th style={{textAlign:'center',background:'var(--bordeaux-10)',minWidth:80}}>Compté</th>
-            <th style={{textAlign:'right'}}>Écart</th>
-            <th style={{textAlign:'right'}}>Écart (€)</th>
+            <SortTh label="Produit" field="nom" sort={invSort} setSort={setInvSort} style={{minWidth:180}}/>
+            <SortTh label="Catégorie" field="cat" sort={invSort} setSort={setInvSort}/>
+            <SortTh label="Unité" field="unite" sort={invSort} setSort={setInvSort} align="center"/>
+            <SortTh label="Prix unit." field="prixUnit" sort={invSort} setSort={setInvSort} align="right"/>
+            <SortTh label="Stock préc." field="stockPrec" sort={invSort} setSort={setInvSort} align="right" style={{background:'var(--gris-100)'}}/>
+            <SortTh label="Achats" field="achats" sort={invSort} setSort={setInvSort} align="right" style={{background:'var(--vert-light)'}}/>
+            <SortTh label="Ventes Trivec" field="ventesTrivec" sort={invSort} setSort={setInvSort} align="right" style={{background:'var(--bleu-light)'}}/>
+            <SortTh label="Théorique" field="theorique" sort={invSort} setSort={setInvSort} align="right" style={{background:'var(--orange-light)'}}/>
+            <SortTh label="Compté" field="compteInventaire" sort={invSort} setSort={setInvSort} align="center" style={{background:'var(--bordeaux-10)',minWidth:80}}/>
+            <SortTh label="Écart" field="ecartPct" sort={invSort} setSort={setInvSort} align="right"/>
+            <SortTh label="Écart (€)" field="ecartVal" sort={invSort} setSort={setInvSort} align="right"/>
             <th>Statut</th>
           </tr></thead>
           <tbody>
-            {filtered.map(item=>{
+            {sortItems(filtered,invSort,(item,col)=>{
+              if(col==='theorique')return calcTheorique(item);
+              if(col==='ecartPct')return calcEcartPct(item);
+              if(col==='ecartVal')return calcEcartValeur(item);
+              return item[col]||'';
+            }).map(item=>{
               const theo=calcTheorique(item);
               const ecart=calcEcart(item);
               const ecartPct=calcEcartPct(item);
