@@ -806,7 +806,7 @@ const FOOD_COST_GLOBAL_TARGET=0.18;
 // ===== PAYROLL DATA (from Silae payslips) =====
 // January 2026 — includes SDTC employees (employed in Jan but left during/after)
 const PayrollDataJan=[
-  {name:'Abdelazize LAAROUSSI',emploi:'PLONGEUR',dept:'cuisine',heures:26,brut:342.69,chargesP:65.60,coutGlobal:381.33,totalVerse:408.29,allegements:111.99,status:'actif'},
+  {name:'Abdelazize LAAROUSSI',emploi:'PLONGEUR',dept:'cuisine',heures:26,brut:342.69,chargesP:65.60,coutGlobal:381.33,totalVerse:408.29,allegements:111.99,status:'sdtc'},
   {name:'Abdoukarim MARZOLF',emploi:'Directeur',dept:'direction',heures:169,brut:3309.15,chargesP:1089.43,coutGlobal:4164.43,totalVerse:4398.58,allegements:367.17,status:'actif'},
   {name:'Abdoulaye SOW',emploi:'PLONGEUR',dept:'cuisine',heures:130,brut:1703.47,chargesP:228.35,coutGlobal:1806.97,totalVerse:1931.82,allegements:564.94,status:'actif'},
   {name:'Antoine FLEURY',emploi:'SOUS CHEF JUNIOR',dept:'cuisine',heures:169,brut:3778.75,chargesP:787.67,coutGlobal:4566.42,totalVerse:0,allegements:0,status:'sdtc'},
@@ -827,7 +827,7 @@ const PayrollDataJan=[
   {name:'Martial AUBERTIN',emploi:'PLONGEUR',dept:'cuisine',heures:149.5,brut:1938.37,chargesP:233.95,coutGlobal:2049.37,totalVerse:2172.32,allegements:660.14,status:'sdtc-fev'},
   {name:'Mathieu FLAHAUT',emploi:'COMMIS DE SALLE',dept:'salle',heures:149.5,brut:2057.56,chargesP:315.81,coutGlobal:2244.27,totalVerse:2373.37,allegements:601.17,status:'actif'},
   {name:'Niklas FRANTASSIEV',emploi:'EMPLOYE POLYVALENT',dept:'salle',heures:169,brut:2854.15,chargesP:776.64,coutGlobal:3356.64,totalVerse:3630.79,allegements:483.81,status:'actif'},
-  {name:'Noemie JOLY',emploi:'BARMAID',dept:'bar',heures:12.5,brut:194.83,chargesP:103.34,coutGlobal:272.62,totalVerse:298.17,allegements:39.70,status:'sdtc-fev'},
+  {name:'Noemie JOLY',emploi:'BARMAID',dept:'bar',heures:12.5,brut:194.83,chargesP:103.34,coutGlobal:272.62,totalVerse:298.17,allegements:39.70,status:'sdtc'},
   {name:'Samir DAKHMOUCH',emploi:'CHEF DE CUISINE',dept:'cuisine',heures:169,brut:5352.35,chargesP:2191.90,coutGlobal:7256.90,totalVerse:7544.25,allegements:152.32,status:'actif'},
   {name:'Sascha RUBI',emploi:'HOTE VESTIAIRE',dept:'salle',heures:143,brut:1859.78,chargesP:203.23,coutGlobal:1939.71,totalVerse:2063.01,allegements:628.46,status:'actif'},
   {name:'Shervon NOEL',emploi:'EMPLOYE POLYVALENT',dept:'salle',heures:169,brut:2422.61,chargesP:516.07,coutGlobal:2938.68,totalVerse:0,allegements:0,status:'sdtc'},
@@ -871,6 +871,8 @@ const PayrollDataDec=[
 // SDTC tracking (Solde de Tout Compte)
 const SDTCData=[
   // Departed in December 2025
+  {name:'Abdelazize LAAROUSSI',month:'12-2025',emploi:'PLONGEUR',dept:'cuisine'},
+  {name:'Noemie JOLY',month:'12-2025',emploi:'BARMAID',dept:'bar'},
   {name:'Nelly KHATCHATRIAN',month:'12-2025',emploi:'EMPLOYE POLYVALENT',dept:'salle'},
   {name:'Taiga MARUYAMA',month:'12-2025',emploi:'CHEF DE RANG',dept:'salle'},
   {name:'Joy RAVACHE',month:'12-2025',emploi:'BARMAID',dept:'bar'},
@@ -888,8 +890,7 @@ const SDTCData=[
   {name:'Chafion BACO',month:'01-2026',emploi:'PLONGEUR',dept:'cuisine'},
   // Departing in February 2026
   {name:'Martial AUBERTIN',month:'02-2026',emploi:'PLONGEUR',dept:'cuisine'},
-  {name:'Lucas FLAHAUT',month:'02-2026',emploi:'COMMIS DE CUISINE',dept:'cuisine'},
-  {name:'Noemie JOLY',month:'02-2026',emploi:'BARMAID',dept:'bar'}
+  {name:'Lucas FLAHAUT',month:'02-2026',emploi:'COMMIS DE CUISINE',dept:'cuisine'}
 ];
 
 const PayrollService={
@@ -2548,8 +2549,8 @@ function StaffPage(){
             ))}
           </div>
           <div style={{fontSize:13}}>
-            <div style={{fontWeight:600,color:'var(--vert)',marginBottom:6}}>Nouvelles arrivées (5)</div>
-            {['Abdoulaye SOW','Jeremy DUBOURG','Martial AUBERTIN','Noemie JOLY','Yaya KA'].map((n,i)=>{
+            <div style={{fontWeight:600,color:'var(--vert)',marginBottom:6}}>Nouvelles arrivées (3)</div>
+            {['Abdoulaye SOW','Jeremy DUBOURG','Yaya KA'].map((n,i)=>{
               const emp=PayrollDataJan.find(e=>e.name===n);
               return emp?(<div key={i} style={{padding:'4px 0',fontSize:12,color:'var(--gris-600)',display:'flex',gap:8}}>
                 <span style={{color:'var(--vert)'}}>✔</span>
