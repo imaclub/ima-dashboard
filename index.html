@@ -1613,18 +1613,17 @@ function Login({onLogin}){
 function Dashboard(){
   const team=StaffRegistry.getActive();
   const tipsEligible=StaffRegistry.getTipsEligible();
-  const trivecMonth=TrivecService.getMonthData();
-  const latestDay=TrivecService.getLatestDay();
   const hasTrivec=TrivecService.isConnected();
+  const pCtx=usePeriod();
   return(<div className="fin">
     {!hasTrivec&&<div style={{background:'var(--bleu-light)',border:'1px solid var(--bleu)',borderRadius:10,padding:16,marginBottom:20,fontSize:13,color:'var(--bleu)'}}>
       <strong>Bienvenue sur le tableau de bord IMA.</strong> Les données s'afficheront automatiquement lorsque vos services seront connectés. Rendez-vous dans <strong>Administration</strong> pour configurer Pennylane, Trivec et SevenRooms.
     </div>}
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">CA du mois</div><div className="kpi-val" style={{color:hasTrivec?'var(--gris-900)':'var(--gris-300)'}}>{hasTrivec?trivecMonth.totalCA.toLocaleString('fr-FR')+'€':'—'}</div><div className={`kpi-chg ${hasTrivec?'pos':'neu'}`}>{hasTrivec?`${trivecMonth.days} jour(s) importé(s)`:'En attente Trivec'}</div></div>
-      <div className="kpi"><div className="kpi-label">Couverts</div><div className="kpi-val" style={{color:hasTrivec?'var(--gris-900)':'var(--gris-300)'}}>{hasTrivec?trivecMonth.totalCouverts.toLocaleString('fr-FR'):'—'}</div><div className={`kpi-chg ${hasTrivec?'pos':'neu'}`}>{hasTrivec?`TM: ${Math.round(trivecMonth.ticketMoyen)}€`:'En attente Trivec'}</div></div>
-      <div className="kpi"><div className="kpi-label">Effectif actif</div><div className="kpi-val">{team.length}</div><div className="kpi-chg neu">{tipsEligible.length} bénéf. tips</div></div>
-      <div className="kpi"><div className="kpi-label">Pennylane</div><div className="kpi-val" style={{fontSize:16}}>{PennylaneService.getToken()?'Connecté':'Non configuré'}</div><div className={`kpi-chg ${PennylaneService.getToken()?'pos':'neg'}`}>{PennylaneService.getToken()?'API active':'Voir Administration'}</div></div>
+      <div className="kpi"><div className="kpi-label">CA ({pCtx.dates.label})</div><div className="kpi-val" style={{color:pCtx.trivecPeriod.total>0?'var(--gris-900)':'var(--gris-300)'}}>{pCtx.trivecPeriod.total>0?pCtx.trivecPeriod.total.toLocaleString('fr-FR')+'€':'—'}</div><div className={`kpi-chg ${pCtx.trivecPeriod.days>0?'pos':'neu'}`}>{pCtx.trivecPeriod.days>0?`${pCtx.trivecPeriod.days} jour(s)`:'En attente Trivec'}</div></div>
+      <div className="kpi"><div className="kpi-label">Couverts</div><div className="kpi-val" style={{color:pCtx.trivecPeriod.couverts>0?'var(--gris-900)':'var(--gris-300)'}}>{pCtx.trivecPeriod.couverts>0?pCtx.trivecPeriod.couverts.toLocaleString('fr-FR'):'—'}</div><div className={`kpi-chg ${pCtx.trivecPeriod.couverts>0?'pos':'neu'}`}>{pCtx.trivecPeriod.couverts>0?`TM: ${Math.round(pCtx.trivecPeriod.ticketMoyen)}€`:'En attente Trivec'}</div></div>
+      <div className="kpi"><div className="kpi-label">Effectif actif</div><div className="kpi-val">{PayrollService.getEffectifActif()}</div><div className="kpi-chg neu">{tipsEligible.length} bénéf. tips</div></div>
+      <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:pCtx.trivecPeriod.total>0?(pCtx.msProrata/pCtx.trivecPeriod.total>0.3?'var(--rouge)':pCtx.msProrata/pCtx.trivecPeriod.total>0.25?'var(--orange)':'var(--vert)'):'var(--gris-300)'}}>{pCtx.trivecPeriod.total>0?Math.round(pCtx.msProrata/pCtx.trivecPeriod.total*1000)/10+'%':'—'}</div><div className="kpi-chg neu">{pCtx.trivecPeriod.total>0?`MS: ${eur(pCtx.msProrata)} / CA: ${eur(pCtx.trivecPeriod.total)}`:'CA non disponible'}</div></div>
     </div>
     <div className="cg">
       <div className="card">
@@ -1645,9 +1644,9 @@ function Dashboard(){
                 })}
               </div>
               <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,fontSize:11,textAlign:'center',borderTop:'1px solid var(--gris-100)',paddingTop:10}}>
-                <div><div style={{color:'var(--gris-500)'}}>Restaurant</div><div style={{fontWeight:700}}>{trivecMonth.caRestaurant.toLocaleString('fr-FR')}€</div></div>
-                <div><div style={{color:'var(--gris-500)'}}>Club</div><div style={{fontWeight:700}}>{trivecMonth.caClub.toLocaleString('fr-FR')}€</div></div>
-                <div><div style={{color:'var(--gris-500)'}}>Bar</div><div style={{fontWeight:700}}>{trivecMonth.caBar.toLocaleString('fr-FR')}€</div></div>
+                <div><div style={{color:'var(--gris-500)'}}>Restaurant</div><div style={{fontWeight:700}}>{(pCtx.trivecPeriod.caResto||0).toLocaleString('fr-FR')}€</div></div>
+                <div><div style={{color:'var(--gris-500)'}}>Club</div><div style={{fontWeight:700}}>{(pCtx.trivecPeriod.caClub||0).toLocaleString('fr-FR')}€</div></div>
+                <div><div style={{color:'var(--gris-500)'}}>Bar</div><div style={{fontWeight:700}}>{(pCtx.trivecPeriod.caBar||0).toLocaleString('fr-FR')}€</div></div>
               </div>
             </div>;
           })():<div style={{padding:40,textAlign:'center',color:'var(--gris-400)'}}>
@@ -1718,24 +1717,14 @@ function Finance(){
   const groupTotals=useMemo(()=>SupplierMap.getGroupTotals(totals),[totals]);
   const totalCosts=Object.values(totals).reduce((s,v)=>s+v,0);
 
-  // CA from Trivec data, with Pennylane fallback
-  const trivecMonth=useMemo(()=>TrivecService.getMonthData(),[]);
-  const trivecCA=trivecMonth.totalCA||0;
-  const caFood=trivecMonth.caRestaurant||0;
-  const caBar=(trivecMonth.caClub||0)+(trivecMonth.caBar||0);
+  // CA from global period context
+  const pCtx=usePeriod();
+  const caTotal=pCtx.trivecPeriod.total;
+  const caFood=pCtx.trivecPeriod.caResto;
+  const caBar=pCtx.trivecPeriod.caClub+pCtx.trivecPeriod.caBar;
 
-  const[pennylaneCA,setPennylaneCA]=useState(0);
-  useEffect(()=>{
-    if(trivecCA===0&&PennylaneService.getToken()){
-      PennylaneService.getMonthlyRevenue(2026,1)
-        .then(rev=>{if(rev.totalCA>0)setPennylaneCA(rev.totalCA);})
-        .catch(()=>{});
-    }
-  },[trivecCA]);
-  const caTotal=trivecCA||pennylaneCA;
-
-  // Calculate EBITDA — use real payroll data for Staff Cost
-  const realStaffCost=PayrollService.getMasseSalariale();
+  // Staff cost prorated to period
+  const realStaffCost=pCtx.msProrata;
   const staffCosts=realStaffCost||totals['Staff']||0;
   // Override totals Staff with real payroll if available
   if(realStaffCost>0)totals['Staff']=realStaffCost;
@@ -1746,9 +1735,9 @@ function Finance(){
 
   // Build P&L table data
   const plData=[];
-  plData.push({type:'revenue',label:'CA Restaurant',amount:trivecMonth.caRestaurant||0,pct:caTotal>0?100*((trivecMonth.caRestaurant||0)/caTotal):0,isSubsection:false,isBold:true,color:'var(--vert)'});
-  plData.push({type:'revenue',label:'CA Club',amount:trivecMonth.caClub||0,pct:caTotal>0?100*((trivecMonth.caClub||0)/caTotal):0,isSubsection:false,isBold:false,color:'var(--bordeaux)'});
-  plData.push({type:'revenue',label:'CA Bar',amount:trivecMonth.caBar||0,pct:caTotal>0?100*((trivecMonth.caBar||0)/caTotal):0,isSubsection:false,isBold:false,color:'var(--orange)'});
+  plData.push({type:'revenue',label:'CA Restaurant',amount:pCtx.trivecPeriod.caResto||0,pct:caTotal>0?100*((pCtx.trivecPeriod.caResto||0)/caTotal):0,isSubsection:false,isBold:true,color:'var(--vert)'});
+  plData.push({type:'revenue',label:'CA Club',amount:pCtx.trivecPeriod.caClub||0,pct:caTotal>0?100*((pCtx.trivecPeriod.caClub||0)/caTotal):0,isSubsection:false,isBold:false,color:'var(--bordeaux)'});
+  plData.push({type:'revenue',label:'CA Bar',amount:pCtx.trivecPeriod.caBar||0,pct:caTotal>0?100*((pCtx.trivecPeriod.caBar||0)/caTotal):0,isSubsection:false,isBold:false,color:'var(--orange)'});
   plData.push({type:'spacer'});
 
   for(const[groupName,groupInfo]of Object.entries(COST_GROUPS)){
@@ -1794,7 +1783,7 @@ function Finance(){
 
     {!loading&&<div>
     <div className="card" style={{marginBottom:16}}>
-      <div className="card-h"><div><div className="card-t">Compte de résultat — Février 2026</div><div className="card-st">CA estimé + Coûts Pennylane</div></div><span className="badge b-ima">Pennylane</span></div>
+      <div className="card-h"><div><div className="card-t">Compte de résultat — {pCtx.dates.label}</div><div className="card-st">CA Trivec ({pCtx.trivecPeriod.days}j) + Coûts Pennylane</div></div><span className="badge b-ima">Pennylane</span></div>
       <div className="card-b"><div className="tbl"><table>
         <thead><tr><th>Poste</th><th style={{textAlign:'right'}}>Montant</th><th style={{textAlign:'right'}}>% CA</th><th style={{width:180}}>Répartition</th></tr></thead>
         <tbody>
@@ -1929,7 +1918,8 @@ function Costs(){
   const totalAll=Object.values(totals).reduce((s,v)=>s+v,0);
   const foodTotal=totals['Food']||0;
   const barTotal=totals['Bar']||0;
-  const realStaffMS=PayrollService.getMasseSalariale();
+  const pCtx=usePeriod();
+  const realStaffMS=pCtx.msProrata;
   const primeCost=(foodTotal+barTotal+realStaffMS);
 
   const supplierGroups=useMemo(()=>{
@@ -2352,28 +2342,18 @@ function StaffPage(){
   const[ver,setVer]=useState(0);
   const team=StaffRegistry.getActive();
   const tipsTeam=StaffRegistry.getTipsEligible();
+  const pCtx=usePeriod();
 
   // Payroll data
   const[payMonth,setPayMonth]=useState('jan');
   const payroll=PayrollService.getData(payMonth);
   const payTotals=PayrollService.getTotals(payroll);
   const deptTotals=PayrollService.getDeptTotals(payroll);
-  const trivecMonth=TrivecService.getMonthData();
-  const trivecCA=trivecMonth.totalCA||0;
 
-  // Fallback: fetch CA from Pennylane customer invoices (Trivec → Pennylane revenue)
-  const[pennylaneCA,setPennylaneCA]=useState(0);
-  useEffect(()=>{
-    if(trivecCA===0&&PennylaneService.getToken()){
-      PennylaneService.getMonthlyRevenue(2026,1)
-        .then(rev=>{if(rev.totalCA>0)setPennylaneCA(rev.totalCA);})
-        .catch(()=>{});
-    }
-  },[trivecCA]);
-
-  const caTotal=trivecCA||pennylaneCA;
-  const caSource=trivecCA>0?'Trivec':pennylaneCA>0?'Pennylane':'—';
-  const staffCostPct=PayrollService.getStaffCostPct(caTotal);
+  // Use global period context for CA and masse salariale
+  const caTotal=pCtx.trivecPeriod.total;
+  const caSource=pCtx.trivecPeriod.days>0?`Trivec (${pCtx.trivecPeriod.days}j)`:'—';
+  const staffCostPct=caTotal>0?Math.round(pCtx.msProrata/caTotal*1000)/10:0;
   const evo=PayrollService.getEvolution();
   const upcoming=PayrollService.getUpcomingDepartures();
   const sdtcList=PayrollService.getSDTC();
@@ -2423,8 +2403,8 @@ function StaffPage(){
   return(<div className="fin">
     <div className="kpi-g">
       <div className="kpi"><div className="kpi-label">Effectif actif</div><div className="kpi-val">{PayrollService.getEffectifActif()}</div><div className="kpi-chg neu">{PayrollDataJan.filter(e=>e.status==='sdtc').length} SDTC + {PayrollDataJan.filter(e=>e.status==='sdtc-fev').length} départs fév</div></div>
-      <div className="kpi"><div className="kpi-label">Masse salariale</div><div className="kpi-val">{eur(PayrollService.getMasseSalarialeActive())}</div><div className="kpi-chg neu">Hors SDTC • Total réel: {eur(evo.janTotal)}</div></div>
-      <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:caTotal>0?(staffCostPct>30?'var(--rouge)':staffCostPct>25?'var(--orange)':'var(--vert)'):'var(--gris-300)'}}>{caTotal>0?staffCostPct+'%':'—'}</div><div className="kpi-chg neu">{caTotal>0?`vs CA ${eur(caTotal)} (${caSource})`:'CA non disponible'}</div></div>
+      <div className="kpi"><div className="kpi-label">Masse salariale ({pCtx.dates.days}j)</div><div className="kpi-val">{eur(pCtx.msProrata)}</div><div className="kpi-chg neu">{pCtx.mode!=='mois'?`Prorata ${pCtx.dates.days}j / 30j • `:''}{eur(pCtx.msActive)}/mois</div></div>
+      <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:caTotal>0?(staffCostPct>30?'var(--rouge)':staffCostPct>25?'var(--orange)':'var(--vert)'):'var(--gris-300)'}}>{caTotal>0?staffCostPct+'%':'—'}</div><div className="kpi-chg neu">{caTotal>0?`CA ${eur(caTotal)} (${caSource})`:'CA non disponible'}</div></div>
       <div className="kpi"><div className="kpi-label">Départs Février</div><div className="kpi-val" style={{color:'var(--orange)'}}>{upcoming.length}</div><div className="kpi-chg neg">{upcoming.map(u=>u.name.split(' ').pop()).join(', ')}</div></div>
     </div>
 
@@ -3285,91 +3265,42 @@ function CRMPage(){
 function POSPage(){
   const hasTrivec=TrivecService.isConnected();
   const allDays=TrivecService.getAllDays();
-  const[viewMode,setViewMode]=useState('jour');
+  const pCtx=usePeriod();
 
   // Today's date in dd/mm/yyyy format
   const now=new Date();
   const todayStr=String(now.getDate()).padStart(2,'0')+'/'+String(now.getMonth()+1).padStart(2,'0')+'/'+now.getFullYear();
 
-  // Filter days based on viewMode
+  // Filter days based on global period context
   const filteredDays=useMemo(()=>{
     const entries=Object.entries(allDays);
-    if(viewMode==='jour'){
-      // Show only today — day resets at 18h so today = current date
-      return entries.filter(([d])=>d===todayStr);
-    }
-    if(viewMode==='semaine'){
-      // Current week (Mon-Sun)
-      const d=new Date();
-      const dayOfWeek=d.getDay()||7;
-      const monday=new Date(d);monday.setDate(d.getDate()-(dayOfWeek-1));
-      monday.setHours(0,0,0,0);
-      return entries.filter(([dateStr])=>{
-        const p=dateStr.split('/');
-        const dt=new Date(parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));
-        return dt>=monday&&dt<=d;
-      });
-    }
-    if(viewMode==='mois'){
-      const m=now.getMonth()+1,y=now.getFullYear();
-      return entries.filter(([dateStr])=>{
-        const p=dateStr.split('/');
-        return parseInt(p[1])===m&&parseInt(p[2])===y;
-      });
-    }
-    // année
-    const y=now.getFullYear();
     return entries.filter(([dateStr])=>{
       const p=dateStr.split('/');
-      return parseInt(p[2])===y;
+      const dt=new Date(parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));
+      return dt>=pCtx.dates.from&&dt<=pCtx.dates.to;
     });
-  },[allDays,viewMode,todayStr]);
+  },[allDays,pCtx.dates]);
 
-  // Aggregate filtered data
-  const agg=useMemo(()=>{
-    let totalCA=0,totalCouverts=0,totalEspeces=0,totalCB=0,totalAmex=0,caResto=0,caClub=0,caBar=0,days=0;
-    filteredDays.forEach(([,d])=>{
-      totalCA+=d.ventes?.total||0;
-      totalCouverts+=(d.couverts?.restaurant?.total||0)+(d.couverts?.club?.total||0)+(d.couverts?.bar?.total||0);
-      totalEspeces+=d.paiements?.especes||0;
-      totalCB+=d.paiements?.cb||0;
-      totalAmex+=d.paiements?.amex||0;
-      caResto+=d.ventes?.restaurant||0;
-      caClub+=d.ventes?.club||0;
-      caBar+=d.ventes?.bar||0;
-      days++;
-    });
-    return{totalCA,totalCouverts,totalEspeces,totalCB,totalAmex,caResto,caClub,caBar,days,ticketMoyen:totalCouverts>0?totalCA/totalCouverts:0};
-  },[filteredDays]);
-
-  const viewLabels={jour:'Jour',semaine:'Semaine',mois:'Mois',annee:'Année'};
-  const periodLabel=viewMode==='jour'?todayStr:viewMode==='semaine'?'Cette semaine':viewMode==='mois'?now.toLocaleDateString('fr-FR',{month:'long',year:'numeric'}):''+now.getFullYear();
+  // Use aggregated data from period context
+  const agg=pCtx.trivecPeriod;
+  const periodLabel=pCtx.dates.label;
 
   // For the detail card, show the day data if viewing a single day
-  const dayDetail=viewMode==='jour'?allDays[todayStr]:null;
+  const dayDetail=pCtx.mode==='jour'?allDays[todayStr]:null;
 
   return(<div className="fin">
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
-      <div><span style={{fontSize:18,fontWeight:700}}>Caisses (Trivec)</span><span style={{fontSize:13,color:'var(--gris-500)',marginLeft:10}}>{periodLabel}</span></div>
-      <div style={{display:'flex',border:'1px solid var(--gris-200)',borderRadius:8,overflow:'hidden'}}>
-        {['jour','semaine','mois','annee'].map(m=>(
-          <button key={m} onClick={()=>setViewMode(m)} style={{padding:'6px 14px',fontSize:12,fontWeight:viewMode===m?600:400,background:viewMode===m?'var(--bordeaux)':'white',color:viewMode===m?'white':'var(--gris-600)',border:'none',cursor:'pointer',transition:'all .15s'}}>{viewLabels[m]}</button>
-        ))}
-      </div>
-    </div>
-
     {!hasTrivec&&<div style={{background:'var(--bleu-light)',border:'1px solid var(--bleu)',borderRadius:10,padding:16,marginBottom:20,fontSize:13,color:'var(--bleu)'}}>
       <strong>Caisses Trivec</strong> — Importez les fichiers Excel Trivec dans Administration pour voir les données.
     </div>}
 
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">CA {viewLabels[viewMode]}</div><div className="kpi-val" style={{color:agg.totalCA>0?'var(--gris-900)':'var(--gris-300)'}}>{agg.totalCA>0?agg.totalCA.toLocaleString('fr-FR')+'€':'0€'}</div><div className={`kpi-chg ${agg.days>0?'pos':'neu'}`}>{agg.days>0?`${agg.days} jour(s)`:'Aucune donnée'}</div></div>
+      <div className="kpi"><div className="kpi-label">CA ({pCtx.dates.label})</div><div className="kpi-val" style={{color:agg.total>0?'var(--gris-900)':'var(--gris-300)'}}>{agg.total>0?agg.total.toLocaleString('fr-FR')+'€':'0€'}</div><div className={`kpi-chg ${agg.days>0?'pos':'neu'}`}>{agg.days>0?`${agg.days} jour(s)`:'Aucune donnée'}</div></div>
       <div className="kpi"><div className="kpi-label">Ticket moyen</div><div className="kpi-val" style={{color:agg.ticketMoyen>0?'var(--gris-900)':'var(--gris-300)'}}>{agg.ticketMoyen>0?Math.round(agg.ticketMoyen)+'€':'0€'}</div><div className={`kpi-chg ${agg.ticketMoyen>0?'pos':'neu'}`}>{agg.ticketMoyen>0?'Restaurant':'—'}</div></div>
-      <div className="kpi"><div className="kpi-label">Couverts</div><div className="kpi-val" style={{color:agg.totalCouverts>0?'var(--gris-900)':'var(--gris-300)'}}>{agg.totalCouverts>0?agg.totalCouverts.toLocaleString('fr-FR'):'0'}</div><div className={`kpi-chg ${agg.totalCouverts>0?'pos':'neu'}`}>{agg.totalCouverts>0?'Tous départements':'—'}</div></div>
-      <div className="kpi"><div className="kpi-label">CB / Espèces / Amex</div><div className="kpi-val" style={{fontSize:agg.totalCA>0?14:24,color:agg.totalCA>0?'var(--gris-900)':'var(--gris-300)'}}>{agg.totalCA>0?`${Math.round(agg.totalCB).toLocaleString('fr-FR')}€ / ${Math.round(agg.totalEspeces).toLocaleString('fr-FR')}€ / ${Math.round(agg.totalAmex).toLocaleString('fr-FR')}€`:'0€'}</div><div className={`kpi-chg ${agg.totalCA>0?'pos':'neu'}`}>{agg.totalCA>0?'Paiements':'—'}</div></div>
+      <div className="kpi"><div className="kpi-label">Couverts</div><div className="kpi-val" style={{color:agg.couverts>0?'var(--gris-900)':'var(--gris-300)'}}>{agg.couverts>0?agg.couverts.toLocaleString('fr-FR'):'0'}</div><div className={`kpi-chg ${agg.couverts>0?'pos':'neu'}`}>{agg.couverts>0?'Tous départements':'—'}</div></div>
+      <div className="kpi"><div className="kpi-label">CB / Espèces / Amex</div><div className="kpi-val" style={{fontSize:agg.total>0?14:24,color:agg.total>0?'var(--gris-900)':'var(--gris-300)'}}>{agg.total>0?`${Math.round(agg.cb).toLocaleString('fr-FR')}€ / ${Math.round(agg.especes).toLocaleString('fr-FR')}€ / ${Math.round(agg.amex).toLocaleString('fr-FR')}€`:'0€'}</div><div className={`kpi-chg ${agg.total>0?'pos':'neu'}`}>{agg.total>0?'Paiements':'—'}</div></div>
     </div>
 
-    {viewMode==='jour'&&!dayDetail&&hasTrivec&&<div style={{background:'var(--orange-light)',border:'1px solid var(--orange)',borderRadius:10,padding:16,marginBottom:16,fontSize:13,color:'var(--orange)'}}>
+    {pCtx.mode==='jour'&&!dayDetail&&hasTrivec&&<div style={{background:'var(--orange-light)',border:'1px solid var(--orange)',borderRadius:10,padding:16,marginBottom:16,fontSize:13,color:'var(--orange)'}}>
       <strong>Pas de données pour le {todayStr}.</strong> La journée n'a pas encore été clôturée ou le fichier Trivec n'a pas été importé. La clôture a lieu à 18h.
     </div>}
 
@@ -3403,11 +3334,11 @@ function POSPage(){
       </div>
     </div>}
 
-    {viewMode!=='jour'&&agg.days>0&&<div className="card" style={{marginBottom:16}}>
+    {pCtx.mode!=='jour'&&agg.days>0&&<div className="card" style={{marginBottom:16}}>
       <div className="card-h"><div><div className="card-t">Répartition CA — {periodLabel}</div></div></div>
       <div className="card-b">
         <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16}}>
-          {[{l:'Restaurant',v:agg.caResto,pct:agg.totalCA>0?(agg.caResto/agg.totalCA*100):0},{l:'Club',v:agg.caClub,pct:agg.totalCA>0?(agg.caClub/agg.totalCA*100):0},{l:'Bar',v:agg.caBar,pct:agg.totalCA>0?(agg.caBar/agg.totalCA*100):0}].map((dept,i)=>
+          {[{l:'Restaurant',v:agg.caResto,pct:agg.total>0?(agg.caResto/agg.total*100):0},{l:'Club',v:agg.caClub,pct:agg.total>0?(agg.caClub/agg.total*100):0},{l:'Bar',v:agg.caBar,pct:agg.total>0?(agg.caBar/agg.total*100):0}].map((dept,i)=>
             <div key={i} style={{padding:14,background:'var(--gris-50)',borderRadius:8,textAlign:'center'}}>
               <div style={{fontSize:10,color:'var(--gris-500)',textTransform:'uppercase',fontWeight:600}}>{dept.l}</div>
               <div style={{fontSize:20,fontWeight:700,color:'var(--bordeaux)'}}>{dept.v.toLocaleString('fr-FR')}€</div>
@@ -3433,7 +3364,7 @@ function POSPage(){
           </tr>
         )}</tbody></table>:
         <div style={{padding:40,textAlign:'center',color:'var(--gris-400)',fontSize:12}}>
-          {hasTrivec?`Aucune donnée pour cette période (${periodLabel})`:'Importez les fichiers Trivec dans Administration'}
+          {hasTrivec?`Aucune donnée pour cette période (${pCtx.dates.label})`:'Importez les fichiers Trivec dans Administration'}
         </div>}
       </div>
     </div>
@@ -4187,9 +4118,11 @@ function Settings(){
         <div className="card-b">
           {(()=>{
             const tm=TrivecService.getMonthData();
-            const ca=tm.totalCA||0;
-            const caTotal=ca; // alias for use below
-            const hasCa=ca>0;
+            const rawCa=tm.totalCA||0;
+            const tmDays=tm.days||0;
+            const ca=tmDays>0&&tmDays<26?Math.round(rawCa/tmDays*26):rawCa;
+            const caTotal=ca;
+            const hasCa=rawCa>0;
             const tmVal=tm.ticketMoyen||0;
             // Aggregate Trivec products for COGS
             const data=TrivecService._getData();
@@ -4230,10 +4163,63 @@ function Settings(){
 }
 
 // ===== APP =====
-function App(){
+// ===== GLOBAL PERIOD CONTEXT =====
+const PeriodContext=React.createContext();
+function usePeriod(){return React.useContext(PeriodContext);}
+
+// Helper: parse dd/mm/yyyy → Date
+const parseDDMMYYYY=(s)=>{const p=s.split('/');return new Date(parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));};
+const toDDMMYYYY=(d)=>String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+
+function PeriodProvider({children}){
+  const[mode,setMode]=useState('mois');
+  const[customFrom,setCustomFrom]=useState('');
+  const[customTo,setCustomTo]=useState('');
+
+  const dates=useMemo(()=>{
+    const today=new Date();today.setHours(23,59,59,999);
+    const todayStart=new Date();todayStart.setHours(0,0,0,0);
+    if(mode==='jour')return{from:todayStart,to:today,label:"Aujourd'hui",days:1};
+    if(mode==='semaine'){const f=new Date();f.setDate(f.getDate()-6);f.setHours(0,0,0,0);return{from:f,to:today,label:'7 derniers jours',days:7};}
+    if(mode==='mois'){const f=new Date();f.setDate(f.getDate()-29);f.setHours(0,0,0,0);return{from:f,to:today,label:'30 derniers jours',days:30};}
+    if(mode==='annee'){const f=new Date(today.getMonth()>=11?today.getFullYear():today.getFullYear()-1,11,1);f.setHours(0,0,0,0);const diffDays=Math.round((today-f)/86400000)+1;return{from:f,to:today,label:`Saison (dep. ${toDDMMYYYY(f)})`,days:diffDays};}
+    if(mode==='custom'&&customFrom&&customTo){const f=new Date(customFrom);f.setHours(0,0,0,0);const t=new Date(customTo);t.setHours(23,59,59);const diffDays=Math.max(Math.round((t-f)/86400000)+1,1);return{from:f,to:t,label:`${toDDMMYYYY(f)} → ${toDDMMYYYY(t)}`,days:diffDays};}
+    return{from:todayStart,to:today,label:'—',days:1};
+  },[mode,customFrom,customTo]);
+
+  // Get Trivec CA for the period
+  const trivecPeriod=useMemo(()=>{
+    const allDays=TrivecService.getAllDays();
+    let total=0,count=0,caResto=0,caClub=0,caBar=0,couverts=0,especes=0,cb=0,amex=0;
+    for(const[dateStr,data]of Object.entries(allDays)){
+      const dt=parseDDMMYYYY(dateStr);
+      if(dt>=dates.from&&dt<=dates.to){
+        total+=data.ventes?.total||0;
+        caResto+=data.ventes?.restaurant||0;
+        caClub+=data.ventes?.club||0;
+        caBar+=data.ventes?.bar||0;
+        couverts+=(data.couverts?.restaurant?.total||0)+(data.couverts?.club?.total||0)+(data.couverts?.bar?.total||0);
+        especes+=data.paiements?.especes||0;
+        cb+=data.paiements?.cb||0;
+        amex+=data.paiements?.amex||0;
+        count++;
+      }
+    }
+    return{total,days:count,caResto,caClub,caBar,couverts,especes,cb,amex,ticketMoyen:couverts>0?total/couverts:0};
+  },[dates]);
+
+  // Masse salariale prorata
+  const msActive=PayrollService.getMasseSalarialeActive();
+  const msProrata=Math.round(msActive/30*dates.days);
+
+  const value={mode,setMode,customFrom,setCustomFrom,customTo,setCustomTo,dates,trivecPeriod,msActive,msProrata};
+  return React.createElement(PeriodContext.Provider,{value},children);
+}
+
+function AppInner(){
   const[currentUser,setCurrentUser]=useState(()=>UserManager.getCurrentUser());
   const[page,setPage]=useState('dashboard');
-  const[period,setPeriod]=useState('mois');
+  const pCtx=usePeriod();
 
   const handleLogin=(user)=>{setCurrentUser({id:user.id,nom:user.nom,email:user.email,role:user.role});};
   const handleLogout=()=>{UserManager.logout();setCurrentUser(null);};
@@ -4291,13 +4277,18 @@ function App(){
       </aside>
       <main className="main">
         <header className="header">
-          <div className="header-l"><h2>{titles[page]}</h2><span className="bc">Février 2026</span></div>
+          <div className="header-l"><h2>{titles[page]}</h2><span className="bc">{pCtx.dates.label}</span></div>
           <div className="header-r">
             <div className="per">
-              {['jour','semaine','mois','année'].map(p=>(
-                <button key={p} className={`per-btn ${period===p?'active':''}`} onClick={()=>setPeriod(p)}>{p[0].toUpperCase()+p.slice(1)}</button>
+              {[{k:'jour',l:'Jour'},{k:'semaine',l:'Semaine'},{k:'mois',l:'Mois'},{k:'annee',l:'Année'},{k:'custom',l:'Période'}].map(p=>(
+                <button key={p.k} className={`per-btn ${pCtx.mode===p.k?'active':''}`} onClick={()=>pCtx.setMode(p.k)}>{p.l}</button>
               ))}
             </div>
+            {pCtx.mode==='custom'&&<div style={{display:'flex',gap:4,alignItems:'center'}}>
+              <input type="date" value={pCtx.customFrom} onChange={e=>pCtx.setCustomFrom(e.target.value)} style={{padding:'3px 6px',border:'1px solid var(--gris-200)',borderRadius:6,fontSize:11,background:'white'}}/>
+              <span style={{fontSize:11,color:'var(--gris-400)'}}>→</span>
+              <input type="date" value={pCtx.customTo} onChange={e=>pCtx.setCustomTo(e.target.value)} style={{padding:'3px 6px',border:'1px solid var(--gris-200)',borderRadius:6,fontSize:11,background:'white'}}/>
+            </div>}
             <div className="loc"><I.Pin/><div className="loc-dot"/>Val d'Isère<I.Chev/></div>
             <div className="notif"><I.Bell/></div>
           </div>
@@ -4307,6 +4298,9 @@ function App(){
     </div>
   );
 }
+
+// App wrapper with PeriodProvider
+function App(){return <PeriodProvider><AppInner/></PeriodProvider>;}
 
 // ErrorBoundary to prevent blank pages on crash
 class ErrorBoundary extends React.Component{
