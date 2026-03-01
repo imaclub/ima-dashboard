@@ -914,8 +914,11 @@ const PayrollService={
     return depts;
   },
   getMasseSalariale(){return PayrollDataJan.reduce((s,e)=>s+(e.coutGlobal||0),0);},
+  // Masse salariale hors SDTC (salariés partis) — pour le Staff Cost % opérationnel
+  getMasseSalarialeActive(){return PayrollDataJan.filter(e=>e.status==='actif'||e.status==='sdtc-fev').reduce((s,e)=>s+(e.coutGlobal||0),0);},
   getMasseSalarialeDec(){return PayrollDataDec.reduce((s,e)=>s+(e.coutGlobal||0),0);},
-  getStaffCostPct(ca){const ms=this.getMasseSalariale();return ca>0?Math.round(ms/ca*1000)/10:0;},
+  getStaffCostPct(ca){const ms=this.getMasseSalarialeActive();return ca>0?Math.round(ms/ca*1000)/10:0;},
+  getEffectifActif(){return PayrollDataJan.filter(e=>e.status==='actif'||e.status==='sdtc-fev').length;},
   getEvolution(){
     const janTotal=this.getMasseSalariale();
     const decTotal=this.getMasseSalarialeDec();
@@ -2419,8 +2422,8 @@ function StaffPage(){
 
   return(<div className="fin">
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">Effectif Janvier</div><div className="kpi-val">{PayrollDataJan.length}</div><div className="kpi-chg" style={{color:evo.janCount>evo.decCount?'var(--vert)':'var(--rouge)'}}>{evo.janCount>evo.decCount?'+':''}{evo.janCount-evo.decCount} vs Déc ({evo.decCount})</div></div>
-      <div className="kpi"><div className="kpi-label">Masse salariale</div><div className="kpi-val">{eur(evo.janTotal)}</div><div className="kpi-chg" style={{color:evo.pct<0?'var(--vert)':'var(--orange)'}}>{evo.pct>0?'+':''}{evo.pct}% vs Déc</div></div>
+      <div className="kpi"><div className="kpi-label">Effectif actif</div><div className="kpi-val">{PayrollService.getEffectifActif()}</div><div className="kpi-chg neu">{PayrollDataJan.filter(e=>e.status==='sdtc').length} SDTC + {PayrollDataJan.filter(e=>e.status==='sdtc-fev').length} départs fév</div></div>
+      <div className="kpi"><div className="kpi-label">Masse salariale</div><div className="kpi-val">{eur(PayrollService.getMasseSalarialeActive())}</div><div className="kpi-chg neu">Hors SDTC • Total réel: {eur(evo.janTotal)}</div></div>
       <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:caTotal>0?(staffCostPct>30?'var(--rouge)':staffCostPct>25?'var(--orange)':'var(--vert)'):'var(--gris-300)'}}>{caTotal>0?staffCostPct+'%':'—'}</div><div className="kpi-chg neu">{caTotal>0?`vs CA ${eur(caTotal)} (${caSource})`:'CA non disponible'}</div></div>
       <div className="kpi"><div className="kpi-label">Départs Février</div><div className="kpi-val" style={{color:'var(--orange)'}}>{upcoming.length}</div><div className="kpi-chg neg">{upcoming.map(u=>u.name.split(' ').pop()).join(', ')}</div></div>
     </div>
