@@ -1257,8 +1257,7 @@ const PennylaneService={
     try{
       while(page<maxPages){
         const params={per_page:100};
-        if(dateFrom)params['filter[date_from]']=dateFrom;
-        if(dateTo)params['filter[date_to]']=dateTo;
+        if(dateFrom)params['filter[date]']=`>=${dateFrom}`;
         if(cursor)params.cursor=cursor;
         const response=await this.request('/supplier_invoices',params);
         const items=response.items||response.supplier_invoices||response.data||[];
