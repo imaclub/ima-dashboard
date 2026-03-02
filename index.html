@@ -417,6 +417,19 @@ const SupplierMap={
     invoices.forEach(inv=>{
       const sid=String(inv.supplier?.id||'');
       const cat=this.getCategory(sid);
+      // Utiliser HT (currency_amount_before_tax) pour cohérence avec CA HT Trivec
+      const ht=parseFloat(inv.currency_amount_before_tax||0);
+      const ttc=parseFloat(inv.amount||0);
+      totals[cat]=(totals[cat]||0)+(ht||ttc);
+    });
+    return totals;
+  },
+  getTotalsTTC(invoices){
+    const totals={};
+    ALL_CATEGORIES.forEach(c=>{totals[c]=0;});
+    invoices.forEach(inv=>{
+      const sid=String(inv.supplier?.id||'');
+      const cat=this.getCategory(sid);
       totals[cat]=(totals[cat]||0)+parseFloat(inv.amount||0);
     });
     return totals;
@@ -1243,7 +1256,7 @@ const PennylaneService={
   clearToken:()=>localStorage.removeItem('ima_pennylane_token'),
   _companyInfo:null,
   _cache:{},
-  _lsCacheKey:'ima_pennylane_invoices_cache',
+  _lsCacheKey:'ima_pennylane_invoices_v3',
   _lsCacheTTL:3600000, // 1 heure
   _getLsCache(){try{const c=JSON.parse(localStorage.getItem(this._lsCacheKey));if(c&&Date.now()-c.ts<this._lsCacheTTL)return c.data;return null;}catch(e){return null;}},
   _setLsCache(data){try{localStorage.setItem(this._lsCacheKey,JSON.stringify({data,ts:Date.now()}));}catch(e){console.warn('Cache write failed',e);}},
@@ -4430,6 +4443,31 @@ function Settings(){
         </div>
       </div>
 
+      {/* ===== GOOGLE PLACES ===== */}
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Google Reviews</div><div className="card-st">Avis Google automatiques</div></div>
+          {localStorage.getItem('ima_google_place_id')?<span className="badge b-ok">Configuré</span>:<span className="badge b-warn">Non configuré</span>}
+        </div>
+        <div className="card-b">
+          <div style={{marginBottom:12,padding:14,background:'var(--gris-50)',borderRadius:8,fontSize:12,color:'var(--gris-600)'}}>
+            Pour afficher automatiquement vos avis Google dans l'onglet Réputation, entrez votre <strong>clé API Google</strong> et votre <strong>Place ID</strong>.
+            <div style={{marginTop:6}}>1. Créez une clé API sur <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer">Google Cloud Console</a></div>
+            <div>2. Activez l'API "Places API" (ou "Places API (New)")</div>
+            <div>3. Trouvez votre Place ID sur <a href="https://developers.google.com/maps/documentation/places/web-service/place-id-finder" target="_blank" rel="noopener noreferrer">Place ID Finder</a></div>
+          </div>
+          <div className="fg-row" style={{marginBottom:10}}>
+            <div className="fg" style={{flex:1}}>
+              <label className="fl">Google API Key</label>
+              <input className="fi" type="password" placeholder="AIza..." defaultValue={localStorage.getItem('ima_google_api_key')||''} onBlur={function(e){if(e.target.value)localStorage.setItem('ima_google_api_key',e.target.value);else localStorage.removeItem('ima_google_api_key');}}/>
+            </div>
+            <div className="fg" style={{flex:1}}>
+              <label className="fl">Place ID</label>
+              <input className="fi" type="text" placeholder="ChIJ..." defaultValue={localStorage.getItem('ima_google_place_id')||''} onBlur={function(e){if(e.target.value)localStorage.setItem('ima_google_place_id',e.target.value);else localStorage.removeItem('ima_google_place_id');}}/>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ===== BACKUP / RESTORE ===== */}
       <div className="card">
         <div className="card-h"><div><div className="card-t">Sauvegarde & Restauration</div><div className="card-st">Exportez vos données pour les conserver entre les mises à jour</div></div></div>
@@ -4631,20 +4669,19 @@ function Tresorerie(){
   // --- TVA NETTE ---
   // TVA collectée (sur les ventes)
   const tvaCollectee=trivec&&trivec.tva?(trivec.tva.taux10.tva+trivec.tva.taux20.tva):0;
-  // TVA déductible (estimée sur les achats)
-  // Food : TVA 5.5% → tva = montant * 5.5/105.5
-  // Bar/Autres : TVA 20% → tva = montant * 20/120
-  const tvaDeductFood=Math.round(foodTotal*5.5/105.5);
-  const tvaDeductBar=Math.round(barTotal*20/120);
-  const tvaDeductAutres=Math.round(otherCharges*20/120);
+  // TVA déductible (estimée sur les achats HT)
+  // Food : TVA 5.5% sur HT
+  // Bar/Autres : TVA 20% sur HT
+  const tvaDeductFood=Math.round(foodTotal*0.055);
+  const tvaDeductBar=Math.round(barTotal*0.20);
+  const tvaDeductAutres=Math.round(otherCharges*0.20);
   const tvaDeductible=tvaDeductFood+tvaDeductBar+tvaDeductAutres;
   // TVA nette à reverser = collectée - déductible
   const tvaNette=tvaCollectee-tvaDeductible;
 
   // --- RÉSULTAT D'EXPLOITATION ---
-  // = CA HT - Achats HT (estimé) - Masse Salariale
-  const achatsHT=totalAchats-tvaDeductible;
-  const resultatExploitation=caHT-achatsHT-staffCost;
+  // totalAchats est déjà HT (getTotals utilise currency_amount_before_tax)
+  const resultatExploitation=caHT-totalAchats-staffCost;
 
   // --- TOP FOURNISSEURS ---
   const topSuppliers=useMemo(()=>{
@@ -4652,7 +4689,9 @@ function Tresorerie(){
     invoices.forEach(inv=>{
       const name=SupplierMap.extractName(inv);
       if(!map[name])map[name]={name,total:0,count:0};
-      map[name].total+=(parseFloat(inv.amount)||0);
+      const ht=parseFloat(inv.currency_amount_before_tax||0);
+      const ttc=parseFloat(inv.amount||0);
+      map[name].total+=(ht||ttc);
       map[name].count++;
     });
     return Object.values(map).sort((a,b)=>Math.abs(b.total)-Math.abs(a.total)).slice(0,10);
@@ -4665,7 +4704,7 @@ function Tresorerie(){
 
     <div className="kpi-g">
       <div className="kpi"><div className="kpi-label">CA HT (Encaissé TTC)</div><div className="kpi-val" style={{color:'var(--vert)'}}>{eur(caHT)}</div><div className="kpi-chg pos">TTC encaissé: {eur(encaissementsTTC)}</div></div>
-      <div className="kpi"><div className="kpi-label">Total Charges</div><div className="kpi-val" style={{color:'var(--rouge)'}}>{eur(totalAchats+staffCost)}</div><div className="kpi-chg neg">Achats {eur(totalAchats)} + MS {eur(staffCost)}</div></div>
+      <div className="kpi"><div className="kpi-label">Total Charges HT</div><div className="kpi-val" style={{color:'var(--rouge)'}}>{eur(totalAchats+staffCost)}</div><div className="kpi-chg neg">Achats HT {eur(totalAchats)} + MS {eur(staffCost)}</div></div>
       <div className="kpi"><div className="kpi-label">Résultat d'Exploitation</div><div className="kpi-val" style={{color:resultatExploitation>=0?'var(--vert)':'var(--rouge)'}}>{eur(resultatExploitation)}</div><div className="kpi-chg" style={{background:resultatExploitation>=0?'var(--vert-light)':'var(--rouge-light)',color:resultatExploitation>=0?'var(--vert)':'var(--rouge)'}}>{caHT>0?Math.round(resultatExploitation/caHT*100)+'% du CA':''}</div></div>
       <div className="kpi"><div className="kpi-label">TVA Nette à reverser</div><div className="kpi-val" style={{color:'var(--orange)'}}>{eur(tvaNette)}</div><div className="kpi-chg neu">Collectée {eur(tvaCollectee)} - Déductible {eur(tvaDeductible)}</div></div>
     </div>
@@ -5068,83 +5107,276 @@ function Comparatif(){
   </div>);
 }
 
+// ===== GOOGLE PLACES SERVICE =====
+const GooglePlacesService={
+  _cacheKey:'ima_google_reviews_cache',
+  _cacheTTL:3600000, // 1 heure
+  getConfig:function(){
+    return{
+      apiKey:localStorage.getItem('ima_google_api_key')||'',
+      placeId:localStorage.getItem('ima_google_place_id')||''
+    };
+  },
+  isConfigured:function(){
+    var c=this.getConfig();
+    return c.apiKey.length>5&&c.placeId.length>5;
+  },
+  getCached:function(){
+    try{
+      var raw=localStorage.getItem(this._cacheKey);
+      if(!raw)return null;
+      var cached=JSON.parse(raw);
+      if(Date.now()-cached.ts>this._cacheTTL)return null;
+      return cached.data;
+    }catch(e){return null;}
+  },
+  setCache:function(data){
+    try{localStorage.setItem(this._cacheKey,JSON.stringify({ts:Date.now(),data:data}));}catch(e){}
+  },
+  fetchPlaceDetails:async function(){
+    if(!this.isConfigured())throw new Error('Google Places API non configurée. Allez dans Administration pour configurer la clé API et le Place ID.');
+    var cached=this.getCached();
+    if(cached)return cached;
+    var c=this.getConfig();
+    var fields='displayName,rating,userRatingCount,reviews';
+    var url='https://places.googleapis.com/v1/places/'+c.placeId+'?fields='+fields+'&languageCode=fr&key='+c.apiKey;
+    var response=await fetch(url);
+    if(!response.ok){
+      var errBody='';
+      try{errBody=JSON.stringify(await response.json());}catch(e){}
+      throw new Error('Erreur Google Places API ('+response.status+'): '+errBody);
+    }
+    var data=await response.json();
+    var result={
+      name:data.displayName?data.displayName.text:'',
+      rating:data.rating||0,
+      totalReviews:data.userRatingCount||0,
+      reviews:(data.reviews||[]).map(function(r){
+        return{
+          author:r.authorAttribution?r.authorAttribution.displayName:'Anonyme',
+          authorPhoto:r.authorAttribution?r.authorAttribution.photoUri:'',
+          rating:r.rating||0,
+          text:r.text?r.text.text:'',
+          time:r.relativePublishTimeDescription||'',
+          publishTime:r.publishTime||''
+        };
+      })
+    };
+    this.setCache(result);
+    return result;
+  },
+  clearCache:function(){localStorage.removeItem(this._cacheKey);}
+};
+
 // ===== REPUTATION =====
 function Reputation(){
-  const[ratings,setRatings]=useState(()=>{
-    try{return JSON.parse(localStorage.getItem('ima_ratings')||'[]');}catch(e){return[];}
-  });
-  const[newRating,setNewRating]=useState({source:'Google',score:4.5,date:new Date().toISOString().split('T')[0]});
+  var[gData,setGData]=useState(null);
+  var[loading,setLoading]=useState(false);
+  var[error,setError]=useState('');
+  var configured=GooglePlacesService.isConfigured();
 
-  const addRating=()=>{
-    if(!newRating.score)return;
-    const updated=[...ratings,{...newRating,id:Date.now()}];
-    setRatings(updated);
-    localStorage.setItem('ima_ratings',JSON.stringify(updated));
-    setNewRating({source:'Google',score:4.5,date:new Date().toISOString().split('T')[0]});
-  };
+  var fetchData=useCallback(function(forceRefresh){
+    if(!configured)return;
+    if(forceRefresh)GooglePlacesService.clearCache();
+    setLoading(true);
+    setError('');
+    GooglePlacesService.fetchPlaceDetails()
+      .then(function(d){setGData(d);})
+      .catch(function(e){setError(e.message||'Erreur inconnue');})
+      .finally(function(){setLoading(false);});
+  },[configured]);
 
-  const avgScore=ratings.length>0?Math.round(ratings.reduce((s,r)=>s+r.score,0)/ratings.length*10)/10:0;
+  useEffect(function(){
+    if(configured)fetchData(false);
+  },[configured]);
 
-  return(<div className="fin">
-    <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">Note moyenne</div><div className="kpi-val" style={{color:avgScore>=4?'var(--vert)':avgScore>=3?'var(--orange)':'var(--rouge)'}}>{avgScore.toFixed(1)}/5</div><div className="kpi-chg pos">{ratings.length} avis enregistrés</div></div>
-      <div className="kpi"><div className="kpi-label">Meilleure note</div><div className="kpi-val">{ratings.length>0?Math.max(...ratings.map(r=>r.score)):0}/5</div><div className="kpi-chg pos">Positif</div></div>
-      <div className="kpi"><div className="kpi-label">Tendance</div><div className="kpi-val" style={{color:'var(--gris-400)'}}>—</div><div className="kpi-chg neu">À suivre</div></div>
-      <div className="kpi"><div className="kpi-label">Avis enregistrés</div><div className="kpi-val">{ratings.length}</div><div className="kpi-chg neu">Suivi manuel</div></div>
-    </div>
+  // Étoiles visuelles
+  function Stars(props){
+    var rating=props.rating||0;
+    var size=props.size||16;
+    var stars=[];
+    for(var i=1;i<=5;i++){
+      var fill=rating>=i?'var(--orange)':rating>=i-0.5?'var(--orange)':'var(--gris-200)';
+      var partial=rating>=i?100:rating>=i-0.5?50:0;
+      if(partial===100){
+        stars.push(React.createElement('span',{key:i,style:{color:'#f59e0b',fontSize:size}},'★'));
+      }else if(partial===50){
+        stars.push(React.createElement('span',{key:i,style:{color:'#f59e0b',fontSize:size,position:'relative',display:'inline-block'}},
+          React.createElement('span',{style:{color:'var(--gris-200)'}},'★'),
+          React.createElement('span',{style:{position:'absolute',left:0,top:0,overflow:'hidden',width:'50%',color:'#f59e0b'}},'★')
+        ));
+      }else{
+        stars.push(React.createElement('span',{key:i,style:{color:'var(--gris-200)',fontSize:size}},'★'));
+      }
+    }
+    return React.createElement('span',{style:{display:'inline-flex',gap:1}},stars);
+  }
 
-    <div className="card" style={{marginBottom:16}}>
-      <div className="card-h"><div><div className="card-t">Liens rapides</div><div className="card-st">Consultez vos avis en ligne</div></div></div>
-      <div className="card-b">
-        <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
-          <a href="https://www.google.com/search?q=ima+val+d%27isere" target="_blank" rel="noopener noreferrer" style={{display:'flex',alignItems:'center',gap:8,padding:'10px 16px',background:'var(--gris-50)',borderRadius:8,border:'1px solid var(--gris-200)',textDecoration:'none',color:'var(--gris-900)',fontSize:13,fontWeight:500}}>
-            <span style={{fontSize:18}}>G</span> Google Reviews
-          </a>
-          <a href="https://www.tripadvisor.com/Search?q=ima+val+d%27isere" target="_blank" rel="noopener noreferrer" style={{display:'flex',alignItems:'center',gap:8,padding:'10px 16px',background:'var(--gris-50)',borderRadius:8,border:'1px solid var(--gris-200)',textDecoration:'none',color:'var(--gris-900)',fontSize:13,fontWeight:500}}>
-            <span style={{fontSize:18}}>TA</span> TripAdvisor
-          </a>
-          <a href="https://www.instagram.com/explore/tags/imavaldisere/" target="_blank" rel="noopener noreferrer" style={{display:'flex',alignItems:'center',gap:8,padding:'10px 16px',background:'var(--gris-50)',borderRadius:8,border:'1px solid var(--gris-200)',textDecoration:'none',color:'var(--gris-900)',fontSize:13,fontWeight:500}}>
-            <span style={{fontSize:18}}>IG</span> Instagram
-          </a>
-        </div>
-      </div>
-    </div>
+  // Distribution des notes depuis les avis
+  var distribution=useMemo(function(){
+    var dist={5:0,4:0,3:0,2:0,1:0};
+    if(gData&&gData.reviews){
+      gData.reviews.forEach(function(r){
+        var k=Math.round(r.rating);
+        if(k>=1&&k<=5)dist[k]++;
+      });
+    }
+    return dist;
+  },[gData]);
 
-    <div className="card">
-      <div className="card-h"><div><div className="card-t">Ajouter un nouvel avis</div></div></div>
-      <div className="card-b">
-        <div className="fg-row" style={{marginBottom:12}}>
-          <div className="fg"><label className="fl">Source</label>
-            <select className="fi-select" value={newRating.source} onChange={e=>setNewRating(p=>({...p,source:e.target.value}))}>
-              <option value="Google">Google</option><option value="TripAdvisor">TripAdvisor</option><option value="Yelp">Yelp</option><option value="Facebook">Facebook</option>
-            </select>
-          </div>
-          <div className="fg"><label className="fl">Note (1-5)</label>
-            <input className="fi" type="number" min="1" max="5" step="0.5" value={newRating.score} onChange={e=>setNewRating(p=>({...p,score:parseFloat(e.target.value)}))} placeholder="4.5"/>
-          </div>
-          <div className="fg"><label className="fl">Date</label>
-            <input className="fi" type="date" value={newRating.date} onChange={e=>setNewRating(p=>({...p,date:e.target.value}))}/>
-          </div>
-        </div>
-        <button className="btn btn-primary" onClick={addRating}>Enregistrer</button>
-      </div>
-    </div>
+  if(!configured){
+    return React.createElement('div',{className:'fin'},
+      React.createElement('div',{className:'card'},
+        React.createElement('div',{className:'card-h'},React.createElement('div',null,
+          React.createElement('div',{className:'card-t'},'Réputation — Configuration requise')
+        )),
+        React.createElement('div',{className:'card-b',style:{textAlign:'center',padding:40}},
+          React.createElement('div',{style:{fontSize:48,marginBottom:16}},'⭐'),
+          React.createElement('div',{style:{fontSize:15,color:'var(--gris-600)',marginBottom:16}},'Pour afficher vos avis Google, configurez votre clé API Google Places et votre Place ID dans la page Administration.'),
+          React.createElement('div',{style:{fontSize:12,color:'var(--gris-400)'}},'Administration → Google Places API')
+        )
+      )
+    );
+  }
 
-    <div className="card">
-      <div className="card-h"><div><div className="card-t">Historique des avis</div><div className="card-st">{ratings.length} notation{ratings.length!==1?'s':''} enregistrée{ratings.length!==1?'s':''}</div></div></div>
-      <div className="card-b">
-        {ratings.length===0?<div style={{textAlign:'center',padding:30,color:'var(--gris-400)'}}>Aucun avis enregistré</div>:
-        <div style={{display:'flex',flexDirection:'column',gap:10}}>
-          {[...ratings].reverse().map(r=>(
-            <div key={r.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:12,background:'var(--gris-50)',borderRadius:8,border:'1px solid var(--gris-200)'}}>
-              <div><div style={{fontSize:13,fontWeight:600}}>{r.source}</div><div style={{fontSize:11,color:'var(--gris-400)',marginTop:2}}>{r.date}</div></div>
-              <div style={{fontSize:24,fontWeight:700,color:r.score>=4?'var(--vert)':r.score>=3?'var(--orange)':'var(--rouge)'}}>{r.score}/5</div>
-            </div>
-          ))}
-        </div>}
-      </div>
-    </div>
-  </div>);
+  if(loading&&!gData){
+    return React.createElement('div',{className:'fin'},
+      React.createElement('div',{style:{textAlign:'center',padding:60}},
+        React.createElement('div',{className:'spinner'}),
+        React.createElement('div',{style:{marginTop:12,color:'var(--gris-400)',fontSize:13}},'Chargement des avis Google...')
+      )
+    );
+  }
+
+  if(error&&!gData){
+    return React.createElement('div',{className:'fin'},
+      React.createElement('div',{className:'card'},
+        React.createElement('div',{className:'card-h'},React.createElement('div',null,
+          React.createElement('div',{className:'card-t'},'Erreur')
+        )),
+        React.createElement('div',{className:'card-b',style:{textAlign:'center',padding:30}},
+          React.createElement('div',{style:{fontSize:14,color:'var(--rouge)',marginBottom:12}},error),
+          React.createElement('button',{className:'btn btn-primary',onClick:function(){fetchData(true);}},'Réessayer')
+        )
+      )
+    );
+  }
+
+  var rating=gData?gData.rating:0;
+  var totalReviews=gData?gData.totalReviews:0;
+  var reviews=gData?gData.reviews:[];
+  var totalDist=Object.values(distribution).reduce(function(s,v){return s+v;},0);
+
+  return React.createElement('div',{className:'fin'},
+    // KPI row
+    React.createElement('div',{className:'kpi-g'},
+      React.createElement('div',{className:'kpi'},
+        React.createElement('div',{className:'kpi-label'},'Note Google'),
+        React.createElement('div',{className:'kpi-val',style:{color:rating>=4?'var(--vert)':rating>=3?'var(--orange)':'var(--rouge)'}},rating.toFixed(1)+'/5'),
+        React.createElement('div',{style:{marginTop:4}},React.createElement(Stars,{rating:rating,size:18}))
+      ),
+      React.createElement('div',{className:'kpi'},
+        React.createElement('div',{className:'kpi-label'},'Nombre d\'avis'),
+        React.createElement('div',{className:'kpi-val'},fmtN(totalReviews)),
+        React.createElement('div',{className:'kpi-chg neu'},'Total Google Reviews')
+      ),
+      React.createElement('div',{className:'kpi'},
+        React.createElement('div',{className:'kpi-label'},'Avis 5 étoiles'),
+        React.createElement('div',{className:'kpi-val',style:{color:'var(--vert)'}},distribution[5]),
+        React.createElement('div',{className:'kpi-chg pos'},totalDist>0?Math.round(distribution[5]/totalDist*100)+'% des avis récents':'—')
+      ),
+      React.createElement('div',{className:'kpi'},
+        React.createElement('div',{className:'kpi-label'},'Avis ≤ 2 étoiles'),
+        React.createElement('div',{className:'kpi-val',style:{color:(distribution[1]+distribution[2])>0?'var(--rouge)':'var(--vert)'}},distribution[1]+distribution[2]),
+        React.createElement('div',{className:'kpi-chg '+(distribution[1]+distribution[2]>0?'neg':'pos')},
+          (distribution[1]+distribution[2])>0?'À surveiller':'Aucun avis négatif récent')
+      )
+    ),
+
+    // Distribution des notes
+    React.createElement('div',{className:'card',style:{marginBottom:16}},
+      React.createElement('div',{className:'card-h'},
+        React.createElement('div',null,
+          React.createElement('div',{className:'card-t'},'Distribution des notes'),
+          React.createElement('div',{className:'card-st'},'Basé sur les '+reviews.length+' avis les plus récents')
+        ),
+        React.createElement('div',{style:{display:'flex',gap:8}},
+          React.createElement('button',{className:'btn btn-ghost',onClick:function(){fetchData(true);},disabled:loading},
+            loading?'Actualisation...':'↻ Actualiser')
+        )
+      ),
+      React.createElement('div',{className:'card-b'},
+        React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:8}},
+          [5,4,3,2,1].map(function(n){
+            var count=distribution[n];
+            var pct=totalDist>0?Math.round(count/totalDist*100):0;
+            return React.createElement('div',{key:n,style:{display:'flex',alignItems:'center',gap:10}},
+              React.createElement('span',{style:{fontSize:13,fontWeight:600,width:20,textAlign:'right'}},n),
+              React.createElement('span',{style:{color:'#f59e0b',fontSize:14}},'★'),
+              React.createElement('div',{style:{flex:1,height:20,background:'var(--gris-100)',borderRadius:4,overflow:'hidden'}},
+                React.createElement('div',{style:{width:pct+'%',height:'100%',background:n>=4?'var(--vert)':n===3?'var(--orange)':'var(--rouge)',borderRadius:4,transition:'width .3s'}})
+              ),
+              React.createElement('span',{style:{fontSize:12,color:'var(--gris-500)',width:60,textAlign:'right'}},count+' ('+pct+'%)')
+            );
+          })
+        )
+      )
+    ),
+
+    // Liens rapides
+    React.createElement('div',{className:'card',style:{marginBottom:16}},
+      React.createElement('div',{className:'card-h'},React.createElement('div',null,
+        React.createElement('div',{className:'card-t'},'Liens rapides')
+      )),
+      React.createElement('div',{className:'card-b'},
+        React.createElement('div',{style:{display:'flex',gap:12,flexWrap:'wrap'}},
+          React.createElement('a',{href:'https://www.google.com/search?q=ima+val+d%27isere+avis',target:'_blank',rel:'noopener noreferrer',style:{display:'flex',alignItems:'center',gap:8,padding:'10px 16px',background:'var(--gris-50)',borderRadius:8,border:'1px solid var(--gris-200)',textDecoration:'none',color:'var(--gris-900)',fontSize:13,fontWeight:500}},
+            React.createElement('span',{style:{fontSize:18}},'G'),' Google Reviews'
+          ),
+          React.createElement('a',{href:'https://www.tripadvisor.com/Search?q=ima+val+d%27isere',target:'_blank',rel:'noopener noreferrer',style:{display:'flex',alignItems:'center',gap:8,padding:'10px 16px',background:'var(--gris-50)',borderRadius:8,border:'1px solid var(--gris-200)',textDecoration:'none',color:'var(--gris-900)',fontSize:13,fontWeight:500}},
+            React.createElement('span',{style:{fontSize:18}},'TA'),' TripAdvisor'
+          ),
+          React.createElement('a',{href:'https://www.instagram.com/explore/tags/imavaldisere/',target:'_blank',rel:'noopener noreferrer',style:{display:'flex',alignItems:'center',gap:8,padding:'10px 16px',background:'var(--gris-50)',borderRadius:8,border:'1px solid var(--gris-200)',textDecoration:'none',color:'var(--gris-900)',fontSize:13,fontWeight:500}},
+            React.createElement('span',{style:{fontSize:18}},'IG'),' Instagram'
+          )
+        )
+      )
+    ),
+
+    // Derniers avis
+    React.createElement('div',{className:'card'},
+      React.createElement('div',{className:'card-h'},React.createElement('div',null,
+        React.createElement('div',{className:'card-t'},'Derniers avis Google'),
+        React.createElement('div',{className:'card-st'},reviews.length+' avis les plus récents')
+      )),
+      React.createElement('div',{className:'card-b'},
+        reviews.length===0?
+          React.createElement('div',{style:{textAlign:'center',padding:30,color:'var(--gris-400)'}},'Aucun avis trouvé'):
+          React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:14}},
+            reviews.map(function(r,i){
+              return React.createElement('div',{key:i,style:{padding:16,background:'var(--gris-50)',borderRadius:10,border:'1px solid var(--gris-200)'}},
+                React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}},
+                  React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10}},
+                    React.createElement('div',{style:{width:36,height:36,borderRadius:'50%',background:'var(--bordeaux)',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700}},
+                      r.author?r.author.charAt(0).toUpperCase():'?'
+                    ),
+                    React.createElement('div',null,
+                      React.createElement('div',{style:{fontSize:13,fontWeight:600}},r.author),
+                      React.createElement('div',{style:{fontSize:11,color:'var(--gris-400)'}},r.time)
+                    )
+                  ),
+                  React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6}},
+                    React.createElement(Stars,{rating:r.rating,size:14}),
+                    React.createElement('span',{style:{fontSize:13,fontWeight:700,color:r.rating>=4?'var(--vert)':r.rating>=3?'var(--orange)':'var(--rouge)'}},r.rating+'/5')
+                  )
+                ),
+                r.text?React.createElement('div',{style:{fontSize:13,lineHeight:1.5,color:'var(--gris-700)'}},r.text):null
+              );
+            })
+          )
+      )
+    )
+  );
 }
 
 // ===== APP =====
@@ -5162,7 +5394,7 @@ function InvoiceProvider({children}){
   useEffect(()=>{
     if(PennylaneService.getToken()&&!loaded){
       setLoading(true);
-      PennylaneService.getAllSupplierInvoices({maxPages:50,onRefresh:function(fresh){setInvoices(fresh);}})
+      PennylaneService.getAllSupplierInvoices({dateFrom:'2025-11-01',maxPages:50,onRefresh:function(fresh){setInvoices(fresh);}})
         .then(function(inv){setInvoices(inv);setLoaded(true);})
         .finally(function(){setLoading(false);});
     }
