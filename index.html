@@ -2290,7 +2290,7 @@ function Costs(){
     </div>
 
     {/* Détail fournisseurs Food & Bar (saison) — cliquable pour voir chaque facture */}
-    {(foodTotal>0||barTotal>0)&&React.createElement(FoodBarDetail,{seasonInvoices:seasonInvoices,foodTotal:foodTotal,barTotal:barTotal})}
+    {(foodTotal>0||barTotal>0)&&<FoodBarDetail seasonInvoices={seasonInvoices} foodTotal={foodTotal} barTotal={barTotal}/>}
 
     {/* ===== TAB: OVERVIEW ===== */}
     {tab==='overview'&&<div>
