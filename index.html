@@ -2023,6 +2023,128 @@ function Finance(){
   </div>);
 }
 
+// ===== FOOD/BAR DETAIL (vérification factures) =====
+function FoodBarDetail({seasonInvoices,foodTotal,barTotal}){
+  const[expandedSup,setExpandedSup]=useState(null);
+  return React.createElement('div',{className:'card',style:{marginBottom:14}},
+    React.createElement('div',{className:'card-h'},React.createElement('div',null,
+      React.createElement('div',{className:'card-t'},'Détail achats saison (déc-fév) par fournisseur'),
+      React.createElement('div',{className:'card-st'},'Cliquez sur un fournisseur pour voir ses factures individuelles — exclut pré-ouverture (novembre)')
+    )),
+    React.createElement('div',{className:'card-b',style:{padding:'0 14px 14px'}},
+      React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}},
+        ['Food','Bar'].map(function(cat){
+          var catInvs=seasonInvoices.filter(function(inv){return SupplierMap.getCategory(String(inv.supplier&&inv.supplier.id||''))===cat;});
+          var bySupplier={};
+          catInvs.forEach(function(inv){
+            var sid=String(inv.supplier&&inv.supplier.id||'unknown');
+            var name=SupplierMap.extractName(inv);
+            if(!bySupplier[sid])bySupplier[sid]={sid:sid,name:name,totalHT:0,totalTTC:0,count:0,invoices:[],htMissing:0};
+            var ht=parseFloat(inv.currency_amount_before_tax||0);
+            var ttc=parseFloat(inv.amount||0);
+            if(!inv.currency_amount_before_tax&&ttc!==0)bySupplier[sid].htMissing++;
+            bySupplier[sid].totalHT+=ht||ttc;
+            bySupplier[sid].totalTTC+=ttc;
+            bySupplier[sid].count++;
+            bySupplier[sid].invoices.push(inv);
+          });
+          var suppliers=Object.values(bySupplier).sort(function(a,b){return Math.abs(b.totalHT)-Math.abs(a.totalHT);});
+          var catTotal=suppliers.reduce(function(s,sup){return s+sup.totalHT;},0);
+          var htMissingTotal=suppliers.reduce(function(s,sup){return s+sup.htMissing;},0);
+          return React.createElement('div',{key:cat},
+            React.createElement('div',{style:{fontWeight:700,fontSize:14,color:cat==='Food'?'#059669':'#581527',marginBottom:4}},
+              'Achats '+cat+' : '+eur(catTotal)+' HT ('+catInvs.length+' factures)'
+            ),
+            htMissingTotal>0&&React.createElement('div',{style:{fontSize:10,color:'var(--orange)',marginBottom:4}},
+              '⚠ '+htMissingTotal+' facture(s) sans montant HT — fallback sur TTC'
+            ),
+            React.createElement('table',{style:{width:'100%',fontSize:11,borderCollapse:'collapse'}},
+              React.createElement('thead',null,
+                React.createElement('tr',{style:{background:'var(--gris-100)'}},
+                  React.createElement('th',{style:{textAlign:'left',padding:'4px 6px'}},'Fournisseur'),
+                  React.createElement('th',{style:{textAlign:'right',padding:'4px 6px'}},'Montant HT'),
+                  React.createElement('th',{style:{textAlign:'right',padding:'4px 6px'}},'TTC'),
+                  React.createElement('th',{style:{textAlign:'center',padding:'4px 6px'}},'Nb')
+                )
+              ),
+              React.createElement('tbody',null,
+                suppliers.map(function(sup,i){
+                  var isExpanded=expandedSup===cat+'_'+sup.sid;
+                  var rows=[];
+                  rows.push(React.createElement('tr',{key:'sup_'+i,
+                    style:{background:i%2===0?'#fff':'var(--gris-50)',color:sup.totalHT<0?'var(--rouge)':'inherit',cursor:'pointer'},
+                    onClick:function(){setExpandedSup(isExpanded?null:cat+'_'+sup.sid);}
+                  },
+                    React.createElement('td',{style:{padding:'3px 6px',fontWeight:500}},
+                      (isExpanded?'▼ ':'▶ ')+sup.name+(sup.htMissing>0?' ⚠':'')
+                    ),
+                    React.createElement('td',{style:{textAlign:'right',padding:'3px 6px',fontWeight:600}},eur(sup.totalHT)),
+                    React.createElement('td',{style:{textAlign:'right',padding:'3px 6px',color:'var(--gris-400)'}},eur(sup.totalTTC)),
+                    React.createElement('td',{style:{textAlign:'center',padding:'3px 6px'}},sup.count)
+                  ));
+                  if(isExpanded){
+                    rows.push(React.createElement('tr',{key:'hdr_'+i},
+                      React.createElement('td',{colSpan:4,style:{padding:0}},
+                        React.createElement('table',{style:{width:'100%',fontSize:10,background:'#f8f5f2',borderCollapse:'collapse'}},
+                          React.createElement('thead',null,
+                            React.createElement('tr',{style:{background:'#ede8e3'}},
+                              React.createElement('th',{style:{textAlign:'left',padding:'3px 6px'}},'N° Facture'),
+                              React.createElement('th',{style:{textAlign:'left',padding:'3px 6px'}},'Date'),
+                              React.createElement('th',{style:{textAlign:'right',padding:'3px 6px'}},'HT'),
+                              React.createElement('th',{style:{textAlign:'right',padding:'3px 6px'}},'TTC'),
+                              React.createElement('th',{style:{textAlign:'left',padding:'3px 6px'}},'Statut')
+                            )
+                          ),
+                          React.createElement('tbody',null,
+                            sup.invoices.sort(function(a,b){return(b.date||'').localeCompare(a.date||'');}).map(function(inv,j){
+                              var ht=parseFloat(inv.currency_amount_before_tax||0);
+                              var ttc=parseFloat(inv.amount||0);
+                              var noHT=!inv.currency_amount_before_tax&&ttc!==0;
+                              return React.createElement('tr',{key:j,style:{color:ttc<0?'var(--rouge)':'inherit',background:noHT?'#fff3cd':'transparent'}},
+                                React.createElement('td',{style:{padding:'2px 6px',fontFamily:'monospace'}},inv.invoice_number||'—'),
+                                React.createElement('td',{style:{padding:'2px 6px'}},inv.date||'—'),
+                                React.createElement('td',{style:{textAlign:'right',padding:'2px 6px',fontWeight:600}},
+                                  ht!==0?eur(ht):(noHT?'⚠ '+eur(ttc)+' (TTC!)':'0 €')
+                                ),
+                                React.createElement('td',{style:{textAlign:'right',padding:'2px 6px',color:'var(--gris-400)'}},eur(ttc)),
+                                React.createElement('td',{style:{padding:'2px 6px',fontSize:9}},inv.status||inv.payment_status||'—')
+                              );
+                            })
+                          ),
+                          React.createElement('tfoot',null,
+                            React.createElement('tr',{style:{fontWeight:700,borderTop:'1px solid var(--gris-300)'}},
+                              React.createElement('td',{colSpan:2,style:{padding:'3px 6px'}},'Total '+sup.name),
+                              React.createElement('td',{style:{textAlign:'right',padding:'3px 6px'}},eur(sup.totalHT)),
+                              React.createElement('td',{style:{textAlign:'right',padding:'3px 6px',color:'var(--gris-400)'}},eur(sup.totalTTC)),
+                              React.createElement('td',null)
+                            )
+                          )
+                        )
+                      )
+                    ));
+                  }
+                  return rows;
+                }).flat()
+              ),
+              React.createElement('tfoot',null,
+                React.createElement('tr',{style:{fontWeight:700,borderTop:'2px solid var(--gris-200)'}},
+                  React.createElement('td',{style:{padding:'4px 6px'}},'TOTAL '+cat.toUpperCase()),
+                  React.createElement('td',{style:{textAlign:'right',padding:'4px 6px'}},eur(catTotal)),
+                  React.createElement('td',{style:{textAlign:'right',padding:'4px 6px',color:'var(--gris-400)'}},eur(suppliers.reduce(function(s,sup){return s+sup.totalTTC;},0))),
+                  React.createElement('td',{style:{textAlign:'center',padding:'4px 6px'}},catInvs.length)
+                )
+              )
+            )
+          );
+        })
+      ),
+      React.createElement('div',{style:{marginTop:10,fontSize:10,color:'var(--gris-400)',fontStyle:'italic'}},
+        'Les montants négatifs (en rouge) sont des avoirs. ⚠ = facture sans montant HT (fallback TTC). Fond jaune = HT manquant. Cliquez un fournisseur pour vérifier facture par facture vs Pennylane.'
+      )
+    )
+  );
+}
+
 // ===== COSTS =====
 function Costs(){
   const[tab,setTab]=useState('overview');
@@ -2167,65 +2289,8 @@ function Costs(){
         <div className="kpi-chg neg">{supplierGroups.filter(s=>s.cat==='Non classé').length} fournisseurs</div></div>
     </div>
 
-    {/* Détail fournisseurs Food & Bar (saison) */}
-    {(foodTotal>0||barTotal>0)&&<div className="card" style={{marginBottom:14}}>
-      <div className="card-h"><div><div className="card-t">Détail achats saison (déc-fév) par fournisseur</div><div className="card-st">Factures de la période Trivec uniquement — exclut les achats pré-ouverture (novembre)</div></div></div>
-      <div className="card-b" style={{padding:'0 14px 14px'}}>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
-          {['Food','Bar'].map(function(cat){
-            var catInvs=seasonInvoices.filter(function(inv){return SupplierMap.getCategory(String(inv.supplier&&inv.supplier.id||''))===cat;});
-            var bySupplier={};
-            catInvs.forEach(function(inv){
-              var sid=String(inv.supplier&&inv.supplier.id||'unknown');
-              var name=SupplierMap.extractName(inv);
-              if(!bySupplier[sid])bySupplier[sid]={name:name,totalHT:0,totalTTC:0,count:0,invoices:[]};
-              bySupplier[sid].totalHT+=parseFloat(inv.currency_amount_before_tax||0);
-              bySupplier[sid].totalTTC+=parseFloat(inv.amount||0);
-              bySupplier[sid].count++;
-              bySupplier[sid].invoices.push(inv);
-            });
-            var suppliers=Object.values(bySupplier).sort(function(a,b){return Math.abs(b.totalHT)-Math.abs(a.totalHT);});
-            var catTotal=suppliers.reduce(function(s,sup){return s+sup.totalHT;},0);
-            return React.createElement('div',{key:cat},
-              React.createElement('div',{style:{fontWeight:700,fontSize:14,color:cat==='Food'?'#059669':'#581527',marginBottom:8}},
-                'Achats '+cat+' : '+eur(catTotal)+' HT ('+catInvs.length+' factures)'
-              ),
-              React.createElement('table',{style:{width:'100%',fontSize:11}},
-                React.createElement('thead',null,
-                  React.createElement('tr',{style:{background:'var(--gris-100)'}},
-                    React.createElement('th',{style:{textAlign:'left',padding:'4px 6px'}},'Fournisseur'),
-                    React.createElement('th',{style:{textAlign:'right',padding:'4px 6px'}},'Montant HT'),
-                    React.createElement('th',{style:{textAlign:'right',padding:'4px 6px'}},'TTC'),
-                    React.createElement('th',{style:{textAlign:'center',padding:'4px 6px'}},'Nb')
-                  )
-                ),
-                React.createElement('tbody',null,
-                  suppliers.map(function(sup,i){
-                    return React.createElement('tr',{key:i,style:{background:i%2===0?'#fff':'var(--gris-50)',color:sup.totalHT<0?'var(--rouge)':'inherit'}},
-                      React.createElement('td',{style:{padding:'3px 6px',fontWeight:500}},sup.name),
-                      React.createElement('td',{style:{textAlign:'right',padding:'3px 6px'}},eur(sup.totalHT)),
-                      React.createElement('td',{style:{textAlign:'right',padding:'3px 6px',color:'var(--gris-400)'}},eur(sup.totalTTC)),
-                      React.createElement('td',{style:{textAlign:'center',padding:'3px 6px'}},sup.count)
-                    );
-                  })
-                ),
-                React.createElement('tfoot',null,
-                  React.createElement('tr',{style:{fontWeight:700,borderTop:'2px solid var(--gris-200)'}},
-                    React.createElement('td',{style:{padding:'4px 6px'}},'TOTAL'),
-                    React.createElement('td',{style:{textAlign:'right',padding:'4px 6px'}},eur(catTotal)),
-                    React.createElement('td',{style:{textAlign:'right',padding:'4px 6px',color:'var(--gris-400)'}},eur(suppliers.reduce(function(s,sup){return s+sup.totalTTC;},0))),
-                    React.createElement('td',{style:{textAlign:'center',padding:'4px 6px'}},catInvs.length)
-                  )
-                )
-              )
-            );
-          })}
-        </div>
-        <div style={{marginTop:10,fontSize:10,color:'var(--gris-400)',fontStyle:'italic'}}>
-          Les montants négatifs (en rouge) sont des avoirs/remboursements. Si un fournisseur semble mal classé, modifiez sa catégorie dans l'onglet "Mapping" ci-dessous.
-        </div>
-      </div>
-    </div>}
+    {/* Détail fournisseurs Food & Bar (saison) — cliquable pour voir chaque facture */}
+    {(foodTotal>0||barTotal>0)&&React.createElement(FoodBarDetail,{seasonInvoices:seasonInvoices,foodTotal:foodTotal,barTotal:barTotal})}
 
     {/* ===== TAB: OVERVIEW ===== */}
     {tab==='overview'&&<div>
