@@ -342,9 +342,13 @@ const SupplierMap={
   },
   _saveMap(map){localStorage.setItem('ima_supplier_map_v2',JSON.stringify(map));},
 
+  // Aliases: catégories Pennylane → catégories dashboard
+  _aliases:{'Restaurants':'Food','Restaurant':'Food','Alimentation':'Food','Boissons':'Bar'},
+
   getCategory(supplierId){
     const map=this._getMap();
-    return map[supplierId]||'Non classé';
+    const cat=map[supplierId]||'Non classé';
+    return this._aliases[cat]||cat;
   },
 
   setCategory(supplierId,category){
@@ -1215,6 +1219,11 @@ const PennylaneService={
   clearToken:()=>localStorage.removeItem('ima_pennylane_token'),
   _companyInfo:null,
   _cache:{},
+  _lsCacheKey:'ima_pennylane_invoices_cache',
+  _lsCacheTTL:3600000, // 1 heure
+  _getLsCache(){try{const c=JSON.parse(localStorage.getItem(this._lsCacheKey));if(c&&Date.now()-c.ts<this._lsCacheTTL)return c.data;return null;}catch(e){return null;}},
+  _setLsCache(data){try{localStorage.setItem(this._lsCacheKey,JSON.stringify({data,ts:Date.now()}));}catch(e){console.warn('Cache write failed',e);}},
+  clearCache(){localStorage.removeItem(this._lsCacheKey);this._cache={};},
 
   async request(endpoint,params={}){
     const token=this.getToken();
@@ -1247,13 +1256,39 @@ const PennylaneService={
   },
 
   // Fetch ALL supplier invoices with pagination, optional date filter
-  async getAllSupplierInvoices({dateFrom,dateTo,maxPages=10}={}){
+  async getAllSupplierInvoices({dateFrom,dateTo,maxPages=10,onRefresh}={}){
     const cacheKey=`inv_${dateFrom}_${dateTo}`;
+    // 1. Memory cache (5 min)
     if(this._cache[cacheKey]&&Date.now()-this._cache[cacheKey].ts<300000)return this._cache[cacheKey].data;
 
-    let allInvoices=[];
-    let cursor=null;
-    let page=0;
+    // 2. localStorage cache (1h) — return instantly, refresh in background
+    let lsData=this._getLsCache();
+    if(lsData&&lsData.length>0){
+      // Dédupliquer le cache aussi
+      const seen2=new Set();lsData=lsData.filter(inv=>{const k=inv.id||inv.invoice_number;if(seen2.has(k))return false;seen2.add(k);return true;});
+      this._cache[cacheKey]={data:lsData,ts:Date.now()};
+      // Background refresh
+      this._fetchAllInvoices({dateFrom,maxPages}).then(fresh=>{
+        if(fresh.length>0){
+          this._setLsCache(fresh);
+          this._cache[cacheKey]={data:fresh,ts:Date.now()};
+          this._discoverSuppliers(fresh);
+          if(onRefresh)onRefresh(fresh);
+        }
+      }).catch(()=>{});
+      return lsData;
+    }
+
+    // 3. No cache — fetch and wait
+    const allInvoices=await this._fetchAllInvoices({dateFrom,maxPages});
+    this._discoverSuppliers(allInvoices);
+    this._setLsCache(allInvoices);
+    this._cache[cacheKey]={data:allInvoices,ts:Date.now()};
+    return allInvoices;
+  },
+
+  async _fetchAllInvoices({dateFrom,maxPages=50}={}){
+    let allInvoices=[];let cursor=null;let page=0;
     try{
       while(page<maxPages){
         const params={per_page:100};
@@ -1263,20 +1298,25 @@ const PennylaneService={
         const items=response.items||response.supplier_invoices||response.data||[];
         allInvoices=allInvoices.concat(items);
         if(!response.has_more||!response.next_cursor)break;
-        cursor=response.next_cursor;
-        page++;
+        cursor=response.next_cursor;page++;
       }
-    }catch(e){console.error('Failed to fetch all invoices:',e);}
-    // Discover new suppliers
-    const map=SupplierMap.getAll();
-    allInvoices.forEach(inv=>{
-      const sid=String(inv.supplier?.id||'');
-      if(sid&&!map[sid]){
-        SupplierMap.setCategory(sid,'Non classé');
-      }
+    }catch(e){console.error('Failed to fetch invoices:',e);}
+    // Dédupliquer par id + invoice_number
+    const seen=new Set();
+    allInvoices=allInvoices.filter(inv=>{
+      const key=inv.id||inv.invoice_number||JSON.stringify(inv);
+      if(seen.has(key))return false;
+      seen.add(key);return true;
     });
-    this._cache[cacheKey]={data:allInvoices,ts:Date.now()};
     return allInvoices;
+  },
+
+  _discoverSuppliers(invoices){
+    const map=SupplierMap.getAll();
+    invoices.forEach(inv=>{
+      const sid=String(inv.supplier?.id||'');
+      if(sid&&!map[sid])SupplierMap.setCategory(sid,'Non classé');
+    });
   },
 
   async getSupplierInvoices(params={}){
@@ -1739,7 +1779,7 @@ function Finance(){
   useEffect(()=>{
     if(PennylaneService.getToken()){
       setLoading(true);
-      PennylaneService.getAllSupplierInvoices({maxPages:50})
+      PennylaneService.getAllSupplierInvoices({maxPages:50,onRefresh:(fresh)=>setAllInvoices(fresh)})
         .then(invoices=>{
           setAllInvoices(invoices);
           setLoaded(true);
@@ -1933,15 +1973,11 @@ function Costs(){
   useEffect(()=>{
     if(PennylaneService.getToken()){
       setLoading(true);
-      PennylaneService.getAllSupplierInvoices({maxPages:50})
+      const updateNames=(invs)=>{const n={};invs.forEach(inv=>{const sid=String(inv.supplier?.id||'');if(sid&&!n[sid])n[sid]=SupplierMap.extractName(inv);});setSupplierNames(n);};
+      PennylaneService.getAllSupplierInvoices({maxPages:50,onRefresh:(fresh)=>{setAllInvoices(fresh);updateNames(fresh);}})
         .then(invoices=>{
           setAllInvoices(invoices);
-          const names={};
-          invoices.forEach(inv=>{
-            const sid=String(inv.supplier?.id||'');
-            if(sid&&!names[sid])names[sid]=SupplierMap.extractName(inv);
-          });
-          setSupplierNames(names);
+          updateNames(invoices);
           setLoaded(true);
         })
         .finally(()=>setLoading(false));
