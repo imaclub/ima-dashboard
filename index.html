@@ -3578,12 +3578,13 @@ function CRMPage(){
   </div>);
 }
 
-// ===== DONNÉES SAISON TRIVEC (04/12/2025 → 02/03/2026) =====
+// ===== DONNÉES SAISON TRIVEC (01/12/2025 → 28/02/2026) =====
+// Source : Rapports CA mensuels Trivec imprimés le 02/03/2026
 const TRIVEC_SEASON={
-  periode:{from:'04/12/2025',to:'02/03/2026',label:'Saison 2025-2026'},
-  tickets:16110,couverts:4083,
-  ventesBrut:1521753.35,ventesNet:1358912.84,
-  cashIn:27443.00,cashOut:0,horsVentes:0,interne:135397.51,
+  periode:{from:'01/12/2025',to:'28/02/2026',label:'Saison 2025-2026'},
+  tickets:15897,couverts:4042,
+  ventesBrut:1506166.35,ventesNet:1345479.84,
+  cashIn:27443.00,cashOut:0,horsVentes:0,interne:133243.51,
   categories:[
     {nom:'Boissons Alcoolisées',montant:965329.45,pct:63.5},
     {nom:'Boissons Sans Alcool',montant:280112.38,pct:18.4},
@@ -3591,8 +3592,8 @@ const TRIVEC_SEASON={
     {nom:'Divers',montant:27443.00,pct:1.8}
   ],
   tva:{
-    taux10:{ttc:471338.66,ht:428489.69,tva:42848.97},
-    taux20:{ttc:887574.18,ht:739645.15,tva:147929.03}
+    taux10:{ttc:467709.09,ht:425190.08,tva:42519.01},
+    taux20:{ttc:877770.75,ht:731475.63,tva:146295.12}
   },
   paiements:{
     total:1397342.81,
@@ -3605,7 +3606,43 @@ const TRIVEC_SEASON={
       {mode:'SevenRoom',transactions:16,montant:8446.00,tips:0}
     ]
   },
-  tipsTotal:62321.98
+  tipsTotal:62321.98,
+  // Détail mensuel (rapports CA Trivec)
+  monthly:[
+    {
+      mois:'Décembre 2025',from:'01/12/2025',to:'31/12/2025',
+      tickets:4199,couverts:1174,
+      totCommandes:460381.00,remise:18962.40,
+      ventesBrut:441418.60,ventesNet:366462.10,
+      cashIn:24432.00,interne:50524.50,
+      tva:{
+        taux10:{ttc:121743.03,ht:110675.48,tva:11067.55},
+        taux20:{ttc:244719.07,ht:203932.56,tva:40786.51}
+      }
+    },
+    {
+      mois:'Janvier 2026',from:'01/01/2026',to:'31/01/2026',
+      tickets:4798,couverts:1062,
+      totCommandes:415297.34,remise:22107.33,
+      ventesBrut:393190.01,ventesNet:348776.00,
+      cashIn:1357.00,interne:43057.01,
+      tva:{
+        taux10:{ttc:101235.75,ht:92032.50,tva:9203.25},
+        taux20:{ttc:247540.25,ht:206283.54,tva:41256.71}
+      }
+    },
+    {
+      mois:'Février 2026',from:'01/02/2026',to:'28/02/2026',
+      tickets:6900,couverts:1806,
+      totCommandes:690165.74,remise:18608.00,
+      ventesBrut:671557.74,ventesNet:630241.74,
+      cashIn:1654.00,interne:39662.00,
+      tva:{
+        taux10:{ttc:244730.31,ht:222482.10,tva:22248.21},
+        taux20:{ttc:385511.43,ht:321259.53,tva:64251.90}
+      }
+    }
+  ]
 };
 
 // ===== POS =====
@@ -5054,6 +5091,8 @@ function Alertes(){
 // ===== COMPARATIF =====
 function Comparatif(){
   const allDays=TrivecService.getAllDays();
+  const S=TRIVEC_SEASON;
+  const monthly=S.monthly||[];
 
   // Get last 7 full days (week comparison)
   const sorted=Object.entries(allDays).sort((a,b)=>new Date(b[0])-new Date(a[0])).slice(0,14);
@@ -5071,8 +5110,67 @@ function Comparatif(){
     doW[day].count++;
   });
 
+  // Best month
+  const bestMonth=monthly.length>0?monthly.reduce((best,m)=>m.ventesNet>best.ventesNet?m:best,monthly[0]):null;
+  const maxMonthlyCA=monthly.length>0?Math.max(...monthly.map(m=>m.ventesNet)):1;
+
   return(<div className="fin">
-    <div className="card">
+    {/* Comparaison mensuelle */}
+    {monthly.length>0&&<div className="card" style={{marginBottom:16}}>
+      <div className="card-h"><div><div className="card-t">Comparaison mensuelle</div><div className="card-st">Évolution mois par mois — Saison {S.periode.label}</div></div></div>
+      <div className="card-b">
+        <div className="tbl"><table>
+          <thead><tr><th>Mois</th><th style={{textAlign:'right'}}>CA Net</th><th style={{textAlign:'right'}}>CA HT</th><th style={{textAlign:'right'}}>Tickets</th><th style={{textAlign:'right'}}>Couverts</th><th style={{textAlign:'right'}}>TM Resto</th><th style={{textAlign:'right'}}>TVA</th><th style={{textAlign:'right'}}>Interne</th><th>Part CA</th></tr></thead>
+          <tbody>{monthly.map(function(m,i){
+            var htTotal=m.tva.taux10.ht+m.tva.taux20.ht;
+            var tmResto=m.couverts>0?Math.round(m.tva.taux10.ht/m.couverts):0;
+            var pctCA=S.ventesNet>0?Math.round(m.ventesNet/S.ventesNet*1000)/10:0;
+            var barW=Math.round(m.ventesNet/maxMonthlyCA*100);
+            var prev=i>0?monthly[i-1]:null;
+            var delta=prev?((m.ventesNet-prev.ventesNet)/prev.ventesNet*100):0;
+            return React.createElement('tr',{key:i,style:{background:m===bestMonth?'var(--vert-light)':'transparent'}},
+              React.createElement('td',{style:{fontWeight:600}},m.mois,m===bestMonth?' ★':'',prev?React.createElement('span',{style:{fontSize:10,marginLeft:6,color:delta>=0?'var(--vert)':'var(--rouge)'}},(delta>=0?'+':'')+delta.toFixed(1)+'%'):null),
+              React.createElement('td',{style:{textAlign:'right',fontWeight:700}},eur(m.ventesNet)),
+              React.createElement('td',{style:{textAlign:'right'}},eur(htTotal)),
+              React.createElement('td',{style:{textAlign:'right'}},fmtN(m.tickets)),
+              React.createElement('td',{style:{textAlign:'right'}},fmtN(m.couverts)),
+              React.createElement('td',{style:{textAlign:'right',fontWeight:600}},eur(tmResto)),
+              React.createElement('td',{style:{textAlign:'right',fontSize:12}},eur(m.tva.taux10.tva+m.tva.taux20.tva)),
+              React.createElement('td',{style:{textAlign:'right',fontSize:12}},eur(m.interne)),
+              React.createElement('td',null,
+                React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6}},
+                  React.createElement('div',{style:{flex:1,height:16,background:'var(--gris-100)',borderRadius:4,overflow:'hidden'}},
+                    React.createElement('div',{style:{width:barW+'%',height:'100%',background:'var(--bordeaux)',borderRadius:4}})
+                  ),
+                  React.createElement('span',{style:{fontSize:11,fontWeight:600,minWidth:36}},pctCA+'%')
+                )
+              )
+            );
+          })}</tbody>
+          <tfoot>{React.createElement('tr',{style:{fontWeight:700,borderTop:'2px solid var(--gris-300)',background:'var(--gris-50)'}},
+            React.createElement('td',null,'TOTAL SAISON'),
+            React.createElement('td',{style:{textAlign:'right',color:'var(--bordeaux)'}},eur(S.ventesNet)),
+            React.createElement('td',{style:{textAlign:'right'}},eur(S.tva.taux10.ht+S.tva.taux20.ht)),
+            React.createElement('td',{style:{textAlign:'right'}},fmtN(S.tickets)),
+            React.createElement('td',{style:{textAlign:'right'}},fmtN(S.couverts)),
+            React.createElement('td',{style:{textAlign:'right'}},S.couverts>0?eur(Math.round(S.tva.taux10.ht/S.couverts)):'—'),
+            React.createElement('td',{style:{textAlign:'right',fontSize:12}},eur(S.tva.taux10.tva+S.tva.taux20.tva)),
+            React.createElement('td',{style:{textAlign:'right',fontSize:12}},eur(S.interne)),
+            React.createElement('td',null,'100%')
+          )}</tfoot>
+        </table></div>
+      </div>
+    </div>}
+
+    {/* KPI mensuels */}
+    {monthly.length>0&&<div className="kpi-g" style={{marginBottom:16}}>
+      <div className="kpi"><div className="kpi-label">Meilleur mois</div><div className="kpi-val" style={{color:'var(--vert)'}}>{bestMonth?bestMonth.mois:''}</div><div className="kpi-chg pos">{bestMonth?eur(bestMonth.ventesNet)+' net':''}</div></div>
+      <div className="kpi"><div className="kpi-label">CA moyen / mois</div><div className="kpi-val">{eur(Math.round(S.ventesNet/monthly.length))}</div><div className="kpi-chg neu">Sur {monthly.length} mois</div></div>
+      <div className="kpi"><div className="kpi-label">Croissance Fév vs Déc</div><div className="kpi-val" style={{color:monthly.length>=3&&monthly[2].ventesNet>monthly[0].ventesNet?'var(--vert)':'var(--rouge)'}}>{monthly.length>=3?((monthly[2].ventesNet-monthly[0].ventesNet)/monthly[0].ventesNet*100).toFixed(1)+'%':'—'}</div><div className="kpi-chg pos">{monthly.length>=3?eur(monthly[2].ventesNet-monthly[0].ventesNet):''}</div></div>
+      <div className="kpi"><div className="kpi-label">Couverts / mois moyen</div><div className="kpi-val">{fmtN(Math.round(S.couverts/monthly.length))}</div><div className="kpi-chg neu">{fmtN(S.couverts)} total saison</div></div>
+    </div>}
+
+    <div className="card" style={{marginBottom:16}}>
       <div className="card-h"><div><div className="card-t">Comparaison semaine vs semaine</div></div></div>
       <div className="card-b"><div className="tbl"><table>
         <thead><tr><th style={{textAlign:'left'}}>Jour</th><th style={{textAlign:'right'}}>CA S-2</th><th style={{textAlign:'right'}}>CA S-1</th><th style={{textAlign:'right'}}>Δ</th><th style={{textAlign:'right'}}>Δ%</th></tr></thead>
