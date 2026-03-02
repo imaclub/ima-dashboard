@@ -236,6 +236,34 @@
 
     @media(max-width:1100px){.cg{grid-template-columns:1fr}.kpi-g{grid-template-columns:repeat(2,1fr)}}
 
+    /* Hamburger + overlay (desktop: hidden) */
+    .burger{display:none;background:none;border:none;font-size:22px;cursor:pointer;color:var(--bordeaux);padding:4px 8px;margin-right:6px;}
+    .sidebar-overlay{display:none;}
+
+    /* ===== MOBILE ===== */
+    @media(max-width:768px){
+      :root{--sidebar-w:0px}
+      .sidebar{transform:translateX(-100%);transition:transform .3s ease;width:280px;z-index:100;}
+      .sidebar.open{transform:translateX(0);}
+      .main{margin-left:0;}
+      .burger{display:flex;align-items:center;}
+      .sidebar-overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99;}
+      .header{padding:10px 14px;flex-wrap:wrap;gap:8px;}
+      .header-l h2{font-size:15px;}
+      .header-r{width:100%;justify-content:space-between;overflow-x:auto;}
+      .per-btn{padding:4px 8px;font-size:10px;}
+      .page{padding:14px 12px;}
+      .kpi-g{grid-template-columns:repeat(2,1fr);gap:10px;}
+      .kpi{padding:12px;}
+      .kpi-val{font-size:20px;}
+      .cg{grid-template-columns:1fr;}
+      .cost-row{grid-template-columns:1fr;}
+      .fg-row{grid-template-columns:1fr;}
+      .card-b{padding:10px 14px 14px;}
+      table th,table td{padding:6px 8px;font-size:11px;}
+      .card-b{overflow-x:auto;}
+    }
+
   </style>
 </head>
 <body>
@@ -1615,15 +1643,23 @@ function Dashboard(){
   const tipsEligible=StaffRegistry.getTipsEligible();
   const hasTrivec=TrivecService.isConnected();
   const pCtx=usePeriod();
+  // Fallback to season data when no daily Trivec data
+  const tp=pCtx.trivecPeriod;
+  const useSeason=tp.days===0&&typeof TRIVEC_SEASON!=='undefined';
+  const caDisplay=useSeason?TRIVEC_SEASON.ventesNet:tp.total;
+  const couvertsDisplay=useSeason?TRIVEC_SEASON.couverts:tp.couverts;
+  const tmDisplay=couvertsDisplay>0?Math.round(caDisplay/couvertsDisplay):0;
+  const caLabel=useSeason?'Saison':'';
+  const staffPct=caDisplay>0?Math.round(pCtx.msProrata/caDisplay*1000)/10:0;
   return(<div className="fin">
-    {!hasTrivec&&<div style={{background:'var(--bleu-light)',border:'1px solid var(--bleu)',borderRadius:10,padding:16,marginBottom:20,fontSize:13,color:'var(--bleu)'}}>
+    {!hasTrivec&&!useSeason&&<div style={{background:'var(--bleu-light)',border:'1px solid var(--bleu)',borderRadius:10,padding:16,marginBottom:20,fontSize:13,color:'var(--bleu)'}}>
       <strong>Bienvenue sur le tableau de bord IMA.</strong> Les données s'afficheront automatiquement lorsque vos services seront connectés. Rendez-vous dans <strong>Administration</strong> pour configurer Pennylane, Trivec et SevenRooms.
     </div>}
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">CA ({pCtx.dates.label})</div><div className="kpi-val" style={{color:pCtx.trivecPeriod.total>0?'var(--gris-900)':'var(--gris-300)'}}>{pCtx.trivecPeriod.total>0?pCtx.trivecPeriod.total.toLocaleString('fr-FR')+'€':'—'}</div><div className={`kpi-chg ${pCtx.trivecPeriod.days>0?'pos':'neu'}`}>{pCtx.trivecPeriod.days>0?`${pCtx.trivecPeriod.days} jour(s)`:'En attente Trivec'}</div></div>
-      <div className="kpi"><div className="kpi-label">Couverts</div><div className="kpi-val" style={{color:pCtx.trivecPeriod.couverts>0?'var(--gris-900)':'var(--gris-300)'}}>{pCtx.trivecPeriod.couverts>0?pCtx.trivecPeriod.couverts.toLocaleString('fr-FR'):'—'}</div><div className={`kpi-chg ${pCtx.trivecPeriod.couverts>0?'pos':'neu'}`}>{pCtx.trivecPeriod.couverts>0?`TM: ${Math.round(pCtx.trivecPeriod.ticketMoyen)}€`:'En attente Trivec'}</div></div>
+      <div className="kpi"><div className="kpi-label">CA {useSeason?'Saison':'('+pCtx.dates.label+')'}</div><div className="kpi-val" style={{color:caDisplay>0?'var(--gris-900)':'var(--gris-300)'}}>{caDisplay>0?caDisplay.toLocaleString('fr-FR',{maximumFractionDigits:0})+'€':'—'}</div><div className={`kpi-chg ${caDisplay>0?'pos':'neu'}`}>{useSeason?'Rapport Trivec':tp.days>0?`${tp.days} jour(s)`:'En attente Trivec'}</div></div>
+      <div className="kpi"><div className="kpi-label">Couverts</div><div className="kpi-val" style={{color:couvertsDisplay>0?'var(--gris-900)':'var(--gris-300)'}}>{couvertsDisplay>0?couvertsDisplay.toLocaleString('fr-FR'):'—'}</div><div className={`kpi-chg ${couvertsDisplay>0?'pos':'neu'}`}>{couvertsDisplay>0?`TM: ${tmDisplay}€`:'En attente Trivec'}</div></div>
       <div className="kpi"><div className="kpi-label">Effectif actif</div><div className="kpi-val">{PayrollService.getEffectifActif()}</div><div className="kpi-chg neu">{tipsEligible.length} bénéf. tips</div></div>
-      <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:pCtx.trivecPeriod.total>0?(pCtx.msProrata/pCtx.trivecPeriod.total>0.3?'var(--rouge)':pCtx.msProrata/pCtx.trivecPeriod.total>0.25?'var(--orange)':'var(--vert)'):'var(--gris-300)'}}>{pCtx.trivecPeriod.total>0?Math.round(pCtx.msProrata/pCtx.trivecPeriod.total*1000)/10+'%':'—'}</div><div className="kpi-chg neu">{pCtx.trivecPeriod.total>0?`MS: ${eur(pCtx.msProrata)} / CA: ${eur(pCtx.trivecPeriod.total)}`:'CA non disponible'}</div></div>
+      <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:caDisplay>0?(staffPct>30?'var(--rouge)':staffPct>25?'var(--orange)':'var(--vert)'):'var(--gris-300)'}}>{caDisplay>0?staffPct+'%':'—'}</div><div className="kpi-chg neu">{caDisplay>0?`MS: ${eur(pCtx.msProrata)} / CA: ${eur(caDisplay)}`:'CA non disponible'}</div></div>
     </div>
     <div className="cg">
       <div className="card">
@@ -1717,11 +1753,12 @@ function Finance(){
   const groupTotals=useMemo(()=>SupplierMap.getGroupTotals(totals),[totals]);
   const totalCosts=Object.values(totals).reduce((s,v)=>s+v,0);
 
-  // CA from global period context
+  // CA from global period context — fallback to season data
   const pCtx=usePeriod();
-  const caTotal=pCtx.trivecPeriod.total;
-  const caFood=pCtx.trivecPeriod.caResto;
-  const caBar=pCtx.trivecPeriod.caClub+pCtx.trivecPeriod.caBar;
+  const _useSeason=pCtx.trivecPeriod.days===0&&typeof TRIVEC_SEASON!=='undefined';
+  const caTotal=_useSeason?TRIVEC_SEASON.ventesNet:pCtx.trivecPeriod.total;
+  const caFood=_useSeason?TRIVEC_SEASON.categories.find(c=>c.nom==='Nourriture')?.montant||0:pCtx.trivecPeriod.caResto;
+  const caBar=_useSeason?(TRIVEC_SEASON.categories.find(c=>c.nom==='Boissons Alcoolisées')?.montant||0)+(TRIVEC_SEASON.categories.find(c=>c.nom==='Boissons Sans Alcool')?.montant||0):(pCtx.trivecPeriod.caClub+pCtx.trivecPeriod.caBar);
 
   // Staff cost prorated to period
   const realStaffCost=pCtx.msProrata;
@@ -3336,17 +3373,47 @@ function CRMPage(){
   </div>);
 }
 
+// ===== DONNÉES SAISON TRIVEC (04/12/2025 → 02/03/2026) =====
+const TRIVEC_SEASON={
+  periode:{from:'04/12/2025',to:'02/03/2026',label:'Saison 2025-2026'},
+  tickets:16110,couverts:4083,
+  ventesBrut:1521753.35,ventesNet:1358912.84,
+  cashIn:27443.00,cashOut:0,horsVentes:0,interne:135397.51,
+  categories:[
+    {nom:'Boissons Alcoolisées',montant:965329.45,pct:63.5},
+    {nom:'Boissons Sans Alcool',montant:280112.38,pct:18.4},
+    {nom:'Nourriture',montant:248868.52,pct:16.4},
+    {nom:'Divers',montant:27443.00,pct:1.8}
+  ],
+  tva:{
+    taux10:{ttc:471338.66,ht:428489.69,tva:42848.97},
+    taux20:{ttc:887574.18,ht:739645.15,tva:147929.03}
+  },
+  paiements:{
+    total:1397342.81,
+    details:[
+      {mode:'CB',transactions:14242,montant:1045825.47,tips:44636.83},
+      {mode:'Amex',transactions:397,montant:169820.53,tips:16538.85},
+      {mode:'Espèces',transactions:2397,montant:161165.81,tips:1146.30},
+      {mode:'Compte Client',transactions:55,montant:47580.00,tips:0},
+      {mode:'Virement',transactions:5,montant:12085.00,tips:0},
+      {mode:'SevenRoom',transactions:16,montant:8446.00,tips:0}
+    ]
+  },
+  tipsTotal:62321.98
+};
+
 // ===== POS =====
 function POSPage(){
   const hasTrivec=TrivecService.isConnected();
   const allDays=TrivecService.getAllDays();
   const pCtx=usePeriod();
+  const[tab,setTab]=useState('saison');
+  const S=TRIVEC_SEASON;
 
-  // Today's date in dd/mm/yyyy format
   const now=new Date();
   const todayStr=String(now.getDate()).padStart(2,'0')+'/'+String(now.getMonth()+1).padStart(2,'0')+'/'+now.getFullYear();
 
-  // Filter days based on global period context
   const filteredDays=useMemo(()=>{
     const entries=Object.entries(allDays);
     return entries.filter(([dateStr])=>{
@@ -3356,93 +3423,192 @@ function POSPage(){
     });
   },[allDays,pCtx.dates]);
 
-  // Use aggregated data from period context
   const agg=pCtx.trivecPeriod;
-  const periodLabel=pCtx.dates.label;
-
-  // For the detail card, show the day data if viewing a single day
   const dayDetail=pCtx.mode==='jour'?allDays[todayStr]:null;
 
+  const ticketMoyen=S.couverts>0?Math.round(S.ventesNet/S.couverts):0;
+  const paiMax=Math.max(...S.paiements.details.map(p=>p.montant));
+
   return(<div className="fin">
-    {!hasTrivec&&<div style={{background:'var(--bleu-light)',border:'1px solid var(--bleu)',borderRadius:10,padding:16,marginBottom:20,fontSize:13,color:'var(--bleu)'}}>
-      <strong>Caisses Trivec</strong> — Importez les fichiers Excel Trivec dans Administration pour voir les données.
-    </div>}
-
-    <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">CA ({pCtx.dates.label})</div><div className="kpi-val" style={{color:agg.total>0?'var(--gris-900)':'var(--gris-300)'}}>{agg.total>0?agg.total.toLocaleString('fr-FR')+'€':'0€'}</div><div className={`kpi-chg ${agg.days>0?'pos':'neu'}`}>{agg.days>0?`${agg.days} jour(s)`:'Aucune donnée'}</div></div>
-      <div className="kpi"><div className="kpi-label">Ticket moyen</div><div className="kpi-val" style={{color:agg.ticketMoyen>0?'var(--gris-900)':'var(--gris-300)'}}>{agg.ticketMoyen>0?Math.round(agg.ticketMoyen)+'€':'0€'}</div><div className={`kpi-chg ${agg.ticketMoyen>0?'pos':'neu'}`}>{agg.ticketMoyen>0?'Restaurant':'—'}</div></div>
-      <div className="kpi"><div className="kpi-label">Couverts</div><div className="kpi-val" style={{color:agg.couverts>0?'var(--gris-900)':'var(--gris-300)'}}>{agg.couverts>0?agg.couverts.toLocaleString('fr-FR'):'0'}</div><div className={`kpi-chg ${agg.couverts>0?'pos':'neu'}`}>{agg.couverts>0?'Tous départements':'—'}</div></div>
-      <div className="kpi"><div className="kpi-label">CB / Espèces / Amex</div><div className="kpi-val" style={{fontSize:agg.total>0?14:24,color:agg.total>0?'var(--gris-900)':'var(--gris-300)'}}>{agg.total>0?`${Math.round(agg.cb).toLocaleString('fr-FR')}€ / ${Math.round(agg.especes).toLocaleString('fr-FR')}€ / ${Math.round(agg.amex).toLocaleString('fr-FR')}€`:'0€'}</div><div className={`kpi-chg ${agg.total>0?'pos':'neu'}`}>{agg.total>0?'Paiements':'—'}</div></div>
+    <div className="tabs" style={{marginBottom:16}}>
+      <div className={`tab ${tab==='saison'?'active':''}`} onClick={()=>setTab('saison')}>Bilan Saison</div>
+      <div className={`tab ${tab==='journalier'?'active':''}`} onClick={()=>setTab('journalier')}>Suivi Journalier</div>
     </div>
 
-    {pCtx.mode==='jour'&&!dayDetail&&hasTrivec&&<div style={{background:'var(--orange-light)',border:'1px solid var(--orange)',borderRadius:10,padding:16,marginBottom:16,fontSize:13,color:'var(--orange)'}}>
-      <strong>Pas de données pour le {todayStr}.</strong> La journée n'a pas encore été clôturée ou le fichier Trivec n'a pas été importé. La clôture a lieu à 18h.
-    </div>}
+    {tab==='saison'&&<div>
+      <div style={{background:'var(--bleu-light)',border:'1px solid var(--bleu)',borderRadius:10,padding:14,marginBottom:18,fontSize:12,color:'var(--bleu)',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+        <div><strong>Rapport Trivec</strong> — {S.periode.label} (04 déc. 2025 → 02 mars 2026)</div>
+        <span style={{fontSize:11,opacity:.7}}>{S.tickets.toLocaleString('fr-FR')} tickets</span>
+      </div>
 
-    {dayDetail&&<div className="card" style={{marginBottom:16}}>
-      <div className="card-h"><div><div className="card-t">Détail — {todayStr}</div></div><span className="badge b-ok">Trivec</span></div>
-      <div className="card-b">
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16,marginBottom:16}}>
-          {[{l:'Restaurant',v:dayDetail.ventes?.restaurant,c:dayDetail.couverts?.restaurant},{l:'Club',v:dayDetail.ventes?.club,c:dayDetail.couverts?.club},{l:'Bar',v:dayDetail.ventes?.bar,c:dayDetail.couverts?.bar}].map((dept,i)=>
-            <div key={i} style={{padding:14,background:'var(--gris-50)',borderRadius:8,textAlign:'center'}}>
-              <div style={{fontSize:10,color:'var(--gris-500)',textTransform:'uppercase',fontWeight:600}}>{dept.l}</div>
-              <div style={{fontSize:20,fontWeight:700,color:'var(--bordeaux)'}}>{(dept.v||0).toLocaleString('fr-FR')}€</div>
-              <div style={{fontSize:11,color:'var(--gris-500)'}}>{dept.c?.total||0} couverts{dept.c?.avgCover?' — TM '+Math.round(dept.c.avgCover)+'€':''}</div>
-            </div>
-          )}
-        </div>
-        <div style={{fontSize:12,fontWeight:600,marginBottom:8}}>Paiements</div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8,fontSize:11}}>
-          {[{l:'Espèces',v:dayDetail.paiements?.especes},{l:'CB',v:dayDetail.paiements?.cb},{l:'Amex',v:dayDetail.paiements?.amex},{l:'Aucun',v:dayDetail.paiements?.aucun},{l:'SevenRoom',v:dayDetail.paiements?.sevenroom}].map((p,i)=>
-            <div key={i} style={{padding:8,background:'var(--gris-50)',borderRadius:6,textAlign:'center'}}>
-              <div style={{color:'var(--gris-500)',fontSize:9}}>{p.l}</div>
-              <div style={{fontWeight:600}}>{(p.v||0).toLocaleString('fr-FR')}€</div>
-            </div>
-          )}
-        </div>
-        {dayDetail.internes?.details?.length>0&&<div style={{marginTop:12}}>
-          <div style={{fontSize:12,fontWeight:600,marginBottom:6}}>Comptes internes ({(dayDetail.internes?.total||0).toLocaleString('fr-FR')}€)</div>
-          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-            {dayDetail.internes.details.map((c,i)=><div key={i} style={{padding:'3px 8px',background:'var(--orange-light)',borderRadius:4,fontSize:10}}>{c.nom}: {c.montant}€</div>)}
+      <div className="kpi-g">
+        <div className="kpi"><div className="kpi-label">Ventes Brut</div><div className="kpi-val">{S.ventesBrut.toLocaleString('fr-FR',{maximumFractionDigits:0})}€</div><div className="kpi-chg pos">Saison complète</div></div>
+        <div className="kpi"><div className="kpi-label">Ventes Net</div><div className="kpi-val" style={{color:'var(--vert)'}}>{S.ventesNet.toLocaleString('fr-FR',{maximumFractionDigits:0})}€</div><div className="kpi-chg pos">- internes & cash in</div></div>
+        <div className="kpi"><div className="kpi-label">Couverts</div><div className="kpi-val">{S.couverts.toLocaleString('fr-FR')}</div><div className="kpi-chg pos">TM : {ticketMoyen}€</div></div>
+        <div className="kpi"><div className="kpi-label">Tips</div><div className="kpi-val" style={{color:'var(--bordeaux)'}}>{S.tipsTotal.toLocaleString('fr-FR',{maximumFractionDigits:0})}€</div><div className="kpi-chg pos">{S.tickets.toLocaleString('fr-FR')} tickets</div></div>
+      </div>
+
+      {/* Catégories de vente */}
+      <div className="card" style={{marginBottom:16}}>
+        <div className="card-h"><div><div className="card-t">Répartition par catégorie</div><div className="card-st">Ventes Brut — {S.ventesBrut.toLocaleString('fr-FR')}€</div></div></div>
+        <div className="card-b">
+          <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:12}}>
+            {S.categories.map((c,i)=>{
+              const colors=['var(--bordeaux)','var(--bleu)','var(--vert)','var(--gris-500)'];
+              return(<div key={i} style={{padding:14,background:'var(--gris-50)',borderRadius:8}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                  <span style={{fontSize:12,fontWeight:600,color:'var(--gris-700)'}}>{c.nom}</span>
+                  <span style={{fontSize:11,color:colors[i],fontWeight:600}}>{c.pct}%</span>
+                </div>
+                <div style={{fontSize:18,fontWeight:700,color:colors[i]}}>{c.montant.toLocaleString('fr-FR',{maximumFractionDigits:0})}€</div>
+                <div style={{marginTop:6,height:4,background:'var(--gris-200)',borderRadius:2}}>
+                  <div style={{height:4,borderRadius:2,background:colors[i],width:c.pct+'%'}}/>
+                </div>
+              </div>);
+            })}
           </div>
-        </div>}
+        </div>
       </div>
-    </div>}
 
-    {pCtx.mode!=='jour'&&agg.days>0&&<div className="card" style={{marginBottom:16}}>
-      <div className="card-h"><div><div className="card-t">Répartition CA — {periodLabel}</div></div></div>
-      <div className="card-b">
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16}}>
-          {[{l:'Restaurant',v:agg.caResto,pct:agg.total>0?(agg.caResto/agg.total*100):0},{l:'Club',v:agg.caClub,pct:agg.total>0?(agg.caClub/agg.total*100):0},{l:'Bar',v:agg.caBar,pct:agg.total>0?(agg.caBar/agg.total*100):0}].map((dept,i)=>
-            <div key={i} style={{padding:14,background:'var(--gris-50)',borderRadius:8,textAlign:'center'}}>
-              <div style={{fontSize:10,color:'var(--gris-500)',textTransform:'uppercase',fontWeight:600}}>{dept.l}</div>
-              <div style={{fontSize:20,fontWeight:700,color:'var(--bordeaux)'}}>{dept.v.toLocaleString('fr-FR')}€</div>
-              <div style={{fontSize:11,color:'var(--gris-500)'}}>{dept.pct.toFixed(1)}% du CA</div>
-            </div>
-          )}
+      {/* Modes de paiement */}
+      <div className="card" style={{marginBottom:16}}>
+        <div className="card-h"><div><div className="card-t">Modes de paiement</div><div className="card-st">{S.paiements.total.toLocaleString('fr-FR')}€ encaissés</div></div><span className="badge b-ok">{S.paiements.details.reduce((s,p)=>s+p.transactions,0).toLocaleString('fr-FR')} transactions</span></div>
+        <div className="card-b">
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            {S.paiements.details.map((p,i)=>{
+              const pct=S.paiements.total>0?(p.montant/S.paiements.total*100):0;
+              return(<div key={i} style={{display:'flex',alignItems:'center',gap:12}}>
+                <div style={{width:110,fontSize:12,fontWeight:600,color:'var(--gris-700)',flexShrink:0}}>{p.mode}</div>
+                <div style={{flex:1,position:'relative'}}>
+                  <div style={{height:24,background:'var(--gris-100)',borderRadius:4,overflow:'hidden'}}>
+                    <div style={{height:'100%',background:i===0?'var(--bordeaux)':i===1?'var(--orange)':i===2?'var(--vert)':'var(--bleu)',borderRadius:4,width:(p.montant/paiMax*100)+'%',transition:'width .3s'}}/>
+                  </div>
+                </div>
+                <div style={{width:100,textAlign:'right',fontSize:13,fontWeight:700}}>{p.montant.toLocaleString('fr-FR',{maximumFractionDigits:0})}€</div>
+                <div style={{width:50,textAlign:'right',fontSize:10,color:'var(--gris-500)'}}>{pct.toFixed(1)}%</div>
+                <div style={{width:60,textAlign:'right',fontSize:10,color:'var(--gris-400)'}}>{p.transactions.toLocaleString('fr-FR')}</div>
+              </div>);
+            })}
+          </div>
+          {/* Tips detail */}
+          <div style={{marginTop:16,padding:12,background:'var(--gris-50)',borderRadius:8,display:'flex',gap:16,flexWrap:'wrap',fontSize:11}}>
+            <div style={{fontWeight:600,color:'var(--gris-600)'}}>Tips par mode :</div>
+            {S.paiements.details.filter(p=>p.tips>0).map((p,i)=>
+              <div key={i}><span style={{color:'var(--gris-500)'}}>{p.mode}</span> <strong>{p.tips.toLocaleString('fr-FR')}€</strong></div>
+            )}
+            <div style={{marginLeft:'auto',fontWeight:700,color:'var(--bordeaux)'}}>Total tips : {S.tipsTotal.toLocaleString('fr-FR')}€</div>
+          </div>
+        </div>
+      </div>
+
+      {/* TVA */}
+      <div className="card" style={{marginBottom:16}}>
+        <div className="card-h"><div><div className="card-t">Rapport TVA</div><div className="card-st">Ventes Net {S.ventesNet.toLocaleString('fr-FR')}€</div></div></div>
+        <div className="card-b">
+          <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:16}}>
+            {[{label:'TVA 10% (Nourriture & SS Alcool)',data:S.tva.taux10,color:'var(--vert)'},{label:'TVA 20% (Boissons Alcoolisées)',data:S.tva.taux20,color:'var(--bordeaux)'}].map((t,i)=>
+              <div key={i} style={{padding:14,background:'var(--gris-50)',borderRadius:8}}>
+                <div style={{fontSize:11,fontWeight:600,color:t.color,marginBottom:10}}>{t.label}</div>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:4,fontSize:12}}>
+                  <span style={{color:'var(--gris-500)'}}>TTC</span><strong>{t.data.ttc.toLocaleString('fr-FR')}€</strong>
+                </div>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:4,fontSize:12}}>
+                  <span style={{color:'var(--gris-500)'}}>HT</span><strong>{t.data.ht.toLocaleString('fr-FR')}€</strong>
+                </div>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:12,paddingTop:6,borderTop:'1px solid var(--gris-200)'}}>
+                  <span style={{color:'var(--gris-500)'}}>TVA collectée</span><strong style={{color:t.color}}>{t.data.tva.toLocaleString('fr-FR')}€</strong>
+                </div>
+              </div>
+            )}
+          </div>
+          <div style={{marginTop:12,padding:10,background:'var(--gris-50)',borderRadius:8,display:'flex',justifyContent:'space-between',fontSize:12}}>
+            <span style={{fontWeight:600}}>Total TVA collectée</span>
+            <strong style={{color:'var(--bordeaux)'}}>{(S.tva.taux10.tva+S.tva.taux20.tva).toLocaleString('fr-FR')}€</strong>
+          </div>
+        </div>
+      </div>
+
+      {/* Résumé financier */}
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Synthèse financière</div><div className="card-st">Du brut au net</div></div></div>
+        <div className="card-b">
+          <div style={{fontSize:12}}>
+            {[
+              {l:'Total commandes',v:S.ventesBrut,bold:true,color:'var(--gris-900)'},
+              {l:'— Cash IN',v:-S.cashIn,bold:false,color:'var(--gris-500)'},
+              {l:'— Interne',v:-S.interne,bold:false,color:'var(--gris-500)'},
+              {l:'Ventes Net',v:S.ventesNet,bold:true,color:'var(--vert)',sep:true}
+            ].map((r,i)=>
+              <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderTop:r.sep?'2px solid var(--gris-200)':i>0?'1px solid var(--gris-100)':'none'}}>
+                <span style={{fontWeight:r.bold?700:400,color:r.color}}>{r.l}</span>
+                <span style={{fontWeight:r.bold?700:400,color:r.color}}>{r.v.toLocaleString('fr-FR',{maximumFractionDigits:2})}€</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>}
 
-    <div className="card">
-      <div className="card-h"><div><div className="card-t">Historique journalier</div><div className="card-st">Trivec POS</div></div>{hasTrivec?<span className="badge b-ok">{filteredDays.length} jour(s)</span>:<span className="badge b-warn">Non connecté</span>}</div>
-      <div className="card-b">
-        {filteredDays.length>0?<table className="t-table"><thead><tr><th>Date</th><th style={{textAlign:'right'}}>CA Total</th><th style={{textAlign:'right'}}>Restaurant</th><th style={{textAlign:'right'}}>Club</th><th style={{textAlign:'right'}}>Bar</th><th style={{textAlign:'right'}}>Couverts</th><th style={{textAlign:'right'}}>TM Resto</th></tr></thead>
-        <tbody>{filteredDays.sort((a,b)=>{const pa=a[0].split('/').reverse().join('');const pb=b[0].split('/').reverse().join('');return pb.localeCompare(pa);}).map(([date,d])=>
-          <tr key={date}><td style={{fontWeight:500}}>{date}</td>
-            <td style={{textAlign:'right',fontWeight:600}}>{(d.caTotal||0).toLocaleString('fr-FR')}€</td>
-            <td style={{textAlign:'right'}}>{(d.ventes?.restaurant||0).toLocaleString('fr-FR')}€</td>
-            <td style={{textAlign:'right'}}>{(d.ventes?.club||0).toLocaleString('fr-FR')}€</td>
-            <td style={{textAlign:'right'}}>{(d.ventes?.bar||0).toLocaleString('fr-FR')}€</td>
-            <td style={{textAlign:'right'}}>{(d.couverts?.restaurant?.total||0)+(d.couverts?.club?.total||0)+(d.couverts?.bar?.total||0)}</td>
-            <td style={{textAlign:'right'}}>{Math.round(d.couverts?.restaurant?.avgCover||0)}€</td>
-          </tr>
-        )}</tbody></table>:
-        <div style={{padding:40,textAlign:'center',color:'var(--gris-400)',fontSize:12}}>
-          {hasTrivec?`Aucune donnée pour cette période (${pCtx.dates.label})`:'Importez les fichiers Trivec dans Administration'}
-        </div>}
+    {tab==='journalier'&&<div>
+      {!hasTrivec&&<div style={{background:'var(--bleu-light)',border:'1px solid var(--bleu)',borderRadius:10,padding:16,marginBottom:20,fontSize:13,color:'var(--bleu)'}}>
+        <strong>Caisses Trivec</strong> — Importez les fichiers Excel Trivec dans Administration ou connectez l'API pour voir les données journalières.
+      </div>}
+
+      <div className="kpi-g">
+        <div className="kpi"><div className="kpi-label">CA ({pCtx.dates.label})</div><div className="kpi-val" style={{color:agg.total>0?'var(--gris-900)':'var(--gris-300)'}}>{agg.total>0?agg.total.toLocaleString('fr-FR')+'€':'0€'}</div><div className={`kpi-chg ${agg.days>0?'pos':'neu'}`}>{agg.days>0?`${agg.days} jour(s)`:'En attente API'}</div></div>
+        <div className="kpi"><div className="kpi-label">Ticket moyen</div><div className="kpi-val" style={{color:agg.ticketMoyen>0?'var(--gris-900)':'var(--gris-300)'}}>{agg.ticketMoyen>0?Math.round(agg.ticketMoyen)+'€':'0€'}</div><div className={`kpi-chg ${agg.ticketMoyen>0?'pos':'neu'}`}>{agg.ticketMoyen>0?'Restaurant':'—'}</div></div>
+        <div className="kpi"><div className="kpi-label">Couverts</div><div className="kpi-val" style={{color:agg.couverts>0?'var(--gris-900)':'var(--gris-300)'}}>{agg.couverts>0?agg.couverts.toLocaleString('fr-FR'):'0'}</div><div className={`kpi-chg ${agg.couverts>0?'pos':'neu'}`}>{agg.couverts>0?'Tous départements':'—'}</div></div>
+        <div className="kpi"><div className="kpi-label">CB / Espèces / Amex</div><div className="kpi-val" style={{fontSize:agg.total>0?14:24,color:agg.total>0?'var(--gris-900)':'var(--gris-300)'}}>{agg.total>0?`${Math.round(agg.cb).toLocaleString('fr-FR')}€ / ${Math.round(agg.especes).toLocaleString('fr-FR')}€ / ${Math.round(agg.amex).toLocaleString('fr-FR')}€`:'0€'}</div><div className={`kpi-chg ${agg.total>0?'pos':'neu'}`}>{agg.total>0?'Paiements':'—'}</div></div>
       </div>
-    </div>
+
+      {pCtx.mode==='jour'&&!dayDetail&&hasTrivec&&<div style={{background:'var(--orange-light)',border:'1px solid var(--orange)',borderRadius:10,padding:16,marginBottom:16,fontSize:13,color:'var(--orange)'}}>
+        <strong>Pas de données pour le {todayStr}.</strong> La journée n'a pas encore été clôturée ou le fichier Trivec n'a pas été importé.
+      </div>}
+
+      {dayDetail&&<div className="card" style={{marginBottom:16}}>
+        <div className="card-h"><div><div className="card-t">Détail — {todayStr}</div></div><span className="badge b-ok">Trivec</span></div>
+        <div className="card-b">
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16,marginBottom:16}}>
+            {[{l:'Restaurant',v:dayDetail.ventes?.restaurant,c:dayDetail.couverts?.restaurant},{l:'Club',v:dayDetail.ventes?.club,c:dayDetail.couverts?.club},{l:'Bar',v:dayDetail.ventes?.bar,c:dayDetail.couverts?.bar}].map((dept,i)=>
+              <div key={i} style={{padding:14,background:'var(--gris-50)',borderRadius:8,textAlign:'center'}}>
+                <div style={{fontSize:10,color:'var(--gris-500)',textTransform:'uppercase',fontWeight:600}}>{dept.l}</div>
+                <div style={{fontSize:20,fontWeight:700,color:'var(--bordeaux)'}}>{(dept.v||0).toLocaleString('fr-FR')}€</div>
+                <div style={{fontSize:11,color:'var(--gris-500)'}}>{dept.c?.total||0} couverts{dept.c?.avgCover?' — TM '+Math.round(dept.c.avgCover)+'€':''}</div>
+              </div>
+            )}
+          </div>
+          <div style={{fontSize:12,fontWeight:600,marginBottom:8}}>Paiements</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8,fontSize:11}}>
+            {[{l:'Espèces',v:dayDetail.paiements?.especes},{l:'CB',v:dayDetail.paiements?.cb},{l:'Amex',v:dayDetail.paiements?.amex},{l:'Aucun',v:dayDetail.paiements?.aucun},{l:'SevenRoom',v:dayDetail.paiements?.sevenroom}].map((p,i)=>
+              <div key={i} style={{padding:8,background:'var(--gris-50)',borderRadius:6,textAlign:'center'}}>
+                <div style={{color:'var(--gris-500)',fontSize:9}}>{p.l}</div>
+                <div style={{fontWeight:600}}>{(p.v||0).toLocaleString('fr-FR')}€</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>}
+
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Historique journalier</div><div className="card-st">Trivec POS</div></div>{hasTrivec?<span className="badge b-ok">{filteredDays.length} jour(s)</span>:<span className="badge b-warn">En attente API</span>}</div>
+        <div className="card-b">
+          {filteredDays.length>0?<table className="t-table"><thead><tr><th>Date</th><th style={{textAlign:'right'}}>CA Total</th><th style={{textAlign:'right'}}>Restaurant</th><th style={{textAlign:'right'}}>Club</th><th style={{textAlign:'right'}}>Bar</th><th style={{textAlign:'right'}}>Couverts</th><th style={{textAlign:'right'}}>TM Resto</th></tr></thead>
+          <tbody>{filteredDays.sort((a,b)=>{const pa=a[0].split('/').reverse().join('');const pb=b[0].split('/').reverse().join('');return pb.localeCompare(pa);}).map(([date,d])=>
+            <tr key={date}><td style={{fontWeight:500}}>{date}</td>
+              <td style={{textAlign:'right',fontWeight:600}}>{(d.caTotal||0).toLocaleString('fr-FR')}€</td>
+              <td style={{textAlign:'right'}}>{(d.ventes?.restaurant||0).toLocaleString('fr-FR')}€</td>
+              <td style={{textAlign:'right'}}>{(d.ventes?.club||0).toLocaleString('fr-FR')}€</td>
+              <td style={{textAlign:'right'}}>{(d.ventes?.bar||0).toLocaleString('fr-FR')}€</td>
+              <td style={{textAlign:'right'}}>{(d.couverts?.restaurant?.total||0)+(d.couverts?.club?.total||0)+(d.couverts?.bar?.total||0)}</td>
+              <td style={{textAlign:'right'}}>{Math.round(d.couverts?.restaurant?.avgCover||0)}€</td>
+            </tr>
+          )}</tbody></table>:
+          <div style={{padding:40,textAlign:'center',color:'var(--gris-400)',fontSize:12}}>
+            {hasTrivec?`Aucune donnée pour cette période (${pCtx.dates.label})`:'Les données journalières seront disponibles après connexion API Trivec'}
+          </div>}
+        </div>
+      </div>
+    </div>}
   </div>);
 }
 
@@ -4294,6 +4460,7 @@ function PeriodProvider({children}){
 function AppInner(){
   const[currentUser,setCurrentUser]=useState(()=>UserManager.getCurrentUser());
   const[page,setPage]=useState('dashboard');
+  const[sidebarOpen,setSidebarOpen]=useState(false);
   const pCtx=usePeriod();
 
   const handleLogin=(user)=>{setCurrentUser({id:user.id,nom:user.nom,email:user.email,role:user.role});};
@@ -4330,14 +4497,15 @@ function AppInner(){
 
   return(
     <div className="app">
-      <aside className="sidebar">
+      {sidebarOpen&&<div className="sidebar-overlay" onClick={()=>setSidebarOpen(false)}/>}
+      <aside className={`sidebar${sidebarOpen?' open':''}`}>
         <div className="sidebar-logo"><h1>IMa</h1><span>Tour de contrôle</span></div>
         <nav className="sidebar-nav">
           {nav.map(s=>(
             <div className="nav-sec" key={s.sec}>
               <div className="nav-sec-title">{s.sec}</div>
               {s.items.map(it=>(
-                <div key={it.id} className={`nav-item ${page===it.id?'active':''}`} onClick={()=>setPage(it.id)}>
+                <div key={it.id} className={`nav-item ${page===it.id?'active':''}`} onClick={()=>{setPage(it.id);setSidebarOpen(false);}}>
                   {it.ic}{it.l}
                 </div>
               ))}
@@ -4352,7 +4520,7 @@ function AppInner(){
       </aside>
       <main className="main">
         <header className="header">
-          <div className="header-l"><h2>{titles[page]}</h2><span className="bc">{pCtx.dates.label}</span></div>
+          <div className="header-l"><button className="burger" onClick={()=>setSidebarOpen(!sidebarOpen)}>&#9776;</button><h2>{titles[page]}</h2><span className="bc">{pCtx.dates.label}</span></div>
           <div className="header-r">
             <div className="per">
               {[{k:'jour',l:'Jour'},{k:'semaine',l:'Semaine'},{k:'mois',l:'Mois'},{k:'annee',l:'Année'},{k:'custom',l:'Période'}].map(p=>(
