@@ -269,7 +269,7 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const{useState,useEffect,useMemo}=React;
+const{useState,useEffect,useMemo,useCallback}=React;
 
 // ===== SVG ICONS =====
 const I={
@@ -4020,9 +4020,22 @@ const MENU_PRICES={
   "Valpolicella Imperfecto 75cl":{prix:95,cat:'vin_rouge',tva:20},
   "Barolo Trediberri 75cl":{prix:95,cat:'vin_rouge',tva:20},
   // ===== FOOD — MEZZE =====
+  // Prix combo: par 3 = 28€, par 5 = 48€, par 7 = 68€ → prix unitaire estimé ≈ 9.33€ TTC
   "Mezze par 3":{prix:28,cat:'mezze',tva:10},
   "Mezze par 5":{prix:48,cat:'mezze',tva:10},
   "Mezze par 7":{prix:68,cat:'mezze',tva:10},
+  // Mezze individuels — prix imputé du combo (28/3 ≈ 9.33€ TTC par item)
+  // Noms Trivec exacts
+  "Mousseline . B":{prix:9.33,cat:'mezze',tva:10},
+  "Mousseline Betterave":{prix:9.33,cat:'mezze',tva:10},
+  "Fatteh":{prix:9.33,cat:'mezze',tva:10},
+  "Moutabal":{prix:9.33,cat:'mezze',tva:10},
+  "Feta & Dukkah":{prix:9.33,cat:'mezze',tva:10},
+  "Feta & Dukkah ENFANT":{prix:9.33,cat:'mezze',tva:10},
+  "Muhammra":{prix:9.33,cat:'mezze',tva:10},
+  "Muhammara":{prix:9.33,cat:'mezze',tva:10},
+  "Falafels":{prix:9.33,cat:'mezze',tva:10},
+  "Patate Douce Rôtie":{prix:9.33,cat:'mezze',tva:10},
   // ===== FOOD — CAVIAR =====
   "Caviar Shadi 30g":{prix:95,cat:'caviar',tva:10},
   "Caviar Shadi 50g":{prix:170,cat:'caviar',tva:10},
@@ -4067,6 +4080,54 @@ const MENU_PRICES={
   "Mille Feuilles":{prix:18,cat:'dessert',tva:10},
   "Rose Achta":{prix:15,cat:'dessert',tva:10},
   "Chocolate Mousse":{prix:26,cat:'dessert',tva:10},
+  "Mousse chocolat":{prix:26,cat:'dessert',tva:10},
+  "Mille Feuille":{prix:18,cat:'dessert',tva:10},
+  "Mille feuille":{prix:18,cat:'dessert',tva:10},
+  "Glace pistache":{prix:15,cat:'dessert',tva:10},
+  "Glace Achta":{prix:15,cat:'dessert',tva:10},
+  "fruit givré":{prix:15,cat:'dessert',tva:10},
+  // Noms Trivec pour plats
+  "Poulpe Aux Epices":{prix:37,cat:'plat',tva:10},
+  "Poulet Rôti aux Clémentines":{prix:36,cat:'plat',tva:10},
+  "Daurade a la rose":{prix:36,cat:'plat',tva:10},
+  "Daurade à La Rose":{prix:36,cat:'plat',tva:10},
+  "Shish taouk":{prix:28,cat:'plat',tva:10},
+  "Shish taouk ENFANT":{prix:28,cat:'plat',tva:10},
+  "Shish-Taouk":{prix:28,cat:'plat',tva:10},
+  "Kefta Wagyu":{prix:38,cat:'plat',tva:10},
+  "choux fleur roti":{prix:27,cat:'plat',tva:10},
+  "Aubergines au Wagyu":{prix:34,cat:'plat',tva:10},
+  "Tomahawk Black angus":{prix:0,cat:'plat',tva:10},
+  "Epaule d'Agneau":{prix:0,cat:'plat',tva:10},
+  "Poisson du jour":{prix:0,cat:'plat',tva:10},
+  // Noms Trivec pour entrées
+  "Houmous wagyu":{prix:28,cat:'entree',tva:10},
+  "Houmous Wagyu & Labneh Zaatar":{prix:28,cat:'entree',tva:10},
+  "Labneh wagyu":{prix:28,cat:'entree',tva:10},
+  "Labney Wagyu":{prix:28,cat:'entree',tva:10},
+  "Salade Epinard":{prix:18,cat:'entree',tva:10},
+  "Salade Fattouche":{prix:18,cat:'entree',tva:10},
+  "IMA'artichoke":{prix:19,cat:'entree',tva:10},
+  "Man'ouché à L'Agneau":{prix:25,cat:'entree',tva:10},
+  "Tartare de Bœuf":{prix:29,cat:'entree',tva:10},
+  "Soupe pistaches":{prix:26,cat:'soupe',tva:10},
+  // Noms Trivec pour accompagnements
+  "Purée Patate .D":{prix:10,cat:'accompagnement',tva:10},
+  "Compoté Aubergine":{prix:10,cat:'accompagnement',tva:10},
+  "Compoté Aubé":{prix:10,cat:'accompagnement',tva:10},
+  "Salade Épinard SIDE":{prix:10,cat:'accompagnement',tva:10},
+  "Riz au Safran":{prix:10,cat:'accompagnement',tva:10},
+  // Noms Trivec pour pains
+  "Pain Libanais":{prix:3,cat:'pain',tva:10},
+  "Pain Pita":{prix:3,cat:'pain',tva:10},
+  "Pain Yemenite":{prix:4,cat:'pain',tva:10},
+  "Bread basket":{prix:12,cat:'pain',tva:10},
+  // Noms Trivec pour caviar
+  "Caviar 30gr":{prix:95,cat:'caviar',tva:10},
+  "Caviar 50gr":{prix:170,cat:'caviar',tva:10},
+  "Caviar 125gr":{prix:390,cat:'caviar',tva:10},
+  // Noms Trivec pour latkes
+  "Latkes":{prix:55,cat:'entree',tva:10},
   // ===== CLUB — CHAMPAGNES ROSÉ =====
   "PJ Belle Époque Rosé Club 75cl":{prix:1120,cat:'club_champagne',tva:20},
   "Krug Rosé Club 75cl":{prix:1150,cat:'club_champagne',tva:20},
@@ -5367,18 +5428,20 @@ function MenuEngineering(){
     }
     // Merge with RecipeCosts for food cost per unit and MENU_PRICES
     return Object.values(pMap).filter(function(p){return p.totalQty>0;}).map(function(p){
-      var prixMoyen=p.totalCA/p.totalQty;
+      var prixMoyenTrivec=p.totalCA/p.totalQty;
       var costUnit=RecipeCosts[p.nom];
       if(costUnit===undefined||costUnit===null)costUnit=null;
       // Look up menu price (TTC)
       var mp=MENU_PRICES[p.nom]||null;
       var prixCarteTTC=mp?mp.prix:null;
       var tvaRate=mp?mp.tva:10;
-      var prixCarteHT=prixCarteTTC?prixCarteTTC/(1+tvaRate/100):null;
-      var marginPct=costUnit!==null&&prixMoyen>0?((prixMoyen-costUnit)/prixMoyen)*100:null;
-      var marginTheorique=costUnit!==null&&prixCarteHT?((prixCarteHT-costUnit)/prixCarteHT)*100:null;
+      var prixCarteHT=prixCarteTTC&&prixCarteTTC>0?prixCarteTTC/(1+tvaRate/100):null;
+      // Prix de vente effectif = prix carte HT si disponible, sinon prix moyen Trivec
+      // Le prix carte est plus fiable (Trivec split les combos et fausse le prix moyen)
+      var prixVente=prixCarteHT||prixMoyenTrivec;
+      var marginPct=costUnit!==null&&prixVente>0?((prixVente-costUnit)/prixVente)*100:null;
       var totalCost=costUnit!==null?costUnit*p.totalQty:null;
-      return{nom:p.nom,cat:p.cat1,cat2:p.cat2,qty:p.totalQty,ca:p.totalCA,prixMoyen:prixMoyen,costUnit:costUnit,totalCost:totalCost,marginPct:marginPct,prixCarteTTC:prixCarteTTC,prixCarteHT:prixCarteHT,marginTheorique:marginTheorique,tvaRate:tvaRate};
+      return{nom:p.nom,cat:p.cat1,cat2:p.cat2,qty:p.totalQty,ca:p.totalCA,prixMoyen:prixMoyenTrivec,prixVente:prixVente,costUnit:costUnit,totalCost:totalCost,marginPct:marginPct,prixCarteTTC:prixCarteTTC,prixCarteHT:prixCarteHT,tvaRate:tvaRate};
     });
   },[]);
 
@@ -5423,8 +5486,8 @@ function MenuEngineering(){
       <div className={'tab '+(tab==='all'?'active':'')} onClick={function(){setTab('all');}}>Tous</div>
     </div>
 
-    <div style={{background:'var(--cream)',border:'1px solid var(--bordeaux-light)',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:11,color:'var(--gris-600)'}}>
-      <strong>Note TVA mixte :</strong> Les prix carte sont TTC. Les spiritueux servis avec mixers offerts (sauf Red Bull) ont une TVA mixte : alcool à 20%, soft à 10%. Les prix moyens Trivec sont HT.
+    <div style={{background:'var(--cream,#fdf6f0)',border:'1px solid #e8d5c4',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:11,color:'var(--gris-600)'}}>
+      <strong>Calcul des marges :</strong> Le prix de vente utilisé est le <strong>prix carte HT</strong> quand il est disponible (priorité), sinon le prix moyen Trivec. Les mezze individuels sont valorisés à 9,33€ TTC (= 28€ / 3 du combo). * = prix carte TTC. Les spiritueux servis avec mixers offerts (sauf Red Bull) ont une TVA mixte.
     </div>
 
     <div className="kpi-g">
@@ -5466,15 +5529,14 @@ function MenuEngineering(){
     <div className="card">
       <div className="card-h"><div><div className="card-t">Top 15 articles par CA</div><div className="card-st">Tous articles vendus</div></div></div>
       <div className="card-b"><div className="tbl"><table>
-        <thead><tr><th>Article</th><th>Catégorie</th><th style={{textAlign:'right'}}>Qty</th><th style={{textAlign:'right'}}>CA</th><th style={{textAlign:'right'}}>Prix moy.</th><th style={{textAlign:'right'}}>Coût unit.</th><th style={{textAlign:'right'}}>Marge %</th><th style={{textAlign:'right'}}>Prix Carte</th><th style={{textAlign:'right'}}>Marge Théo.</th><th>BCG</th></tr></thead>
+        <thead><tr><th>Article</th><th>Catégorie</th><th style={{textAlign:'right'}}>Qty</th><th style={{textAlign:'right'}}>CA</th><th style={{textAlign:'right'}}>Prix Carte</th><th style={{textAlign:'right'}}>Prix Trivec</th><th style={{textAlign:'right'}}>Coût unit.</th><th style={{textAlign:'right'}}>Marge %</th><th>BCG</th></tr></thead>
         <tbody>{topCA.map(function(p,i){return(
           <tr key={i}><td style={{fontWeight:500}}>{p.nom}</td><td><span className="badge b-ima" style={{fontSize:9}}>{p.cat}</span></td>
           <td style={{textAlign:'right'}}>{fmt(p.qty)}</td><td style={{textAlign:'right',fontWeight:600}}>{eur(p.ca)}</td>
-          <td style={{textAlign:'right'}}>{eur(p.prixMoyen)}</td>
+          <td style={{textAlign:'right',color:p.prixCarteTTC?'var(--bordeaux)':'var(--gris-300)'}}>{p.prixCarteTTC?eur(p.prixCarteTTC)+'*':'—'}</td>
+          <td style={{textAlign:'right',fontSize:11,color:'var(--gris-500)'}}>{eur(p.prixMoyen)}</td>
           <td style={{textAlign:'right'}}>{p.costUnit!==null?eur(p.costUnit):'—'}</td>
           <td style={{textAlign:'right',fontWeight:700,color:p.marginPct===null?'var(--gris-300)':p.marginPct>=avgMargin?'var(--vert)':'var(--rouge)'}}>{p.marginPct!==null?p.marginPct.toFixed(1)+'%':'—'}</td>
-          <td style={{textAlign:'right'}}>{p.prixCarteTTC!==null?eur(p.prixCarteTTC):'—'}</td>
-          <td style={{textAlign:'right',fontWeight:700,color:p.marginTheorique===null?'var(--gris-300)':p.marginTheorique>=avgMargin?'var(--vert)':'var(--orange)'}}>{p.marginTheorique!==null?p.marginTheorique.toFixed(1)+'%':'—'}</td>
           <td><span style={{fontSize:9,fontWeight:600,color:bcgColors[classify(p)]}}>{classify(p)}</span></td></tr>
         );})}</tbody>
       </table></div></div>
@@ -5484,10 +5546,10 @@ function MenuEngineering(){
       <div className="card">
         <div className="card-h"><div><div className="card-t">Meilleures marges</div></div></div>
         <div className="card-b"><div className="tbl"><table>
-          <thead><tr><th>Article</th><th style={{textAlign:'right'}}>Qty</th><th style={{textAlign:'right'}}>Prix moy.</th><th style={{textAlign:'right'}}>Coût</th><th style={{textAlign:'right'}}>Marge</th><th>BCG</th></tr></thead>
+          <thead><tr><th>Article</th><th style={{textAlign:'right'}}>Qty</th><th style={{textAlign:'right'}}>Prix Vente</th><th style={{textAlign:'right'}}>Coût</th><th style={{textAlign:'right'}}>Marge</th><th>BCG</th></tr></thead>
           <tbody>{bestMargin.map(function(p,i){return(
             <tr key={i}><td style={{fontWeight:500}}>{p.nom}</td>
-            <td style={{textAlign:'right'}}>{fmt(p.qty)}</td><td style={{textAlign:'right'}}>{eur(p.prixMoyen)}</td><td style={{textAlign:'right'}}>{eur(p.costUnit)}</td>
+            <td style={{textAlign:'right'}}>{fmt(p.qty)}</td><td style={{textAlign:'right'}}>{eur(p.prixVente)}</td><td style={{textAlign:'right'}}>{eur(p.costUnit)}</td>
             <td style={{textAlign:'right',fontWeight:700,color:'var(--vert)'}}>{p.marginPct.toFixed(1)}%</td>
             <td><span style={{fontSize:9,fontWeight:600,color:bcgColors[classify(p)]}}>{classify(p)}</span></td></tr>
           );})}</tbody>
@@ -5496,10 +5558,10 @@ function MenuEngineering(){
       <div className="card">
         <div className="card-h"><div><div className="card-t">Pires marges</div><div className="card-st">Articles à retravailler</div></div></div>
         <div className="card-b"><div className="tbl"><table>
-          <thead><tr><th>Article</th><th style={{textAlign:'right'}}>Qty</th><th style={{textAlign:'right'}}>Prix moy.</th><th style={{textAlign:'right'}}>Coût</th><th style={{textAlign:'right'}}>Marge</th><th>Action</th></tr></thead>
+          <thead><tr><th>Article</th><th style={{textAlign:'right'}}>Qty</th><th style={{textAlign:'right'}}>Prix Vente</th><th style={{textAlign:'right'}}>Coût</th><th style={{textAlign:'right'}}>Marge</th><th>Action</th></tr></thead>
           <tbody>{worstMargin.map(function(p,i){return(
             <tr key={i} style={{background:p.marginPct<0?'rgba(220,38,38,.04)':'transparent'}}><td style={{fontWeight:500}}>{p.nom}</td>
-            <td style={{textAlign:'right'}}>{fmt(p.qty)}</td><td style={{textAlign:'right'}}>{eur(p.prixMoyen)}</td><td style={{textAlign:'right'}}>{eur(p.costUnit)}</td>
+            <td style={{textAlign:'right'}}>{fmt(p.qty)}</td><td style={{textAlign:'right'}}>{eur(p.prixVente)}</td><td style={{textAlign:'right'}}>{eur(p.costUnit)}</td>
             <td style={{textAlign:'right',fontWeight:700,color:'var(--rouge)'}}>{p.marginPct.toFixed(1)}%</td>
             <td><span className="badge b-warn" style={{fontSize:9}}>{p.qty>=avgQty?'Renégocier':'Retirer?'}</span></td></tr>
           );})}</tbody>
@@ -5510,11 +5572,11 @@ function MenuEngineering(){
     {noCost.length>0&&<div className="card">
       <div className="card-h"><div><div className="card-t">Articles sans coût connu ({noCost.length})</div><div className="card-st">Ajoutez les coûts dans RecipeCosts pour compléter l'analyse</div></div></div>
       <div className="card-b"><div className="tbl"><table>
-        <thead><tr><th>Article</th><th>Catégorie</th><th style={{textAlign:'right'}}>Qty</th><th style={{textAlign:'right'}}>CA</th><th style={{textAlign:'right'}}>Prix moy.</th></tr></thead>
+        <thead><tr><th>Article</th><th>Catégorie</th><th style={{textAlign:'right'}}>Qty</th><th style={{textAlign:'right'}}>CA</th><th style={{textAlign:'right'}}>Prix Vente</th></tr></thead>
         <tbody>{noCost.sort(function(a,b){return b.ca-a.ca;}).slice(0,20).map(function(p,i){return(
           <tr key={i}><td style={{fontWeight:500}}>{p.nom}</td><td><span className="badge b-ima" style={{fontSize:9}}>{p.cat}</span></td>
           <td style={{textAlign:'right'}}>{fmt(p.qty)}</td><td style={{textAlign:'right',fontWeight:600}}>{eur(p.ca)}</td>
-          <td style={{textAlign:'right'}}>{eur(p.prixMoyen)}</td></tr>
+          <td style={{textAlign:'right'}}>{eur(p.prixVente)}</td></tr>
         );})}</tbody>
       </table></div></div>
     </div>}
