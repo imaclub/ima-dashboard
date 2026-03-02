@@ -948,9 +948,25 @@ const PayrollService={
     return depts;
   },
   getMasseSalariale(){return PayrollDataJan.reduce((s,e)=>s+(e.coutGlobal||0),0);},
-  // Masse salariale hors SDTC (salariés partis) — pour le Staff Cost % opérationnel
-  getMasseSalarialeActive(){return PayrollDataJan.filter(e=>e.status==='actif'||e.status==='sdtc-fev').reduce((s,e)=>s+(e.coutGlobal||0),0);},
   getMasseSalarialeDec(){return PayrollDataDec.reduce((s,e)=>s+(e.coutGlobal||0),0);},
+  // Masse salariale saison : Dec + Jan + estimation Fév
+  getMasseSalarialeActive(){
+    const decTotal=PayrollDataDec.reduce((s,e)=>s+(e.coutGlobal||0),0);
+    const janActive=PayrollDataJan.filter(e=>e.status==='actif'||e.status==='sdtc-fev').reduce((s,e)=>s+(e.coutGlobal||0),0);
+    // Estimation février : actifs à taux plein + départs fév à 50%
+    const febActif=PayrollDataJan.filter(e=>e.status==='actif').reduce((s,e)=>s+(e.coutGlobal||0),0);
+    const febSdtc=PayrollDataJan.filter(e=>e.status==='sdtc-fev').reduce((s,e)=>s+(e.coutGlobal||0),0);
+    const febEstimate=febActif+Math.round(febSdtc*0.5);
+    return decTotal+janActive+febEstimate;
+  },
+  getMasseSalarialeEstFev(){
+    const febActif=PayrollDataJan.filter(e=>e.status==='actif').reduce((s,e)=>s+(e.coutGlobal||0),0);
+    const febSdtc=PayrollDataJan.filter(e=>e.status==='sdtc-fev').reduce((s,e)=>s+(e.coutGlobal||0),0);
+    return febActif+Math.round(febSdtc*0.5);
+  },
+  // Nombre de mois de données (Dec + Jan + Feb estimé)
+  _nMonthsData:3,
+  getMasseSalarialeMensuelle(){return this.getMasseSalarialeActive()/this._nMonthsData;},
   getStaffCostPct(ca){const ms=this.getMasseSalarialeActive();return ca>0?Math.round(ms/ca*1000)/10:0;},
   getEffectifActif(){return PayrollDataJan.filter(e=>e.status==='actif'||e.status==='sdtc-fev').length;},
   getEvolution(){
@@ -961,7 +977,7 @@ const PayrollService={
     return{janTotal,decTotal,diff,pct,janCount:PayrollDataJan.length,decCount:PayrollDataDec.length};
   },
   getUpcomingDepartures(){return SDTCData.filter(s=>s.month==='02-2026');},
-  periode:'Janvier 2026'
+  periode:'Déc 2025 → Fév 2026'
 };
 
 // ===== INVENTORY SERVICE =====
@@ -2601,7 +2617,7 @@ function StaffPage(){
   return(<div className="fin">
     <div className="kpi-g">
       <div className="kpi"><div className="kpi-label">Effectif actif</div><div className="kpi-val">{PayrollService.getEffectifActif()}</div><div className="kpi-chg neu">{PayrollDataJan.filter(e=>e.status==='sdtc').length} SDTC + {PayrollDataJan.filter(e=>e.status==='sdtc-fev').length} départs fév</div></div>
-      <div className="kpi"><div className="kpi-label">Masse salariale ({pCtx.dates.days}j)</div><div className="kpi-val">{eur(pCtx.msProrata)}</div><div className="kpi-chg neu">{pCtx.mode!=='mois'?`Prorata ${pCtx.dates.days}j / 30j • `:''}{eur(pCtx.msActive)}/mois</div></div>
+      <div className="kpi"><div className="kpi-label">Masse salariale ({pCtx.dates.days}j)</div><div className="kpi-val">{eur(pCtx.msProrata)}</div><div className="kpi-chg neu">{pCtx.mode!=='mois'?`Prorata ${pCtx.dates.days}j / 30j • `:''}{eur(pCtx.msMensuel)}/mois</div></div>
       <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:caTotal>0?(staffCostPct>30?'var(--rouge)':staffCostPct>25?'var(--orange)':'var(--vert)'):'var(--gris-300)'}}>{caTotal>0?staffCostPct+'%':'—'}</div><div className="kpi-chg neu">{caTotal>0?`CA ${eur(caTotal)} (${caSource})`:'CA non disponible'}</div></div>
       <div className="kpi"><div className="kpi-label">Départs Février</div><div className="kpi-val" style={{color:'var(--orange)'}}>{upcoming.length}</div><div className="kpi-chg neg">{upcoming.map(u=>u.name.split(' ').pop()).join(', ')}</div></div>
     </div>
@@ -4611,11 +4627,12 @@ function PeriodProvider({children}){
     return{total,days:count,caResto,caClub,caBar,couverts,especes,cb,amex,ticketMoyen:couverts>0?total/couverts:0};
   },[dates]);
 
-  // Masse salariale prorata
+  // Masse salariale prorata — msActive = total Dec+Jan, prorata sur la période
   const msActive=PayrollService.getMasseSalarialeActive();
-  const msProrata=Math.round(msActive/30*dates.days);
+  const msMensuel=PayrollService.getMasseSalarialeMensuelle();
+  const msProrata=Math.round(msMensuel/30*dates.days);
 
-  const value={mode,setMode,customFrom,setCustomFrom,customTo,setCustomTo,dates,trivecPeriod,msActive,msProrata};
+  const value={mode,setMode,customFrom,setCustomFrom,customTo,setCustomTo,dates,trivecPeriod,msActive,msMensuel,msProrata};
   return React.createElement(PeriodContext.Provider,{value},children);
 }
 
