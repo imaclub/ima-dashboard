@@ -1739,7 +1739,7 @@ function Finance(){
   useEffect(()=>{
     if(PennylaneService.getToken()){
       setLoading(true);
-      PennylaneService.getAllSupplierInvoices({dateFrom:'2024-11-01',maxPages:50})
+      PennylaneService.getAllSupplierInvoices({maxPages:50})
         .then(invoices=>{
           setAllInvoices(invoices);
           setLoaded(true);
@@ -1933,7 +1933,7 @@ function Costs(){
   useEffect(()=>{
     if(PennylaneService.getToken()){
       setLoading(true);
-      PennylaneService.getAllSupplierInvoices({dateFrom:'2024-11-01',maxPages:50})
+      PennylaneService.getAllSupplierInvoices({maxPages:50})
         .then(invoices=>{
           setAllInvoices(invoices);
           const names={};
@@ -2179,7 +2179,7 @@ function Costs(){
               if(!PennylaneService.getToken()){setSyncResults({error:'Pennylane non connecté. Configurez le token dans Administration.'});return;}
               setSyncing(true);setSyncProgress('Chargement des factures...');setSyncResults(null);
               try{
-                const invoices=await PennylaneService.getAllSupplierInvoices({dateFrom:'2024-11-01',maxPages:50});
+                const invoices=await PennylaneService.getAllSupplierInvoices({maxPages:50});
                 const foodBarInv=invoices.filter(inv=>{const sid=String(inv.supplier?.id||'');const cat=SupplierMap.getCategory(sid);return cat==='Food'||cat==='Bar';});
                 if(foodBarInv.length===0){setSyncResults({error:'Aucune facture Food/Bar trouvée. Classez vos fournisseurs dans l\'onglet Mapping.'});setSyncing(false);return;}
                 setSyncProgress(`Récupération détails: 0/${foodBarInv.length} factures...`);
