@@ -2392,9 +2392,8 @@ function Costs(){
           <div className="card-b"><div className="tbl"><table>
             <thead><tr><th style={{textAlign:'left'}}>Fournisseur</th><th>Catégorie</th><th style={{textAlign:'right'}}>Total TTC</th><th style={{textAlign:'center'}}>Factures</th><th style={{width:200}}>Action</th></tr></thead>
             <tbody>{suppliersToShow.sort((a,b)=>a.cat==='Non classé'?-1:b.cat==='Non classé'?1:Math.abs(b.total)-Math.abs(a.total)).map(s=>(
-              <React.Fragment key={s.id}>
-              <tr style={{background:s.cat==='Non classé'?'rgba(220,38,38,.04)':'transparent'}}>
-                <td style={{fontWeight:500,cursor:'pointer'}} onClick={()=>setExpandedCat(expandedCat==='sup_'+s.id?null:'sup_'+s.id)} title="Cliquer pour voir le détail">{s.name} <span style={{fontSize:9,color:'var(--gris-400)'}}>▶</span></td>
+              <tr key={s.id} style={{background:s.cat==='Non classé'?'rgba(220,38,38,.04)':'transparent'}}>
+                <td style={{fontWeight:500}}>{s.name}</td>
                 <td><span style={{display:'inline-block',padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:600,background:CAT_COLORS[s.cat]||'var(--gris-400)',color:'white'}}>{s.cat}</span></td>
                 <td style={{textAlign:'right',fontWeight:600}}>{eur(s.total)}</td>
                 <td style={{textAlign:'center'}}>{s.count}</td>
@@ -2413,21 +2412,6 @@ function Costs(){
                   }
                 </td>
               </tr>
-              {expandedCat==='sup_'+s.id&&<tr><td colSpan="5" style={{padding:0,background:'var(--gris-50)'}}>
-                <table style={{width:'100%',fontSize:11}}>
-                  <thead><tr style={{background:'var(--gris-100)'}}><th style={{padding:'4px 8px'}}>N° Facture</th><th style={{padding:'4px 8px'}}>Label</th><th style={{padding:'4px 8px'}}>Date</th><th style={{padding:'4px 8px',textAlign:'right'}}>HT</th><th style={{padding:'4px 8px',textAlign:'right'}}>TTC</th></tr></thead>
-                  <tbody>{allInvoices.filter(inv=>String(inv.supplier?.id||'')===s.id).sort((a,b)=>new Date(b.date)-new Date(a.date)).map((inv,i)=>
-                    <tr key={i} style={{borderBottom:'1px solid var(--gris-200)'}}>
-                      <td style={{padding:'4px 8px'}}>{inv.invoice_number||'—'}</td>
-                      <td style={{padding:'4px 8px',maxWidth:300,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{inv.label||'—'}</td>
-                      <td style={{padding:'4px 8px'}}>{inv.date||'—'}</td>
-                      <td style={{padding:'4px 8px',textAlign:'right'}}>{eur(parseFloat(inv.currency_amount_before_tax||0))}</td>
-                      <td style={{padding:'4px 8px',textAlign:'right',fontWeight:600}}>{eur(parseFloat(inv.amount||0))}</td>
-                    </tr>
-                  )}</tbody>
-                </table>
-              </td></tr>}
-              </React.Fragment>
               ))}</tbody>
           </table></div></div>
         </div>);
