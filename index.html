@@ -1256,7 +1256,7 @@ const PennylaneService={
   clearToken:()=>localStorage.removeItem('ima_pennylane_token'),
   _companyInfo:null,
   _cache:{},
-  _lsCacheKey:'ima_pennylane_invoices_v3',
+  _lsCacheKey:'ima_pennylane_invoices_cache',
   _lsCacheTTL:3600000, // 1 heure
   _getLsCache(){try{const c=JSON.parse(localStorage.getItem(this._lsCacheKey));if(c&&Date.now()-c.ts<this._lsCacheTTL)return c.data;return null;}catch(e){return null;}},
   _setLsCache(data){try{localStorage.setItem(this._lsCacheKey,JSON.stringify({data,ts:Date.now()}));}catch(e){console.warn('Cache write failed',e);}},
@@ -1740,22 +1740,20 @@ function Dashboard(){
   const tipsEligible=StaffRegistry.getTipsEligible();
   const hasTrivec=TrivecService.isConnected();
   const pCtx=usePeriod();
-  // Fallback to season data when no daily Trivec data
   const tp=pCtx.trivecPeriod;
-  const useSeason=tp.days===0&&typeof TRIVEC_SEASON!=='undefined';
-  const caDisplay=useSeason?TRIVEC_SEASON.ventesNet:tp.total;
-  const couvertsDisplay=useSeason?TRIVEC_SEASON.couverts:tp.couverts;
-  const caResto=useSeason?(TRIVEC_SEASON.categories.find(function(c){return c.nom==='Nourriture';})||{}).montant||0:tp.caResto;
-  const tmDisplay=couvertsDisplay>0?Math.round(caResto/couvertsDisplay):0;
-  const caLabel=useSeason?'Saison':'';
-  const msDisplay=useSeason?pCtx.msActive:pCtx.msProrata;
+  const isSeason=tp._fromSeason||false;
+  const caDisplay=tp.total;
+  const couvertsDisplay=tp.couverts;
+  const tmDisplay=tp.ticketMoyen;
+  const caLabel=isSeason?'Saison':'';
+  const msDisplay=isSeason?pCtx.msActive:pCtx.msProrata;
   const staffPct=caDisplay>0?Math.round(msDisplay/caDisplay*1000)/10:0;
   return(<div className="fin">
-    {!hasTrivec&&!useSeason&&<div style={{background:'var(--bleu-light)',border:'1px solid var(--bleu)',borderRadius:10,padding:16,marginBottom:20,fontSize:13,color:'var(--bleu)'}}>
+    {!hasTrivec&&!isSeason&&<div style={{background:'var(--bleu-light)',border:'1px solid var(--bleu)',borderRadius:10,padding:16,marginBottom:20,fontSize:13,color:'var(--bleu)'}}>
       <strong>Bienvenue sur le tableau de bord IMA.</strong> Les données s'afficheront automatiquement lorsque vos services seront connectés. Rendez-vous dans <strong>Administration</strong> pour configurer Pennylane, Trivec et SevenRooms.
     </div>}
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">CA {useSeason?'Saison':'('+pCtx.dates.label+')'}</div><div className="kpi-val" style={{color:caDisplay>0?'var(--gris-900)':'var(--gris-300)'}}>{caDisplay>0?caDisplay.toLocaleString('fr-FR',{maximumFractionDigits:0})+'€':'—'}</div><div className={`kpi-chg ${caDisplay>0?'pos':'neu'}`}>{useSeason?'Rapport Trivec':tp.days>0?`${tp.days} jour(s)`:'En attente Trivec'}</div></div>
+      <div className="kpi"><div className="kpi-label">CA {isSeason?'Saison':'('+pCtx.dates.label+')'}</div><div className="kpi-val" style={{color:caDisplay>0?'var(--gris-900)':'var(--gris-300)'}}>{caDisplay>0?caDisplay.toLocaleString('fr-FR',{maximumFractionDigits:0})+'€':'—'}</div><div className={`kpi-chg ${caDisplay>0?'pos':'neu'}`}>{isSeason?'Rapport Trivec':tp.days>0?`${tp.days} jour(s)`:'Pas de données Trivec'}</div></div>
       <div className="kpi"><div className="kpi-label">Couverts</div><div className="kpi-val" style={{color:couvertsDisplay>0?'var(--gris-900)':'var(--gris-300)'}}>{couvertsDisplay>0?couvertsDisplay.toLocaleString('fr-FR'):'—'}</div><div className={`kpi-chg ${couvertsDisplay>0?'pos':'neu'}`}>{couvertsDisplay>0?`TM: ${tmDisplay}€`:'En attente Trivec'}</div></div>
       <div className="kpi"><div className="kpi-label">Effectif actif</div><div className="kpi-val">{PayrollService.getEffectifActif()}</div><div className="kpi-chg neu">{tipsEligible.length} bénéf. tips</div></div>
       <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:caDisplay>0?(staffPct>30?'var(--rouge)':staffPct>25?'var(--orange)':'var(--vert)'):'var(--gris-300)'}}>{caDisplay>0?staffPct+'%':'—'}</div><div className="kpi-chg neu">{caDisplay>0?`MS: ${eur(msDisplay)} / CA: ${eur(caDisplay)}`:'CA non disponible'}</div></div>
@@ -1854,15 +1852,16 @@ function Finance(){
   const groupTotals=useMemo(()=>SupplierMap.getGroupTotals(totals),[totals]);
   const totalCosts=Object.values(totals).reduce((s,v)=>s+v,0);
 
-  // CA from global period context — fallback to season data
+  // CA from global period context (centralisé dans PeriodProvider)
   const pCtx=usePeriod();
-  const _useSeason=pCtx.trivecPeriod.days===0&&typeof TRIVEC_SEASON!=='undefined';
-  const caTotal=_useSeason?TRIVEC_SEASON.ventesNet:pCtx.trivecPeriod.total;
-  const caFood=_useSeason?TRIVEC_SEASON.categories.find(c=>c.nom==='Nourriture')?.montant||0:pCtx.trivecPeriod.caResto;
-  const caBar=_useSeason?(TRIVEC_SEASON.categories.find(c=>c.nom==='Boissons Alcoolisées')?.montant||0)+(TRIVEC_SEASON.categories.find(c=>c.nom==='Boissons Sans Alcool')?.montant||0):(pCtx.trivecPeriod.caClub+pCtx.trivecPeriod.caBar);
+  const tp=pCtx.trivecPeriod;
+  const isSeason=tp._fromSeason||false;
+  const caTotal=tp.total;
+  const caFood=tp.caResto;
+  const caBar=tp.caBar+tp.caClub;
 
   // Staff cost — use full season MS when using season CA
-  const realStaffCost=_useSeason?pCtx.msActive:pCtx.msProrata;
+  const realStaffCost=isSeason?pCtx.msActive:pCtx.msProrata;
   const staffCosts=realStaffCost||totals['Staff']||0;
   // Override totals Staff with real payroll if available
   if(realStaffCost>0)totals['Staff']=realStaffCost;
@@ -1873,9 +1872,8 @@ function Finance(){
 
   // Build P&L table data
   const plData=[];
-  plData.push({type:'revenue',label:'CA Restaurant',amount:pCtx.trivecPeriod.caResto||0,pct:caTotal>0?100*((pCtx.trivecPeriod.caResto||0)/caTotal):0,isSubsection:false,isBold:true,color:'var(--vert)'});
-  plData.push({type:'revenue',label:'CA Club',amount:pCtx.trivecPeriod.caClub||0,pct:caTotal>0?100*((pCtx.trivecPeriod.caClub||0)/caTotal):0,isSubsection:false,isBold:false,color:'var(--bordeaux)'});
-  plData.push({type:'revenue',label:'CA Bar',amount:pCtx.trivecPeriod.caBar||0,pct:caTotal>0?100*((pCtx.trivecPeriod.caBar||0)/caTotal):0,isSubsection:false,isBold:false,color:'var(--orange)'});
+  plData.push({type:'revenue',label:'CA Restaurant (Food HT)',amount:tp.caResto||0,pct:caTotal>0?100*((tp.caResto||0)/caTotal):0,isSubsection:false,isBold:true,color:'var(--vert)'});
+  plData.push({type:'revenue',label:'CA Bar & Boissons (HT)',amount:(tp.caBar||0)+(tp.caClub||0),pct:caTotal>0?100*(((tp.caBar||0)+(tp.caClub||0))/caTotal):0,isSubsection:false,isBold:false,color:'var(--bordeaux)'});
   plData.push({type:'spacer'});
 
   for(const[groupName,groupInfo]of Object.entries(COST_GROUPS)){
@@ -1921,7 +1919,7 @@ function Finance(){
 
     {!loading&&<div>
     <div className="card" style={{marginBottom:16}}>
-      <div className="card-h"><div><div className="card-t">Compte de résultat — {pCtx.dates.label}</div><div className="card-st">CA Trivec ({pCtx.trivecPeriod.days}j) + Coûts Pennylane</div></div><span className="badge b-ima">Pennylane</span></div>
+      <div className="card-h"><div><div className="card-t">Compte de résultat — {isSeason?'Saison':pCtx.dates.label}</div><div className="card-st">{isSeason?'Rapports Trivec + Coûts Pennylane':'CA Trivec ('+tp.days+'j) + Coûts Pennylane'}</div></div><span className="badge b-ima">Pennylane</span></div>
       <div className="card-b"><div className="tbl"><table>
         <thead><tr><th>Poste</th><th style={{textAlign:'right'}}>Montant</th><th style={{textAlign:'right'}}>% CA</th><th style={{width:180}}>Répartition</th></tr></thead>
         <tbody>
@@ -1931,7 +1929,7 @@ function Finance(){
               const isBold=row.isBold;
               const fontSize=row.isBold?14:13;
               return <tr key={i} style={{fontWeight:isBold?700:400,background:row.type==='total'?'var(--gris-50)':'transparent',borderTop:row.type==='total'?'2px solid var(--gris-300)':'none'}}>
-                <td style={{paddingLeft:row.indent?40:14,fontSize}}>{row.label}{row.type==='revenue'&&<span className="badge b-warn" style={{marginLeft:8,fontSize:9}}>Estimé</span>}</td>
+                <td style={{paddingLeft:row.indent?40:14,fontSize}}>{row.label}{row.type==='revenue'&&!isSeason&&<span className="badge b-warn" style={{marginLeft:8,fontSize:9}}>Estimé</span>}{row.type==='revenue'&&isSeason&&<span className="badge b-ok" style={{marginLeft:8,fontSize:9}}>Rapport Trivec</span>}</td>
                 <td style={{textAlign:'right',color:row.color,fontSize}}>{eur(row.amount)}</td>
                 <td style={{textAlign:'right'}}>{Math.abs(row.pct).toFixed(1)}%</td>
                 <td><div className="pbar"><div className="pfill" style={{width:`${Math.abs(row.pct)*1.5}%`,background:row.color}}/></div></td>
@@ -2050,13 +2048,13 @@ function Costs(){
   const foodTotal=totals['Food']||0;
   const barTotal=totals['Bar']||0;
   const pCtx=usePeriod();
-  const _sCA=typeof TRIVEC_SEASON!=='undefined'?TRIVEC_SEASON:null;
-  const _costsUseSeason=_sCA!==null;
-  const realStaffMS=_costsUseSeason?pCtx.msActive:pCtx.msProrata;
+  const tp=pCtx.trivecPeriod;
+  const isSeason=tp._fromSeason||false;
+  const realStaffMS=isSeason?pCtx.msActive:pCtx.msProrata;
   const primeCost=(foodTotal+barTotal+realStaffMS);
-  const caNourriture=_sCA?_sCA.categories.find(c=>c.nom==='Nourriture')?.montant||0:0;
-  const caBoissons=_sCA?(_sCA.categories.find(c=>c.nom==='Boissons Alcoolisées')?.montant||0)+(_sCA.categories.find(c=>c.nom==='Boissons Sans Alcool')?.montant||0):0;
-  const caTotalSeason=_sCA?_sCA.ventesNet:0;
+  const caNourriture=tp.caResto||0;
+  const caBoissons=(tp.caBar||0)+(tp.caClub||0);
+  const caTotalSeason=tp.total||0;
   const foodCostPct=caNourriture>0&&foodTotal>0?Math.round(foodTotal/caNourriture*1000)/10:null;
   const barCostPct=caBoissons>0&&barTotal>0?Math.round(barTotal/caBoissons*1000)/10:null;
   const primeCostPct=caTotalSeason>0?Math.round(primeCost/caTotalSeason*1000)/10:null;
@@ -2590,11 +2588,11 @@ function StaffPage(){
   const payTotals=PayrollService.getTotals(payroll);
   const deptTotals=PayrollService.getDeptTotals(payroll);
 
-  // Use global period context for CA and masse salariale — fallback to season
-  const _staffUseSeason=pCtx.trivecPeriod.days===0&&typeof TRIVEC_SEASON!=='undefined';
-  const caTotal=_staffUseSeason?TRIVEC_SEASON.ventesNet:pCtx.trivecPeriod.total;
-  const caSource=_staffUseSeason?'Saison Trivec':pCtx.trivecPeriod.days>0?`Trivec (${pCtx.trivecPeriod.days}j)`:'—';
-  const msDisplay=_staffUseSeason?pCtx.msActive:pCtx.msProrata;
+  // Use global period context for CA and masse salariale
+  const _staffIsSeason=pCtx.trivecPeriod._fromSeason||false;
+  const caTotal=pCtx.trivecPeriod.total;
+  const caSource=_staffIsSeason?'Saison Trivec':pCtx.trivecPeriod.days>0?`Trivec (${pCtx.trivecPeriod.days}j)`:'—';
+  const msDisplay=_staffIsSeason?pCtx.msActive:pCtx.msProrata;
   const staffCostPct=caTotal>0?Math.round(msDisplay/caTotal*1000)/10:0;
   const evo=PayrollService.getEvolution();
   const upcoming=PayrollService.getUpcomingDepartures();
@@ -2645,7 +2643,7 @@ function StaffPage(){
   return(<div className="fin">
     <div className="kpi-g">
       <div className="kpi"><div className="kpi-label">Effectif actif</div><div className="kpi-val">{PayrollService.getEffectifActif()}</div><div className="kpi-chg neu">{PayrollDataJan.filter(e=>e.status==='sdtc').length} SDTC + {PayrollDataJan.filter(e=>e.status==='sdtc-fev').length} départs fév</div></div>
-      <div className="kpi"><div className="kpi-label">Masse salariale {_staffUseSeason?'Saison':'('+pCtx.dates.days+'j)'}</div><div className="kpi-val">{eur(msDisplay)}</div><div className="kpi-chg neu">{_staffUseSeason?'Dec+Jan+Fév(est.)':pCtx.mode!=='mois'?`Prorata ${pCtx.dates.days}j / 30j`:''} • {eur(pCtx.msMensuel)}/mois</div></div>
+      <div className="kpi"><div className="kpi-label">Masse salariale {_staffIsSeason?'Saison':'('+pCtx.dates.days+'j)'}</div><div className="kpi-val">{eur(msDisplay)}</div><div className="kpi-chg neu">{_staffIsSeason?'Dec+Jan+Fév(est.)':pCtx.mode!=='mois'?`Prorata ${pCtx.dates.days}j / 30j`:''} • {eur(pCtx.msMensuel)}/mois</div></div>
       <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:caTotal>0?(staffCostPct>30?'var(--rouge)':staffCostPct>25?'var(--orange)':'var(--vert)'):'var(--gris-300)'}}>{caTotal>0?staffCostPct+'%':'—'}</div><div className="kpi-chg neu">{caTotal>0?`CA ${eur(caTotal)} (${caSource})`:'CA non disponible'}</div></div>
       <div className="kpi"><div className="kpi-label">Départs Février</div><div className="kpi-val" style={{color:'var(--orange)'}}>{upcoming.length}</div><div className="kpi-chg neg">{upcoming.map(u=>u.name.split(' ').pop()).join(', ')}</div></div>
     </div>
@@ -4681,12 +4679,12 @@ function Tresorerie(){
   const loading=invCtx.loading;
 
   // --- DONNÉES DE BASE ---
-  const _tresoUseSeason=trivec!==null;
+  const isSeason=pCtx.trivecPeriod._fromSeason||false;
 
   // CA TTC encaissé (ce que les clients ont réellement payé)
   const encaissementsTTC=trivec?trivec.paiements.total:0;
-  // CA HT (hors taxes)
-  const caHT=trivec?trivec.ventesNet:0;
+  // CA HT — utiliser le PeriodContext centralisé
+  const caHT=pCtx.trivecPeriod.total||0;
 
   // Paiements par moyen
   const paymentBreakdown=trivec&&trivec.paiements&&trivec.paiements.details?
@@ -4701,7 +4699,7 @@ function Tresorerie(){
   const otherCharges=totalAchats-foodTotal-barTotal;
 
   // Masse salariale
-  const staffCost=_tresoUseSeason?pCtx.msActive:pCtx.msProrata;
+  const staffCost=isSeason?pCtx.msActive:pCtx.msProrata;
 
   // --- TVA NETTE ---
   // TVA collectée (sur les ventes)
@@ -5489,11 +5487,16 @@ function InvoiceProvider({children}){
   const[invoices,setInvoices]=useState([]);
   const[loading,setLoading]=useState(false);
   const[loaded,setLoaded]=useState(false);
+  // Filtre côté client : ne garder que les factures depuis nov 2025 (commandes avant ouverture)
+  var INVOICE_DATE_FROM='2025-11-01';
+  function filterByDate(invs){
+    return invs.filter(function(inv){return!inv.date||inv.date>=INVOICE_DATE_FROM;});
+  }
   useEffect(()=>{
     if(PennylaneService.getToken()&&!loaded){
       setLoading(true);
-      PennylaneService.getAllSupplierInvoices({dateFrom:'2025-11-01',maxPages:50,onRefresh:function(fresh){setInvoices(fresh);}})
-        .then(function(inv){setInvoices(inv);setLoaded(true);})
+      PennylaneService.getAllSupplierInvoices({maxPages:50,onRefresh:function(fresh){setInvoices(filterByDate(fresh));}})
+        .then(function(inv){setInvoices(filterByDate(inv));setLoaded(true);})
         .finally(function(){setLoading(false);});
     }
   },[loaded]);
@@ -5506,9 +5509,10 @@ const parseDDMMYYYY=(s)=>{const p=s.split('/');return new Date(parseInt(p[2]),pa
 const toDDMMYYYY=(d)=>String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
 
 function PeriodProvider({children}){
-  const[mode,setMode]=useState('mois');
+  const[mode,setMode]=useState('annee');
   const[customFrom,setCustomFrom]=useState('');
   const[customTo,setCustomTo]=useState('');
+  const S=typeof TRIVEC_SEASON!=='undefined'?TRIVEC_SEASON:null;
 
   const dates=useMemo(()=>{
     const today=new Date();today.setHours(23,59,59,999);
@@ -5516,33 +5520,111 @@ function PeriodProvider({children}){
     if(mode==='jour')return{from:todayStart,to:today,label:"Aujourd'hui",days:1};
     if(mode==='semaine'){const f=new Date();f.setDate(f.getDate()-6);f.setHours(0,0,0,0);return{from:f,to:today,label:'7 derniers jours',days:7};}
     if(mode==='mois'){const f=new Date();f.setDate(f.getDate()-29);f.setHours(0,0,0,0);return{from:f,to:today,label:'30 derniers jours',days:30};}
-    if(mode==='annee'){const f=new Date(today.getMonth()>=11?today.getFullYear():today.getFullYear()-1,11,1);f.setHours(0,0,0,0);const diffDays=Math.round((today-f)/86400000)+1;return{from:f,to:today,label:`Saison (dep. ${toDDMMYYYY(f)})`,days:diffDays};}
+    if(mode==='annee'){
+      var nDays=S&&S.monthly?S.monthly.reduce(function(s,m){
+        var fd=m.from.split('/');var td=m.to.split('/');
+        var d1=new Date(fd[2],fd[1]-1,fd[0]);var d2=new Date(td[2],td[1]-1,td[0]);
+        return s+Math.round((d2-d1)/86400000)+1;
+      },0):90;
+      return{from:new Date(2025,11,1),to:today,label:'Saison '+((S&&S.periode)?S.periode.label:''),days:nDays};
+    }
     if(mode==='custom'&&customFrom&&customTo){const f=new Date(customFrom);f.setHours(0,0,0,0);const t=new Date(customTo);t.setHours(23,59,59);const diffDays=Math.max(Math.round((t-f)/86400000)+1,1);return{from:f,to:t,label:`${toDDMMYYYY(f)} → ${toDDMMYYYY(t)}`,days:diffDays};}
     return{from:todayStart,to:today,label:'—',days:1};
   },[mode,customFrom,customTo]);
 
-  // Get Trivec CA for the period
+  // Build trivecPeriod — centralise la logique saison vs daily
   const trivecPeriod=useMemo(()=>{
-    const allDays=TrivecService.getAllDays();
-    let total=0,count=0,caResto=0,caClub=0,caBar=0,couverts=0,especes=0,cb=0,amex=0;
-    for(const[dateStr,data]of Object.entries(allDays)){
-      const dt=parseDDMMYYYY(dateStr);
-      if(dt>=dates.from&&dt<=dates.to){
-        total+=data.ventes?.total||0;
-        caResto+=data.ventes?.restaurant||0;
-        caClub+=data.ventes?.club||0;
-        caBar+=data.ventes?.bar||0;
-        couverts+=(data.couverts?.restaurant?.total||0);
-        especes+=data.paiements?.especes||0;
-        cb+=data.paiements?.cb||0;
-        amex+=data.paiements?.amex||0;
-        count++;
-      }
-    }
-    return{total,days:count,caResto,caClub,caBar,couverts,especes,cb,amex,ticketMoyen:couverts>0?caResto/couverts:0};
-  },[dates]);
+    var empty={total:0,days:0,caResto:0,caClub:0,caBar:0,couverts:0,especes:0,cb:0,amex:0,ticketMoyen:0,_fromSeason:false};
 
-  // Masse salariale prorata — msActive = total Dec+Jan, prorata sur la période
+    // Helper: build from TRIVEC_SEASON
+    function fromSeason(ss){
+      var caFood=ss.tva.taux10.ht; // TVA 10% = Nourriture (resto)
+      var caDrinks=ss.tva.taux20.ht; // TVA 20% = Boissons (bar+club)
+      return{
+        total:ss.ventesNet,days:ss.tickets>0?90:0,
+        caResto:caFood,caClub:0,caBar:caDrinks,
+        couverts:ss.couverts,especes:0,cb:0,amex:0,
+        ticketMoyen:ss.couverts>0?Math.round(caFood/ss.couverts):0,
+        _fromSeason:true
+      };
+    }
+
+    // Helper: build from monthly array
+    function fromMonthly(months){
+      var t=0,cR=0,cB=0,cov=0;
+      months.forEach(function(m){t+=m.ventesNet;cR+=m.tva.taux10.ht;cB+=m.tva.taux20.ht;cov+=m.couverts;});
+      var nDays=months.reduce(function(s,m){
+        var fd=m.from.split('/');var td=m.to.split('/');
+        var d1=new Date(fd[2],fd[1]-1,fd[0]);var d2=new Date(td[2],td[1]-1,td[0]);
+        return s+Math.round((d2-d1)/86400000)+1;
+      },0);
+      return{total:t,days:nDays,caResto:cR,caClub:0,caBar:cB,couverts:cov,especes:0,cb:0,amex:0,ticketMoyen:cov>0?Math.round(cR/cov):0,_fromSeason:true};
+    }
+
+    // Helper: build from daily Trivec data
+    function fromDaily(){
+      var allDays=TrivecService.getAllDays();
+      var total=0,count=0,caResto=0,caClub=0,caBar=0,couverts=0,especes=0,cb=0,amex=0;
+      for(var dateStr in allDays){
+        if(!allDays.hasOwnProperty(dateStr))continue;
+        var dt=parseDDMMYYYY(dateStr);var data=allDays[dateStr];
+        if(dt>=dates.from&&dt<=dates.to){
+          total+=data.ventes?.total||0;caResto+=data.ventes?.restaurant||0;
+          caClub+=data.ventes?.club||0;caBar+=data.ventes?.bar||0;
+          couverts+=(data.couverts?.restaurant?.total||0);
+          especes+=data.paiements?.especes||0;cb+=data.paiements?.cb||0;amex+=data.paiements?.amex||0;
+          count++;
+        }
+      }
+      return{total:total,days:count,caResto:caResto,caClub:caClub,caBar:caBar,couverts:couverts,especes:especes,cb:cb,amex:amex,ticketMoyen:couverts>0?caResto/couverts:0,_fromSeason:false};
+    }
+
+    // --- Mode Année / Saison → toujours TRIVEC_SEASON ---
+    if(mode==='annee'&&S){return fromSeason(S);}
+
+    // --- Mode Mois → utiliser TRIVEC_SEASON.monthly si disponible ---
+    if(mode==='mois'&&S&&S.monthly){
+      // Trouver le(s) mois qui chevauchent la période (30 derniers jours)
+      var matchMonths=S.monthly.filter(function(m){
+        var fd=m.from.split('/');var td=m.to.split('/');
+        var mFrom=new Date(fd[2],fd[1]-1,fd[0]);var mTo=new Date(td[2],td[1]-1,td[0]);
+        return mTo>=dates.from&&mFrom<=dates.to;
+      });
+      if(matchMonths.length>0)return fromMonthly(matchMonths);
+    }
+
+    // --- Mode Semaine → essayer daily data, sinon prorata du dernier mois ---
+    if(mode==='semaine'){
+      var daily=fromDaily();
+      if(daily.days>=4)return daily; // Au moins 4 jours sur 7
+      // Fallback : prorata du dernier mois disponible
+      if(S&&S.monthly){
+        var lastMonth=S.monthly[S.monthly.length-1];
+        var fd2=lastMonth.from.split('/');var td2=lastMonth.to.split('/');
+        var d1=new Date(fd2[2],fd2[1]-1,fd2[0]);var d2=new Date(td2[2],td2[1]-1,td2[0]);
+        var mDays=Math.round((d2-d1)/86400000)+1;
+        var ratio=7/mDays;
+        return{
+          total:Math.round(lastMonth.ventesNet*ratio),days:7,
+          caResto:Math.round(lastMonth.tva.taux10.ht*ratio),caClub:0,
+          caBar:Math.round(lastMonth.tva.taux20.ht*ratio),
+          couverts:Math.round(lastMonth.couverts*ratio),
+          especes:0,cb:0,amex:0,
+          ticketMoyen:lastMonth.couverts>0?Math.round(lastMonth.tva.taux10.ht/lastMonth.couverts):0,
+          _fromSeason:true
+        };
+      }
+      return daily;
+    }
+
+    // --- Mode Jour → daily data only, pas de fallback saison ---
+    if(mode==='jour'){return fromDaily();}
+
+    // --- Custom / Fallback → daily data ---
+    return fromDaily();
+  },[dates,mode]);
+
+  // Masse salariale prorata
   const msActive=PayrollService.getMasseSalarialeActive();
   const msMensuel=PayrollService.getMasseSalarialeMensuelle();
   const msProrata=Math.round(msMensuel/30*dates.days);
