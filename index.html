@@ -1267,7 +1267,7 @@ const PennylaneService={
     let lsData=this._getLsCache();
     if(lsData&&lsData.length>0){
       // Dédupliquer le cache aussi
-      const seen2=new Set();lsData=lsData.filter(inv=>{const k=inv.id||inv.invoice_number;if(seen2.has(k))return false;seen2.add(k);return true;});
+      const seen2=new Set();lsData=lsData.filter(inv=>{const n=inv.invoice_number||'';const k=n?`${n}_${inv.supplier?.id||''}_${inv.date||''}_${inv.amount||''}`:(inv.id||'');if(seen2.has(k))return false;seen2.add(k);return true;});
       this._cache[cacheKey]={data:lsData,ts:Date.now()};
       // Background refresh
       this._fetchAllInvoices({dateFrom,maxPages}).then(fresh=>{
@@ -1303,10 +1303,14 @@ const PennylaneService={
         cursor=response.next_cursor;page++;
       }
     }catch(e){console.error('Failed to fetch invoices:',e);}
-    // Dédupliquer par id + invoice_number
+    // Dédupliquer par composite key: invoice_number+supplier+date+amount
     const seen=new Set();
     allInvoices=allInvoices.filter(inv=>{
-      const key=inv.id||inv.invoice_number||JSON.stringify(inv);
+      const invNum=inv.invoice_number||'';
+      const sid=inv.supplier?.id||'';
+      const amt=inv.amount||'';
+      const dt=inv.date||'';
+      const key=invNum?`${invNum}_${sid}_${dt}_${amt}`:(inv.id||JSON.stringify(inv));
       if(seen.has(key))return false;
       seen.add(key);return true;
     });
@@ -1965,6 +1969,8 @@ function Costs(){
   const[loaded,setLoaded]=useState(false);
   const[supplierNames,setSupplierNames]=useState({});
   const[editingSupplier,setEditingSupplier]=useState(null);
+  const[detailSupplier,setDetailSupplier]=useState(null);
+  const[mapSearch,setMapSearch]=useState('');
   const[mapVersion,setMapVersion]=useState(0);
   const[expandedCat,setExpandedCat]=useState(null);
   const[filterCat,setFilterCat]=useState('Tous');
@@ -2372,10 +2378,71 @@ function Costs(){
 
     {/* ===== TAB: MAPPING ===== */}
     {tab==='mapping'&&<div>
-      {supplierGroups.filter(s=>s.cat==='Non classé').length>0&&<div className="alert-i a-err" style={{marginBottom:14}}><I.Warn/><div><div className="at">{supplierGroups.filter(s=>s.cat==='Non classé').length} fournisseur(s) non classé(s)</div><div className="as">Cliquez sur "Modifier" pour assigner une catégorie. Les fournisseurs non classés apparaissent en haut.</div></div></div>}
+      {/* Search bar */}
+      <div style={{marginBottom:14,display:'flex',gap:10,alignItems:'center'}}>
+        <input type="text" className="fi" placeholder="Rechercher fournisseur, montant, n° facture, label..." value={mapSearch} onChange={e=>setMapSearch(e.target.value)} style={{flex:1,fontSize:13}}/>
+        {mapSearch&&<button className="btn btn-sm btn-secondary" onClick={()=>setMapSearch('')} style={{whiteSpace:'nowrap'}}>Effacer</button>}
+      </div>
 
-      {/* Group by cost group */}
-      {Object.entries(COST_GROUPS).map(([groupName,groupInfo])=>{
+      {supplierGroups.filter(s=>s.cat==='Non classé').length>0&&!mapSearch&&<div className="alert-i a-err" style={{marginBottom:14}}><I.Warn/><div><div className="at">{supplierGroups.filter(s=>s.cat==='Non classé').length} fournisseur(s) non classé(s)</div><div className="as">Cliquez sur "Modifier" pour assigner une catégorie.</div></div></div>}
+
+      {/* Search results mode */}
+      {mapSearch.length>1&&(()=>{
+        const q=mapSearch.toLowerCase();
+        // Search in suppliers
+        const matchedSuppliers=supplierGroups.filter(s=>s.name.toLowerCase().includes(q));
+        // Search in invoices (label, invoice_number, amount)
+        const matchedInvoices=allInvoices.filter(inv=>{
+          const label=(inv.label||'').toLowerCase();
+          const num=(inv.invoice_number||'').toLowerCase();
+          const amt=String(inv.amount||'');
+          const name=SupplierMap.extractName(inv).toLowerCase();
+          return label.includes(q)||num.includes(q)||amt.includes(q)||name.includes(q);
+        });
+        return(<div>
+          {matchedSuppliers.length>0&&<div className="card" style={{marginBottom:14}}>
+            <div className="card-h"><div><div className="card-t">Fournisseurs ({matchedSuppliers.length})</div></div></div>
+            <div className="card-b"><div className="tbl"><table>
+              <thead><tr><th>Fournisseur</th><th>Catégorie</th><th style={{textAlign:'right'}}>Total TTC</th><th style={{textAlign:'center'}}>Nb</th><th>Action</th></tr></thead>
+              <tbody>{matchedSuppliers.map(s=>(
+                <tr key={s.id} style={{cursor:'pointer'}} onClick={()=>setDetailSupplier(detailSupplier===s.id?null:s.id)}>
+                  <td style={{fontWeight:500}}>{s.name}</td>
+                  <td><span style={{display:'inline-block',padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:600,background:CAT_COLORS[s.cat]||'var(--gris-400)',color:'white'}}>{s.cat}</span></td>
+                  <td style={{textAlign:'right',fontWeight:600}}>{eur(s.total)}</td>
+                  <td style={{textAlign:'center'}}>{s.count}</td>
+                  <td>{editingSupplier===s.id?<div style={{display:'flex',gap:3,flexWrap:'wrap'}}>{ALL_CATEGORIES.map(cat=>(<button key={cat} onClick={e=>{e.stopPropagation();handleCategoryChange(s.id,cat);}} style={{fontSize:9,padding:'3px 6px',borderRadius:4,border:'1px solid var(--gris-200)',background:s.cat===cat?CAT_COLORS[cat]||'var(--bordeaux)':'white',color:s.cat===cat?'white':'var(--gris-700)',cursor:'pointer',fontFamily:'inherit'}}>{cat}</button>))}</div>:<button className="btn btn-sm btn-secondary" onClick={e=>{e.stopPropagation();setEditingSupplier(s.id);}}>Modifier</button>}</td>
+                </tr>
+              ))}</tbody>
+            </table></div></div>
+          </div>}
+
+          <div className="card" style={{marginBottom:14}}>
+            <div className="card-h"><div><div className="card-t">Factures correspondantes ({matchedInvoices.length})</div></div></div>
+            <div className="card-b"><div className="tbl"><table style={{fontSize:12}}>
+              <thead><tr><th>Fournisseur</th><th>N° Facture</th><th>Label</th><th>Date</th><th style={{textAlign:'right'}}>HT</th><th style={{textAlign:'right'}}>TTC</th><th>Catégorie</th></tr></thead>
+              <tbody>{matchedInvoices.sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,100).map((inv,i)=>{
+                const sid=String(inv.supplier?.id||'');
+                const cat=SupplierMap.getCategory(sid);
+                return(<tr key={i}>
+                  <td style={{fontWeight:500}}>{SupplierMap.extractName(inv)}</td>
+                  <td style={{fontSize:11}}>{inv.invoice_number||'—'}</td>
+                  <td style={{fontSize:11,maxWidth:250,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{inv.label||'—'}</td>
+                  <td style={{fontSize:11}}>{inv.date||'—'}</td>
+                  <td style={{textAlign:'right',fontSize:11}}>{eur(parseFloat(inv.currency_amount_before_tax||0))}</td>
+                  <td style={{textAlign:'right',fontWeight:600}}>{eur(parseFloat(inv.amount||0))}</td>
+                  <td><span style={{display:'inline-block',padding:'2px 6px',borderRadius:4,fontSize:9,fontWeight:600,background:CAT_COLORS[cat]||'var(--gris-400)',color:'white'}}>{cat}</span></td>
+                </tr>);
+              })}</tbody>
+            </table></div>
+            {matchedInvoices.length>100&&<div style={{padding:8,textAlign:'center',fontSize:11,color:'var(--gris-400)'}}>Affichage limité aux 100 premiers résultats</div>}
+            {matchedInvoices.length===0&&<div style={{padding:20,textAlign:'center',fontSize:12,color:'var(--gris-400)'}}>Aucun résultat pour "{mapSearch}"</div>}
+            </div>
+          </div>
+        </div>);
+      })()}
+
+      {/* Normal grouped view when no search */}
+      {!mapSearch&&Object.entries(COST_GROUPS).map(([groupName,groupInfo])=>{
         const groupSuppliers=supplierGroups.filter(s=>groupInfo.cats.includes(s.cat));
         if(groupSuppliers.length===0&&groupName!=='Hors Exploitation')return null;
         const suppliersToShow=groupName==='Hors Exploitation'?
@@ -2392,8 +2459,8 @@ function Costs(){
           <div className="card-b"><div className="tbl"><table>
             <thead><tr><th style={{textAlign:'left'}}>Fournisseur</th><th>Catégorie</th><th style={{textAlign:'right'}}>Total TTC</th><th style={{textAlign:'center'}}>Factures</th><th style={{width:200}}>Action</th></tr></thead>
             <tbody>{suppliersToShow.sort((a,b)=>a.cat==='Non classé'?-1:b.cat==='Non classé'?1:Math.abs(b.total)-Math.abs(a.total)).map(s=>(
-              <tr key={s.id} style={{background:s.cat==='Non classé'?'rgba(220,38,38,.04)':'transparent'}}>
-                <td style={{fontWeight:500}}>{s.name}</td>
+              <tr key={s.id} style={{background:s.cat==='Non classé'?'rgba(220,38,38,.04)':'transparent',cursor:'pointer'}} onClick={()=>setDetailSupplier(detailSupplier===s.id?null:s.id)}>
+                <td style={{fontWeight:500}}>{s.name} <span style={{fontSize:9,color:'var(--gris-400)'}}>{detailSupplier===s.id?'▼':'▶'}</span></td>
                 <td><span style={{display:'inline-block',padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:600,background:CAT_COLORS[s.cat]||'var(--gris-400)',color:'white'}}>{s.cat}</span></td>
                 <td style={{textAlign:'right',fontWeight:600}}>{eur(s.total)}</td>
                 <td style={{textAlign:'center'}}>{s.count}</td>
@@ -2401,19 +2468,50 @@ function Costs(){
                   {editingSupplier===s.id?
                     <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
                       {ALL_CATEGORIES.map(cat=>(
-                        <button key={cat} onClick={()=>handleCategoryChange(s.id,cat)}
+                        <button key={cat} onClick={e=>{e.stopPropagation();handleCategoryChange(s.id,cat);}}
                           style={{fontSize:9,padding:'3px 6px',borderRadius:4,border:'1px solid var(--gris-200)',background:s.cat===cat?CAT_COLORS[cat]||'var(--bordeaux)':'white',
                             color:s.cat===cat?'white':'var(--gris-700)',cursor:'pointer',fontFamily:'inherit',fontWeight:s.cat===cat?600:400}}>
                           {cat}
                         </button>
                       ))}
                     </div>
-                    :<button className="btn btn-sm btn-secondary" onClick={()=>setEditingSupplier(s.id)}>Modifier</button>
+                    :<button className="btn btn-sm btn-secondary" onClick={e=>{e.stopPropagation();setEditingSupplier(s.id);}}>Modifier</button>
                   }
                 </td>
               </tr>
               ))}</tbody>
-          </table></div></div>
+          </table></div>
+
+          {/* Detail panel for selected supplier */}
+          {suppliersToShow.some(s=>detailSupplier===s.id)&&(()=>{
+            const s=suppliersToShow.find(s=>detailSupplier===s.id);
+            const invs=allInvoices.filter(inv=>String(inv.supplier?.id||'')===s.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
+            return(<div style={{marginTop:0,padding:'12px 16px',background:'var(--gris-50)',borderTop:'1px solid var(--gris-200)',borderRadius:'0 0 10px 10px'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                <div style={{fontSize:13,fontWeight:600}}>Factures de {s.name} <span style={{color:'var(--gris-400)',fontWeight:400}}>({invs.length})</span></div>
+                <button className="btn btn-sm btn-secondary" onClick={()=>setDetailSupplier(null)} style={{fontSize:10}}>Fermer</button>
+              </div>
+              <div className="tbl"><table style={{fontSize:11}}>
+                <thead><tr><th>N° Facture</th><th>Label</th><th>Date</th><th style={{textAlign:'right'}}>HT</th><th style={{textAlign:'right'}}>TTC</th><th>Statut</th></tr></thead>
+                <tbody>{invs.map((inv,i)=>(
+                  <tr key={i}>
+                    <td>{inv.invoice_number||'—'}</td>
+                    <td style={{maxWidth:300,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{inv.label||'—'}</td>
+                    <td>{inv.date||'—'}</td>
+                    <td style={{textAlign:'right'}}>{eur(parseFloat(inv.currency_amount_before_tax||0))}</td>
+                    <td style={{textAlign:'right',fontWeight:600}}>{eur(parseFloat(inv.amount||0))}</td>
+                    <td><span className={`badge ${inv.payment_status==='paid'?'b-ok':'b-warn'}`} style={{fontSize:9}}>{inv.payment_status==='paid'?'Payée':'À traiter'}</span></td>
+                  </tr>
+                ))}</tbody>
+                <tfoot><tr style={{fontWeight:700,borderTop:'2px solid var(--gris-300)'}}>
+                  <td>TOTAL</td><td/><td/>
+                  <td style={{textAlign:'right'}}>{eur(invs.reduce((s,i)=>s+parseFloat(i.currency_amount_before_tax||0),0))}</td>
+                  <td style={{textAlign:'right',color:'var(--bordeaux)'}}>{eur(invs.reduce((s,i)=>s+parseFloat(i.amount||0),0))}</td><td/>
+                </tr></tfoot>
+              </table></div>
+            </div>);
+          })()}
+          </div>
         </div>);
       })}
     </div>}
