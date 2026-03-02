@@ -1719,7 +1719,8 @@ function Dashboard(){
   const couvertsDisplay=useSeason?TRIVEC_SEASON.couverts:tp.couverts;
   const tmDisplay=couvertsDisplay>0?Math.round(caDisplay/couvertsDisplay):0;
   const caLabel=useSeason?'Saison':'';
-  const staffPct=caDisplay>0?Math.round(pCtx.msProrata/caDisplay*1000)/10:0;
+  const msDisplay=useSeason?pCtx.msActive:pCtx.msProrata;
+  const staffPct=caDisplay>0?Math.round(msDisplay/caDisplay*1000)/10:0;
   return(<div className="fin">
     {!hasTrivec&&!useSeason&&<div style={{background:'var(--bleu-light)',border:'1px solid var(--bleu)',borderRadius:10,padding:16,marginBottom:20,fontSize:13,color:'var(--bleu)'}}>
       <strong>Bienvenue sur le tableau de bord IMA.</strong> Les données s'afficheront automatiquement lorsque vos services seront connectés. Rendez-vous dans <strong>Administration</strong> pour configurer Pennylane, Trivec et SevenRooms.
@@ -1728,7 +1729,7 @@ function Dashboard(){
       <div className="kpi"><div className="kpi-label">CA {useSeason?'Saison':'('+pCtx.dates.label+')'}</div><div className="kpi-val" style={{color:caDisplay>0?'var(--gris-900)':'var(--gris-300)'}}>{caDisplay>0?caDisplay.toLocaleString('fr-FR',{maximumFractionDigits:0})+'€':'—'}</div><div className={`kpi-chg ${caDisplay>0?'pos':'neu'}`}>{useSeason?'Rapport Trivec':tp.days>0?`${tp.days} jour(s)`:'En attente Trivec'}</div></div>
       <div className="kpi"><div className="kpi-label">Couverts</div><div className="kpi-val" style={{color:couvertsDisplay>0?'var(--gris-900)':'var(--gris-300)'}}>{couvertsDisplay>0?couvertsDisplay.toLocaleString('fr-FR'):'—'}</div><div className={`kpi-chg ${couvertsDisplay>0?'pos':'neu'}`}>{couvertsDisplay>0?`TM: ${tmDisplay}€`:'En attente Trivec'}</div></div>
       <div className="kpi"><div className="kpi-label">Effectif actif</div><div className="kpi-val">{PayrollService.getEffectifActif()}</div><div className="kpi-chg neu">{tipsEligible.length} bénéf. tips</div></div>
-      <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:caDisplay>0?(staffPct>30?'var(--rouge)':staffPct>25?'var(--orange)':'var(--vert)'):'var(--gris-300)'}}>{caDisplay>0?staffPct+'%':'—'}</div><div className="kpi-chg neu">{caDisplay>0?`MS: ${eur(pCtx.msProrata)} / CA: ${eur(caDisplay)}`:'CA non disponible'}</div></div>
+      <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:caDisplay>0?(staffPct>30?'var(--rouge)':staffPct>25?'var(--orange)':'var(--vert)'):'var(--gris-300)'}}>{caDisplay>0?staffPct+'%':'—'}</div><div className="kpi-chg neu">{caDisplay>0?`MS: ${eur(msDisplay)} / CA: ${eur(caDisplay)}`:'CA non disponible'}</div></div>
     </div>
     <div className="cg">
       <div className="card">
@@ -1829,8 +1830,8 @@ function Finance(){
   const caFood=_useSeason?TRIVEC_SEASON.categories.find(c=>c.nom==='Nourriture')?.montant||0:pCtx.trivecPeriod.caResto;
   const caBar=_useSeason?(TRIVEC_SEASON.categories.find(c=>c.nom==='Boissons Alcoolisées')?.montant||0)+(TRIVEC_SEASON.categories.find(c=>c.nom==='Boissons Sans Alcool')?.montant||0):(pCtx.trivecPeriod.caClub+pCtx.trivecPeriod.caBar);
 
-  // Staff cost prorated to period
-  const realStaffCost=pCtx.msProrata;
+  // Staff cost — use full season MS when using season CA
+  const realStaffCost=_useSeason?pCtx.msActive:pCtx.msProrata;
   const staffCosts=realStaffCost||totals['Staff']||0;
   // Override totals Staff with real payroll if available
   if(realStaffCost>0)totals['Staff']=realStaffCost;
@@ -2023,10 +2024,10 @@ function Costs(){
   const foodTotal=totals['Food']||0;
   const barTotal=totals['Bar']||0;
   const pCtx=usePeriod();
-  const realStaffMS=pCtx.msProrata;
-  const primeCost=(foodTotal+barTotal+realStaffMS);
-  // Season CA for ratio calculations
   const _sCA=typeof TRIVEC_SEASON!=='undefined'?TRIVEC_SEASON:null;
+  const _costsUseSeason=_sCA!==null;
+  const realStaffMS=_costsUseSeason?pCtx.msActive:pCtx.msProrata;
+  const primeCost=(foodTotal+barTotal+realStaffMS);
   const caNourriture=_sCA?_sCA.categories.find(c=>c.nom==='Nourriture')?.montant||0:0;
   const caBoissons=_sCA?(_sCA.categories.find(c=>c.nom==='Boissons Alcoolisées')?.montant||0)+(_sCA.categories.find(c=>c.nom==='Boissons Sans Alcool')?.montant||0):0;
   const caTotalSeason=_sCA?_sCA.ventesNet:0;
@@ -2567,7 +2568,8 @@ function StaffPage(){
   const _staffUseSeason=pCtx.trivecPeriod.days===0&&typeof TRIVEC_SEASON!=='undefined';
   const caTotal=_staffUseSeason?TRIVEC_SEASON.ventesNet:pCtx.trivecPeriod.total;
   const caSource=_staffUseSeason?'Saison Trivec':pCtx.trivecPeriod.days>0?`Trivec (${pCtx.trivecPeriod.days}j)`:'—';
-  const staffCostPct=caTotal>0?Math.round(pCtx.msProrata/caTotal*1000)/10:0;
+  const msDisplay=_staffUseSeason?pCtx.msActive:pCtx.msProrata;
+  const staffCostPct=caTotal>0?Math.round(msDisplay/caTotal*1000)/10:0;
   const evo=PayrollService.getEvolution();
   const upcoming=PayrollService.getUpcomingDepartures();
   const sdtcList=PayrollService.getSDTC();
@@ -2617,7 +2619,7 @@ function StaffPage(){
   return(<div className="fin">
     <div className="kpi-g">
       <div className="kpi"><div className="kpi-label">Effectif actif</div><div className="kpi-val">{PayrollService.getEffectifActif()}</div><div className="kpi-chg neu">{PayrollDataJan.filter(e=>e.status==='sdtc').length} SDTC + {PayrollDataJan.filter(e=>e.status==='sdtc-fev').length} départs fév</div></div>
-      <div className="kpi"><div className="kpi-label">Masse salariale ({pCtx.dates.days}j)</div><div className="kpi-val">{eur(pCtx.msProrata)}</div><div className="kpi-chg neu">{pCtx.mode!=='mois'?`Prorata ${pCtx.dates.days}j / 30j • `:''}{eur(pCtx.msMensuel)}/mois</div></div>
+      <div className="kpi"><div className="kpi-label">Masse salariale {_staffUseSeason?'Saison':'('+pCtx.dates.days+'j)'}</div><div className="kpi-val">{eur(msDisplay)}</div><div className="kpi-chg neu">{_staffUseSeason?'Dec+Jan+Fév(est.)':pCtx.mode!=='mois'?`Prorata ${pCtx.dates.days}j / 30j`:''} • {eur(pCtx.msMensuel)}/mois</div></div>
       <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:caTotal>0?(staffCostPct>30?'var(--rouge)':staffCostPct>25?'var(--orange)':'var(--vert)'):'var(--gris-300)'}}>{caTotal>0?staffCostPct+'%':'—'}</div><div className="kpi-chg neu">{caTotal>0?`CA ${eur(caTotal)} (${caSource})`:'CA non disponible'}</div></div>
       <div className="kpi"><div className="kpi-label">Départs Février</div><div className="kpi-val" style={{color:'var(--orange)'}}>{upcoming.length}</div><div className="kpi-chg neg">{upcoming.map(u=>u.name.split(' ').pop()).join(', ')}</div></div>
     </div>
