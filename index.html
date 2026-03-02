@@ -1776,10 +1776,14 @@ function Dashboard(){
                   </div>;
                 })}
               </div>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,fontSize:11,textAlign:'center',borderTop:'1px solid var(--gris-100)',paddingTop:10}}>
-                <div><div style={{color:'var(--gris-500)'}}>Restaurant</div><div style={{fontWeight:700}}>{(pCtx.trivecPeriod.caResto||0).toLocaleString('fr-FR')}€</div></div>
-                <div><div style={{color:'var(--gris-500)'}}>Club</div><div style={{fontWeight:700}}>{(pCtx.trivecPeriod.caClub||0).toLocaleString('fr-FR')}€</div></div>
-                <div><div style={{color:'var(--gris-500)'}}>Bar</div><div style={{fontWeight:700}}>{(pCtx.trivecPeriod.caBar||0).toLocaleString('fr-FR')}€</div></div>
+              <div style={{display:'grid',gridTemplateColumns:isSeason?'repeat(4,1fr)':'repeat(3,1fr)',gap:10,fontSize:11,textAlign:'center',borderTop:'1px solid var(--gris-100)',paddingTop:10}}>
+                {isSeason?TRIVEC_SEASON.categories.map(function(c){return(
+                  <div key={c.nom}><div style={{color:'var(--gris-500)'}}>{c.nom}</div><div style={{fontWeight:700}}>{c.montant.toLocaleString('fr-FR')}€</div><div style={{color:'var(--gris-400)',fontSize:10}}>{c.pct}%</div></div>
+                );}):<>
+                <div><div style={{color:'var(--gris-500)'}}>Restaurant</div><div style={{fontWeight:700}}>{(tp.caResto||0).toLocaleString('fr-FR')}€</div></div>
+                <div><div style={{color:'var(--gris-500)'}}>Club</div><div style={{fontWeight:700}}>{(tp.caClub||0).toLocaleString('fr-FR')}€</div></div>
+                <div><div style={{color:'var(--gris-500)'}}>Bar</div><div style={{fontWeight:700}}>{(tp.caBar||0).toLocaleString('fr-FR')}€</div></div>
+                </>}
               </div>
             </div>;
           })():<div style={{padding:40,textAlign:'center',color:'var(--gris-400)'}}>
@@ -2052,8 +2056,12 @@ function Costs(){
   const isSeason=tp._fromSeason||false;
   const realStaffMS=isSeason?pCtx.msActive:pCtx.msProrata;
   const primeCost=(foodTotal+barTotal+realStaffMS);
-  const caNourriture=tp.caResto||0;
-  const caBoissons=(tp.caBar||0)+(tp.caClub||0);
+  // Pour les ratios de coût, utiliser les catégories Trivec comme dénominateur
+  // Car TVA 10% = Nourriture + Boissons SA, TVA 20% = Boissons Alc seulement
+  // Les catégories donnent le bon split : Nourriture vs Boissons (Alc+SA)
+  const _S=typeof TRIVEC_SEASON!=='undefined'?TRIVEC_SEASON:null;
+  const caNourriture=isSeason&&_S?(_S.categories.find(function(c){return c.nom==='Nourriture';})||{}).montant||0:(tp.caResto||0);
+  const caBoissons=isSeason&&_S?((_S.categories.find(function(c){return c.nom==='Boissons Alcoolisées';})||{}).montant||0)+((_S.categories.find(function(c){return c.nom==='Boissons Sans Alcool';})||{}).montant||0):((tp.caBar||0)+(tp.caClub||0));
   const caTotalSeason=tp.total||0;
   const foodCostPct=caNourriture>0&&foodTotal>0?Math.round(foodTotal/caNourriture*1000)/10:null;
   const barCostPct=caBoissons>0&&barTotal>0?Math.round(barTotal/caBoissons*1000)/10:null;
@@ -2120,6 +2128,10 @@ function Costs(){
       <div className={`tab ${tab==='ratios'?'active':''}`} onClick={()=>setTab('ratios')}>Ratios & COGS</div>
       <div className={`tab ${tab==='fournisseurs'?'active':''}`} onClick={()=>setTab('fournisseurs')}>Tous les fournisseurs</div>
       <div className={`tab ${tab==='mapping'?'active':''}`} onClick={()=>setTab('mapping')}>Mapping</div>
+    </div>
+
+    <div style={{background:'var(--cream,#fdf6f0)',border:'1px solid #e8d5c4',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:11,color:'var(--gris-600)'}}>
+      <strong>Note TVA mixte :</strong> Le bar cost est calculé sur CA Boissons Alc. + Boissons SA (catégories Trivec). Les spiritueux servis avec mixers offerts (sauf Red Bull) ont une TVA mixte : la part alcool est à 20%, le soft offert est à 10%. Les prix carte intègrent le mixer dans le prix affiché.
     </div>
 
     {loading&&<div style={{textAlign:'center',padding:40}}><div className="spinner" style={{width:24,height:24}}/><div style={{marginTop:10,fontSize:13,color:'var(--gris-500)'}}>Chargement Pennylane...</div></div>}
@@ -3643,6 +3655,483 @@ const TRIVEC_SEASON={
   ]
 };
 
+// ===== PRIX DE VENTE CARTE (TTC) =====
+// Source : Cartes IMA (Food, Boissons, Vins, VIP) — hors suggestions
+// Note : ALL DRINKS INCLUDE COMPLIMENTARY MIXERS EXCEPT REDBULL
+// → Quand un spirit est servi avec un soft (ex: vodka-redbull), le prix inclut le mixer.
+//   La TVA est mixte : spirit à 20%, soft offert à 10%.
+const MENU_PRICES={
+  // ===== COCKTAILS SIGNATURES =====
+  "IMA's Tea Time":{prix:18,cat:'cocktail',tva:20},
+  "Eastern Sour":{prix:18,cat:'cocktail',tva:20},
+  "Smoked Bourbon":{prix:18,cat:'cocktail',tva:20},
+  "British Monk":{prix:20,cat:'cocktail',tva:20},
+  "Sweet and Russian":{prix:20,cat:'cocktail',tva:20},
+  "Midnight Flower":{prix:20,cat:'cocktail',tva:20},
+  "Smoky Mountain":{prix:22,cat:'cocktail',tva:20},
+  // ===== MOCKTAILS =====
+  "Douceur d'Hiver":{prix:16,cat:'mocktail',tva:10},
+  "Nectar Alpin":{prix:16,cat:'mocktail',tva:10},
+  // ===== SPRITZ =====
+  "Aperol Spritz":{prix:16,cat:'spritz',tva:20},
+  "Limoncello Spritz":{prix:16,cat:'spritz',tva:20},
+  "Hugo Spritz":{prix:16,cat:'spritz',tva:20},
+  "Italicus Spritz":{prix:16,cat:'spritz',tva:20},
+  // ===== CHAMPAGNES AU VERRE =====
+  "Perrier-Jouët Grand Brut verre":{prix:24,cat:'champagne_verre',tva:20},
+  "Perrier-Jouët Blason Rosé verre":{prix:29,cat:'champagne_verre',tva:20},
+  // ===== VINS AU VERRE =====
+  "Minuty Or verre":{prix:12,cat:'vin_verre',tva:20},
+  "Seyssel Cep Noir verre blanc":{prix:10,cat:'vin_verre',tva:20},
+  "Pouilly Fumé Calcite verre":{prix:12,cat:'vin_verre',tva:20},
+  "Coudoulet Beaucastel verre blanc":{prix:12,cat:'vin_verre',tva:20},
+  "Rully 1er Cru Meix Cadot verre":{prix:15,cat:'vin_verre',tva:20},
+  "Cuvée Avalanche verre rouge":{prix:10,cat:'vin_verre',tva:20},
+  "Croze Hermitage Alexandrins verre":{prix:12,cat:'vin_verre',tva:20},
+  "Côte de Nuit Village verre":{prix:12,cat:'vin_verre',tva:20},
+  "St Emilion Baron Boutisse verre":{prix:14,cat:'vin_verre',tva:20},
+  // ===== LIQUEURS & EAU-DE-VIE (4cl) =====
+  "Génépi":{prix:8,cat:'liqueur',tva:20},
+  "Jägermeister":{prix:12,cat:'liqueur',tva:20},
+  "Get 27":{prix:12,cat:'liqueur',tva:20},
+  "Get 31":{prix:14,cat:'liqueur',tva:20},
+  "Bailey's":{prix:14,cat:'liqueur',tva:20},
+  "Poire William":{prix:14,cat:'liqueur',tva:20},
+  "Chartreuse Jaune":{prix:14,cat:'liqueur',tva:20},
+  "Chartreuse Verte":{prix:14,cat:'liqueur',tva:20},
+  "Calvados Beaujour":{prix:16,cat:'liqueur',tva:20},
+  "Amaretto Adriatico":{prix:16,cat:'liqueur',tva:20},
+  "Armagnac By Joy 1975":{prix:17,cat:'liqueur',tva:20},
+  // ===== APÉRITIFS (4cl) =====
+  "Ricard":{prix:8,cat:'aperitif',tva:20},
+  "Martini Bianco":{prix:12,cat:'aperitif',tva:20},
+  "Martini Rosso":{prix:12,cat:'aperitif',tva:20},
+  "Campari":{prix:12,cat:'aperitif',tva:20},
+  "Porto Sandeman":{prix:12,cat:'aperitif',tva:20},
+  "Aperol":{prix:14,cat:'aperitif',tva:20},
+  // ===== BIÈRES =====
+  "Noam 33cl":{prix:10,cat:'biere',tva:20},
+  "Corona btl 33cl":{prix:12,cat:'biere',tva:20},
+  "Lagunitas IPA 33cl":{prix:12,cat:'biere',tva:20},
+  "Heineken 33cl":{prix:8,cat:'biere_pression',tva:20},
+  "Heineken 50cl":{prix:14,cat:'biere_pression',tva:20},
+  "Corona pression 33cl":{prix:9,cat:'biere_pression',tva:20},
+  "Corona pression 50cl":{prix:15,cat:'biere_pression',tva:20},
+  // ===== SOFTS =====
+  "Evian 33cl":{prix:10,cat:'soft',tva:10},
+  "Badoit 33cl":{prix:7,cat:'soft',tva:10},
+  "Badoit 75cl":{prix:10,cat:'soft',tva:10},
+  "Coca-Cola 33cl":{prix:10,cat:'soft',tva:10},
+  "Coca-Cola Zero 33cl":{prix:10,cat:'soft',tva:10},
+  "Fuze Tea 20cl":{prix:8,cat:'soft',tva:10},
+  "Sprite 20cl":{prix:8,cat:'soft',tva:10},
+  "Fanta 20cl":{prix:8,cat:'soft',tva:10},
+  "Red Bull 25cl":{prix:10,cat:'soft',tva:10},
+  "Schweppes Tonic":{prix:8,cat:'soft',tva:10},
+  "Schweppes Hibiscus":{prix:8,cat:'soft',tva:10},
+  "Schweppes Pomelo":{prix:8,cat:'soft',tva:10},
+  "Schweppes Ginger Ale":{prix:8,cat:'soft',tva:10},
+  "Schweppes Ginger Beer":{prix:8,cat:'soft',tva:10},
+  "Jus Granini 20cl":{prix:9,cat:'soft',tva:10},
+  "Alain Millat 33cl":{prix:12,cat:'soft',tva:10},
+  // ===== CAFÉS =====
+  "Espresso":{prix:6,cat:'cafe',tva:10},
+  "Décaféiné":{prix:6,cat:'cafe',tva:10},
+  "Café Crème":{prix:8,cat:'cafe',tva:10},
+  "Cappuccino":{prix:8,cat:'cafe',tva:10},
+  "Double Espresso":{prix:10,cat:'cafe',tva:10},
+  "Irish Coffee":{prix:18,cat:'cafe',tva:20},
+  // ===== INFUSIONS & THÉ =====
+  "Thé Vert":{prix:9,cat:'the',tva:10},
+  "Earl Grey":{prix:9,cat:'the',tva:10},
+  "Camomille":{prix:9,cat:'the',tva:10},
+  "Verveine":{prix:9,cat:'the',tva:10},
+  "Thé à la Menthe":{prix:10,cat:'the',tva:10},
+  // ===== VODKA (verre 4cl) =====
+  "Silver Gecko":{prix:16,cat:'vodka',tva:20},
+  "Belvedere verre":{prix:18,cat:'vodka',tva:20},
+  "Beluga Noble verre":{prix:18,cat:'vodka',tva:20},
+  "Belvedere Ten verre":{prix:24,cat:'vodka',tva:20},
+  "Grey Goose Altius verre":{prix:26,cat:'vodka',tva:20},
+  "Beluga Gold Line verre":{prix:30,cat:'vodka',tva:20},
+  // VODKA bouteilles 75cl
+  "Belvedere 75cl":{prix:280,cat:'vodka_btl',tva:20},
+  "Beluga Noble 75cl":{prix:320,cat:'vodka_btl',tva:20},
+  "Belvedere Ten 75cl":{prix:650,cat:'vodka_btl',tva:20},
+  "Grey Goose Altius 75cl":{prix:680,cat:'vodka_btl',tva:20},
+  "Beluga Gold Line 75cl":{prix:700,cat:'vodka_btl',tva:20},
+  // VODKA magnums
+  "Belvedere 150cl":{prix:650,cat:'vodka_mag',tva:20},
+  "Beluga Noble 150cl":{prix:720,cat:'vodka_mag',tva:20},
+  "Belvedere Ten 150cl":{prix:1350,cat:'vodka_mag',tva:20},
+  "Grey Goose Altius 150cl":{prix:1500,cat:'vodka_mag',tva:20},
+  "Beluga Gold Line 150cl":{prix:1600,cat:'vodka_mag',tva:20},
+  // ===== GIN (verre 4cl) =====
+  "Tanqueray London Dry verre":{prix:16,cat:'gin',tva:20},
+  "Tanqueray Alcohol-Free verre":{prix:16,cat:'gin',tva:10},
+  "Tanqueray Flor de Sevilla verre":{prix:18,cat:'gin',tva:20},
+  "Tanqueray Blackcurrant verre":{prix:18,cat:'gin',tva:20},
+  "Tanqueray No. Ten verre":{prix:25,cat:'gin',tva:20},
+  "Roku Gin verre":{prix:28,cat:'gin',tva:20},
+  "Hendrick's verre":{prix:18,cat:'gin',tva:20},
+  "Monkey 47 verre":{prix:22,cat:'gin',tva:20},
+  // GIN bouteilles
+  "Tanqueray London Dry 75cl":{prix:240,cat:'gin_btl',tva:20},
+  "Tanqueray Alcohol-Free 75cl":{prix:240,cat:'gin_btl',tva:10},
+  "Tanqueray Flor de Sevilla 75cl":{prix:300,cat:'gin_btl',tva:20},
+  "Tanqueray Blackcurrant 75cl":{prix:300,cat:'gin_btl',tva:20},
+  "Tanqueray No. Ten 75cl":{prix:340,cat:'gin_btl',tva:20},
+  "Roku Gin 75cl":{prix:350,cat:'gin_btl',tva:20},
+  "Hendrick's 75cl":{prix:300,cat:'gin_btl',tva:20},
+  "Monkey 47 75cl":{prix:270,cat:'gin_btl',tva:20},
+  // ===== TEQUILA (verre 4cl) =====
+  "Don Julio Reposado verre":{prix:16,cat:'tequila',tva:20},
+  "Don Julio Anejo verre":{prix:20,cat:'tequila',tva:20},
+  "Don Julio 70 Cristalino verre":{prix:25,cat:'tequila',tva:20},
+  "Don Julio 1942 verre":{prix:45,cat:'tequila',tva:20},
+  "Don Julio Rosado verre":{prix:45,cat:'tequila',tva:20},
+  "Casamigos Blanco verre":{prix:14,cat:'tequila',tva:20},
+  "Casamigos Reposado verre":{prix:16,cat:'tequila',tva:20},
+  "Casamigos Anejo verre":{prix:20,cat:'tequila',tva:20},
+  "Casamigos Mezcal Joven verre":{prix:25,cat:'tequila',tva:20},
+  "Adiccion Blanco verre":{prix:25,cat:'tequila',tva:20},
+  "Adiccion Reposado verre":{prix:30,cat:'tequila',tva:20},
+  "Adiccion Mezcal verre":{prix:35,cat:'tequila',tva:20},
+  "Adiccion Anejo verre":{prix:40,cat:'tequila',tva:20},
+  "818 Reposado verre":{prix:18,cat:'tequila',tva:20},
+  "818 Anejo verre":{prix:22,cat:'tequila',tva:20},
+  "818 Eight Reserve verre":{prix:50,cat:'tequila',tva:20},
+  "Codigo Blanco verre":{prix:14,cat:'tequila',tva:20},
+  "Codigo Reposado verre":{prix:15,cat:'tequila',tva:20},
+  "Codigo Anejo verre":{prix:18,cat:'tequila',tva:20},
+  "Codigo Rosa verre":{prix:30,cat:'tequila',tva:20},
+  "Codigo Origen verre":{prix:45,cat:'tequila',tva:20},
+  // TEQUILA bouteilles
+  "Don Julio Reposado 75cl":{prix:280,cat:'tequila_btl',tva:20},
+  "Don Julio Anejo 75cl":{prix:350,cat:'tequila_btl',tva:20},
+  "Don Julio 70 Cristalino 75cl":{prix:390,cat:'tequila_btl',tva:20},
+  "Don Julio 1942 75cl":{prix:680,cat:'tequila_btl',tva:20},
+  "Don Julio Rosado 75cl":{prix:750,cat:'tequila_btl',tva:20},
+  "Don Julio 1942 150cl":{prix:1550,cat:'tequila_mag',tva:20},
+  "Casamigos Blanco 75cl":{prix:240,cat:'tequila_btl',tva:20},
+  "Casamigos Reposado 75cl":{prix:280,cat:'tequila_btl',tva:20},
+  "Casamigos Anejo 75cl":{prix:350,cat:'tequila_btl',tva:20},
+  "Casamigos Mezcal Joven 75cl":{prix:300,cat:'tequila_btl',tva:20},
+  "Adiccion Blanco 75cl":{prix:300,cat:'tequila_btl',tva:20},
+  "Adiccion Reposado 75cl":{prix:500,cat:'tequila_btl',tva:20},
+  "Adiccion Mezcal 75cl":{prix:350,cat:'tequila_btl',tva:20},
+  "Adiccion Anejo 75cl":{prix:650,cat:'tequila_btl',tva:20},
+  "Adiccion Reposado 150cl":{prix:1200,cat:'tequila_mag',tva:20},
+  "Adiccion Anejo 150cl":{prix:1500,cat:'tequila_mag',tva:20},
+  "818 Reposado 75cl":{prix:280,cat:'tequila_btl',tva:20},
+  "818 Anejo 75cl":{prix:350,cat:'tequila_btl',tva:20},
+  "818 Eight Reserve 75cl":{prix:700,cat:'tequila_btl',tva:20},
+  "Codigo Blanco 75cl":{prix:250,cat:'tequila_btl',tva:20},
+  "Codigo Reposado 75cl":{prix:280,cat:'tequila_btl',tva:20},
+  "Codigo Anejo 75cl":{prix:320,cat:'tequila_btl',tva:20},
+  "Codigo Rosa 75cl":{prix:350,cat:'tequila_btl',tva:20},
+  "Codigo Origen 75cl":{prix:700,cat:'tequila_btl',tva:20},
+  "Codigo Blanco 150cl":{prix:600,cat:'tequila_mag',tva:20},
+  "Codigo Reposado 150cl":{prix:700,cat:'tequila_mag',tva:20},
+  "Codigo Anejo 150cl":{prix:800,cat:'tequila_mag',tva:20},
+  "Codigo Rosa 150cl":{prix:750,cat:'tequila_mag',tva:20},
+  // ===== RHUM (verre 4cl) =====
+  "Havana Club Especial verre":{prix:16,cat:'rhum',tva:20},
+  "Havana Club 7 Ans verre":{prix:18,cat:'rhum',tva:20},
+  "Don Papa Baroko verre":{prix:22,cat:'rhum',tva:20},
+  "Zacapa Solera Gran Reserva verre":{prix:28,cat:'rhum',tva:20},
+  "Zacapa Centenario XO verre":{prix:42,cat:'rhum',tva:20},
+  "Bumbu The Original verre":{prix:18,cat:'rhum',tva:20},
+  "Bumbu XO verre":{prix:28,cat:'rhum',tva:20},
+  // RHUM bouteilles
+  "Havana Club Especial 75cl":{prix:220,cat:'rhum_btl',tva:20},
+  "Havana Club 7 Ans 75cl":{prix:240,cat:'rhum_btl',tva:20},
+  "Don Papa Baroko 75cl":{prix:260,cat:'rhum_btl',tva:20},
+  "Zacapa Solera Gran Reserva 75cl":{prix:360,cat:'rhum_btl',tva:20},
+  "Zacapa Centenario XO 75cl":{prix:450,cat:'rhum_btl',tva:20},
+  "Bumbu The Original 75cl":{prix:240,cat:'rhum_btl',tva:20},
+  "Bumbu XO 75cl":{prix:320,cat:'rhum_btl',tva:20},
+  // ===== COGNAC (verre 4cl) =====
+  "Hennessy VS verre":{prix:22,cat:'cognac',tva:20},
+  "Martell VSOP verre":{prix:28,cat:'cognac',tva:20},
+  "Martell XO verre":{prix:45,cat:'cognac',tva:20},
+  // COGNAC bouteilles
+  "Hennessy VS 75cl":{prix:350,cat:'cognac_btl',tva:20},
+  "Martell VSOP 75cl":{prix:380,cat:'cognac_btl',tva:20},
+  "Martell XO 75cl":{prix:750,cat:'cognac_btl',tva:20},
+  // ===== WHISKY (verre 4cl) =====
+  "Jack Daniel's verre":{prix:16,cat:'whisky',tva:20},
+  "Johnnie Walker Black Label verre":{prix:18,cat:'whisky',tva:20},
+  "Bulleit Bourbon verre":{prix:18,cat:'whisky',tva:20},
+  "Bulleit Rye verre":{prix:18,cat:'whisky',tva:20},
+  "Chivas 12 verre":{prix:25,cat:'whisky',tva:20},
+  "Talisker 10 verre":{prix:25,cat:'whisky',tva:20},
+  "Hibiki verre":{prix:28,cat:'whisky',tva:20},
+  "Oban 14 verre":{prix:35,cat:'whisky',tva:20},
+  "Royal Salute verre":{prix:45,cat:'whisky',tva:20},
+  "Johnnie Walker Blue Label verre":{prix:50,cat:'whisky',tva:20},
+  // WHISKY bouteilles
+  "Jack Daniel's 75cl":{prix:250,cat:'whisky_btl',tva:20},
+  "Johnnie Walker Black Label 75cl":{prix:280,cat:'whisky_btl',tva:20},
+  "Bulleit Bourbon 75cl":{prix:280,cat:'whisky_btl',tva:20},
+  "Bulleit Rye 75cl":{prix:380,cat:'whisky_btl',tva:20},
+  "Chivas 12 75cl":{prix:320,cat:'whisky_btl',tva:20},
+  "Talisker 10 75cl":{prix:380,cat:'whisky_btl',tva:20},
+  "Hibiki 75cl":{prix:320,cat:'whisky_btl',tva:20},
+  "Oban 14 75cl":{prix:630,cat:'whisky_btl',tva:20},
+  "Royal Salute 75cl":{prix:650,cat:'whisky_btl',tva:20},
+  "Johnnie Walker Blue Label 75cl":{prix:700,cat:'whisky_btl',tva:20},
+  // ===== CHAMPAGNES BRUT (75cl) =====
+  "Perrier-Jouët Brut 75cl":{prix:160,cat:'champagne',tva:20},
+  "Perrier-Jouët Blanc de Blancs 75cl":{prix:250,cat:'champagne',tva:20},
+  "Perrier-Jouët Belle Époque 75cl":{prix:640,cat:'champagne',tva:20},
+  "Perrier-Jouët Belle Époque BdB 75cl":{prix:1150,cat:'champagne',tva:20},
+  "Louis Roederer 75cl":{prix:175,cat:'champagne',tva:20},
+  "Veuve Clicquot Réserve 75cl":{prix:190,cat:'champagne',tva:20},
+  "Baron de Rothschild 75cl":{prix:220,cat:'champagne',tva:20},
+  "Krug Grande Cuvée 75cl":{prix:720,cat:'champagne',tva:20},
+  "Dom Pérignon 75cl":{prix:750,cat:'champagne',tva:20},
+  "Cristal Roederer 75cl":{prix:780,cat:'champagne',tva:20},
+  "Plénitude P2 2006":{prix:1350,cat:'champagne',tva:20},
+  // CHAMPAGNES BRUT magnums
+  "Perrier-Jouët Brut 150cl":{prix:340,cat:'champagne_mag',tva:20},
+  "Perrier-Jouët Blanc de Blancs 150cl":{prix:520,cat:'champagne_mag',tva:20},
+  "Perrier-Jouët Belle Époque 150cl":{prix:1490,cat:'champagne_mag',tva:20},
+  "Perrier-Jouët Belle Époque BdB 150cl":{prix:2900,cat:'champagne_mag',tva:20},
+  "Krug Grande Cuvée 150cl":{prix:1500,cat:'champagne_mag',tva:20},
+  "Dom Pérignon 150cl":{prix:1850,cat:'champagne_mag',tva:20},
+  "Cristal Roederer 150cl":{prix:2000,cat:'champagne_mag',tva:20},
+  // CHAMPAGNES BRUT 3L/6L
+  "Perrier-Jouët Belle Époque 3L":{prix:3800,cat:'champagne_jero',tva:20},
+  "Krug Grande Cuvée 3L":{prix:4200,cat:'champagne_jero',tva:20},
+  "Dom Pérignon 3L":{prix:5500,cat:'champagne_jero',tva:20},
+  "Perrier-Jouët Belle Époque 6L":{prix:9200,cat:'champagne_jero',tva:20},
+  "Perrier-Jouët Belle Époque BdB 6L":{prix:24500,cat:'champagne_jero',tva:20},
+  "Cristal Roederer 3L":{prix:6300,cat:'champagne_jero',tva:20},
+  // ===== CHAMPAGNES ROSÉ =====
+  "Perrier-Jouët Blason Rosé 75cl":{prix:200,cat:'champagne_rose',tva:20},
+  "Perrier-Jouët BE Rosé 75cl":{prix:1120,cat:'champagne_rose',tva:20},
+  "Veuve Clicquot Rosé 75cl":{prix:240,cat:'champagne_rose',tva:20},
+  "Krug Rosé Éd.28 75cl":{prix:1150,cat:'champagne_rose',tva:20},
+  "Dom Pérignon Rosé 75cl":{prix:1250,cat:'champagne_rose',tva:20},
+  "Cristal Roederer Rosé 75cl":{prix:1350,cat:'champagne_rose',tva:20},
+  "Perrier-Jouët Blason Rosé 150cl":{prix:430,cat:'champagne_rose_mag',tva:20},
+  "Perrier-Jouët BE Rosé 150cl":{prix:2450,cat:'champagne_rose_mag',tva:20},
+  "Krug Rosé Éd.22 150cl":{prix:2380,cat:'champagne_rose_mag',tva:20},
+  "Dom Pérignon Rosé 150cl":{prix:2850,cat:'champagne_rose_mag',tva:20},
+  "Cristal Roederer Rosé 150cl":{prix:2900,cat:'champagne_rose_mag',tva:20},
+  // ===== VINS BLANC (75cl) =====
+  "Seyssel Cep Noir 75cl":{prix:48,cat:'vin_blanc',tva:20},
+  "Chignin Bergeron 75cl":{prix:55,cat:'vin_blanc',tva:20},
+  "Ardoisières Argile 75cl":{prix:85,cat:'vin_blanc',tva:20},
+  "Pouilly-Fumé Corneau 75cl":{prix:60,cat:'vin_blanc',tva:20},
+  "Sancerre Silex Blanc 75cl":{prix:85,cat:'vin_blanc',tva:20},
+  "Pouilly Fumé Calcite 75cl":{prix:90,cat:'vin_blanc',tva:20},
+  "Pouilly-Fumé Les Filles 75cl":{prix:120,cat:'vin_blanc',tva:20},
+  "Sancerre Pour Vous 75cl":{prix:195,cat:'vin_blanc',tva:20},
+  "Coudoulet Beaucastel Blanc 75cl":{prix:60,cat:'vin_blanc',tva:20},
+  "Saint-Joseph Blanc Monteillet 75cl":{prix:75,cat:'vin_blanc',tva:20},
+  "Hermitage Alexandrins Blanc 75cl":{prix:95,cat:'vin_blanc',tva:20},
+  "Condrieu Pagus Luminis 75cl":{prix:100,cat:'vin_blanc',tva:20},
+  "Condrieu Terrasses du Palat 75cl":{prix:140,cat:'vin_blanc',tva:20},
+  "Beaucastel Blanc 75cl":{prix:220,cat:'vin_blanc',tva:20},
+  "Tourelles Békaa Blanc 75cl":{prix:70,cat:'vin_blanc',tva:20},
+  "Pinot Grigio Alto Adige 75cl":{prix:80,cat:'vin_blanc',tva:20},
+  "Rully 1er Cru Meix Cadot 75cl":{prix:75,cat:'vin_blanc',tva:20},
+  "Maranges Les Meurées Blanc 75cl":{prix:90,cat:'vin_blanc',tva:20},
+  "Chablis 1er Cru Fourchaume 75cl":{prix:95,cat:'vin_blanc',tva:20},
+  "Pernand-Vergelesses 75cl":{prix:115,cat:'vin_blanc',tva:20},
+  "Meursault Ballot-Millot 75cl":{prix:165,cat:'vin_blanc',tva:20},
+  "Saint-Aubin Vieille Vignes 75cl":{prix:165,cat:'vin_blanc',tva:20},
+  "Chassagne Montrachet Bachelet 75cl":{prix:190,cat:'vin_blanc',tva:20},
+  "Puligny Montrachet Borgeot 75cl":{prix:195,cat:'vin_blanc',tva:20},
+  "Chassagne 1er Cru Fairendes 75cl":{prix:270,cat:'vin_blanc',tva:20},
+  "Meursault Narvaux 75cl":{prix:255,cat:'vin_blanc',tva:20},
+  "Corton Charlemagne 75cl":{prix:685,cat:'vin_blanc',tva:20},
+  "Criot Batard Montrachet GC 75cl":{prix:990,cat:'vin_blanc',tva:20},
+  // ===== VINS ROSÉ (75cl) =====
+  "Minuty Rose & Or 75cl":{prix:85,cat:'vin_rose',tva:20},
+  "Whispering Angel 75cl":{prix:95,cat:'vin_rose',tva:20},
+  "Minuty 281 75cl":{prix:155,cat:'vin_rose',tva:20},
+  "Minuty Rose & Or 150cl":{prix:180,cat:'vin_rose_mag',tva:20},
+  "Minuty 281 150cl":{prix:295,cat:'vin_rose_mag',tva:20},
+  // ===== VINS ROUGE (75cl) - selection =====
+  "Cuvée Avalanche 75cl":{prix:55,cat:'vin_rouge',tva:20},
+  "Mondeuse Arbin 75cl":{prix:70,cat:'vin_rouge',tva:20},
+  "Persan Miolans 75cl":{prix:85,cat:'vin_rouge',tva:20},
+  "Ardoisières Améthyste 75cl":{prix:185,cat:'vin_rouge',tva:20},
+  "Crozes Hermitage Alexandrins 75cl":{prix:48,cat:'vin_rouge',tva:20},
+  "Coudoulet Beaucastel Rouge 75cl":{prix:70,cat:'vin_rouge',tva:20},
+  "Saint-Joseph Monteillet 75cl":{prix:85,cat:'vin_rouge',tva:20},
+  "Côte du Rhône Jamet 75cl":{prix:95,cat:'vin_rouge',tva:20},
+  "Crozes Clos des Grives 75cl":{prix:145,cat:'vin_rouge',tva:20},
+  "Côte Rôtie Jamet 75cl":{prix:180,cat:'vin_rouge',tva:20},
+  "Côte Rôtie Bécasses 75cl":{prix:195,cat:'vin_rouge',tva:20},
+  "Beaucastel Rouge 75cl":{prix:280,cat:'vin_rouge',tva:20},
+  "Sancerre Tayaux 75cl":{prix:70,cat:'vin_rouge',tva:20},
+  "Sancerre Silex Rouge 75cl":{prix:85,cat:'vin_rouge',tva:20},
+  "Haute Côte de Nuit 75cl":{prix:65,cat:'vin_rouge',tva:20},
+  "Côte de Nuits Villages 75cl":{prix:70,cat:'vin_rouge',tva:20},
+  "Santenay 1er Cru Maladière 75cl":{prix:95,cat:'vin_rouge',tva:20},
+  "Mercurey 1er Cru Fortoul 75cl":{prix:115,cat:'vin_rouge',tva:20},
+  "Morey Saint-Denis 75cl":{prix:140,cat:'vin_rouge',tva:20},
+  "Gevrey Chambertin 75cl":{prix:160,cat:'vin_rouge',tva:20},
+  "Chambolle Musigny VV 75cl":{prix:175,cat:'vin_rouge',tva:20},
+  "Chassagne 1er Cru Boudriotte 75cl":{prix:190,cat:'vin_rouge',tva:20},
+  "Pommard Chanlins 75cl":{prix:215,cat:'vin_rouge',tva:20},
+  "Beaune 1er Cru Clos des Mouches 75cl":{prix:340,cat:'vin_rouge',tva:20},
+  "Vosne-Romanée 1er Cru Chaumes 75cl":{prix:395,cat:'vin_rouge',tva:20},
+  "Corton Grand Cru Rognet 75cl":{prix:410,cat:'vin_rouge',tva:20},
+  "Clos Vougeot Grand Cru 75cl":{prix:440,cat:'vin_rouge',tva:20},
+  "Vosne-Romanée 1er Cru Suchots 75cl":{prix:475,cat:'vin_rouge',tva:20},
+  // Bordeaux
+  "Baron de Boutisse GC 75cl":{prix:50,cat:'vin_rouge',tva:20},
+  "Fleur de Lisse 75cl":{prix:95,cat:'vin_rouge',tva:20},
+  "Dragon de Quintus GC 75cl":{prix:135,cat:'vin_rouge',tva:20},
+  "Canon La Gaffelière GC 75cl":{prix:235,cat:'vin_rouge',tva:20},
+  "Angelus GC 75cl":{prix:950,cat:'vin_rouge',tva:20},
+  "Cheval Blanc 75cl":{prix:1475,cat:'vin_rouge',tva:20},
+  "Fieuzal 75cl":{prix:150,cat:'vin_rouge',tva:20},
+  "Pape Clément 75cl":{prix:390,cat:'vin_rouge',tva:20},
+  "Lagrange 75cl":{prix:85,cat:'vin_rouge',tva:20},
+  "Clos du Marquis 75cl":{prix:145,cat:'vin_rouge',tva:20},
+  "Talbot 75cl":{prix:195,cat:'vin_rouge',tva:20},
+  "Léoville Poyferré 75cl":{prix:210,cat:'vin_rouge',tva:20},
+  "Beychevelle 75cl":{prix:385,cat:'vin_rouge',tva:20},
+  "Beaucaillou 75cl":{prix:460,cat:'vin_rouge',tva:20},
+  "Cantemerle 75cl":{prix:90,cat:'vin_rouge',tva:20},
+  "La Lagune 75cl":{prix:125,cat:'vin_rouge',tva:20},
+  "Lacoste Borie 75cl":{prix:90,cat:'vin_rouge',tva:20},
+  "Lynch Bages 75cl":{prix:330,cat:'vin_rouge',tva:20},
+  "Fugue de Nénin 75cl":{prix:95,cat:'vin_rouge',tva:20},
+  "Gazin 75cl":{prix:195,cat:'vin_rouge',tva:20},
+  "La Conseillante 75cl":{prix:395,cat:'vin_rouge',tva:20},
+  "Les Hauts du Tertre 75cl":{prix:90,cat:'vin_rouge',tva:20},
+  "Prieuré-Lichine 75cl":{prix:140,cat:'vin_rouge',tva:20},
+  "Giscours 75cl":{prix:170,cat:'vin_rouge',tva:20},
+  "Cantenac Brown 75cl":{prix:195,cat:'vin_rouge',tva:20},
+  "Rauzan-Ségla 75cl":{prix:295,cat:'vin_rouge',tva:20},
+  "Palmer 75cl":{prix:630,cat:'vin_rouge',tva:20},
+  "Clauzet 75cl":{prix:95,cat:'vin_rouge',tva:20},
+  "Dame de Montrose 75cl":{prix:120,cat:'vin_rouge',tva:20},
+  "Calon Ségur 75cl":{prix:360,cat:'vin_rouge',tva:20},
+  "Cos d'Estournel 75cl":{prix:390,cat:'vin_rouge',tva:20},
+  "Tourelles Békaa Rouge 75cl":{prix:80,cat:'vin_rouge',tva:20},
+  "Valpolicella Imperfecto 75cl":{prix:95,cat:'vin_rouge',tva:20},
+  "Barolo Trediberri 75cl":{prix:95,cat:'vin_rouge',tva:20},
+  // ===== FOOD — MEZZE =====
+  "Mezze par 3":{prix:28,cat:'mezze',tva:10},
+  "Mezze par 5":{prix:48,cat:'mezze',tva:10},
+  "Mezze par 7":{prix:68,cat:'mezze',tva:10},
+  // ===== FOOD — CAVIAR =====
+  "Caviar Shadi 30g":{prix:95,cat:'caviar',tva:10},
+  "Caviar Shadi 50g":{prix:170,cat:'caviar',tva:10},
+  "Caviar Shadi 125g":{prix:390,cat:'caviar',tva:10},
+  "Caviar Osciètre 30g":{prix:130,cat:'caviar',tva:10},
+  "Caviar Osciètre 50g":{prix:210,cat:'caviar',tva:10},
+  "Caviar Osciètre 125g":{prix:540,cat:'caviar',tva:10},
+  "Vodka Beluga Gold Line 30cl":{prix:30,cat:'caviar',tva:20},
+  // ===== FOOD — PAINS =====
+  "Pain Hallah":{prix:6,cat:'pain',tva:10},
+  "Pain Pita":{prix:3,cat:'pain',tva:10},
+  "Pain Yéménite":{prix:4,cat:'pain',tva:10},
+  "Bread Basket":{prix:12,cat:'pain',tva:10},
+  // ===== FOOD — LATKES =====
+  "Latkes Caviar":{prix:55,cat:'entree',tva:10},
+  // ===== FOOD — SOUPES =====
+  "Velouté de Pistache":{prix:26,cat:'soupe',tva:10},
+  "Harira du Chef":{prix:26,cat:'soupe',tva:10},
+  // ===== FOOD — ENTRÉES / DUOS =====
+  "Houmous Wagyu & Labneh Zaatar":{prix:28,cat:'entree',tva:10},
+  "Labneh Wagyu & Houmous Paprika":{prix:28,cat:'entree',tva:10},
+  "Salade Pousses d'Épinards":{prix:18,cat:'entree',tva:10},
+  "Salade Fattouche":{prix:18,cat:'entree',tva:10},
+  "IMA'rtichoke":{prix:19,cat:'entree',tva:10},
+  "Man'ouché à l'Agneau":{prix:25,cat:'entree',tva:10},
+  "Tartare de Bœuf":{prix:29,cat:'entree',tva:10},
+  // ===== FOOD — PLATS =====
+  "Choux-Fleur d'IMA":{prix:27,cat:'plat',tva:10},
+  "Aubergine au Wagyu":{prix:34,cat:'plat',tva:10},
+  "Shish-Taouk":{prix:28,cat:'plat',tva:10},
+  "Daurade à la Rose":{prix:36,cat:'plat',tva:10},
+  "Poulet Rôti aux Clémentines":{prix:36,cat:'plat',tva:10},
+  "Kefta de Wagyu":{prix:38,cat:'plat',tva:10},
+  "Poulpe aux Épices":{prix:37,cat:'plat',tva:10},
+  // ===== FOOD — ACCOMPAGNEMENTS =====
+  "Purée de Patates Douces":{prix:10,cat:'accompagnement',tva:10},
+  "Compoté d'Aubergines":{prix:10,cat:'accompagnement',tva:10},
+  "Salade d'Épinards Side":{prix:10,cat:'accompagnement',tva:10},
+  "Riz au Safran":{prix:10,cat:'accompagnement',tva:10},
+  // ===== FOOD — DESSERTS =====
+  "Pistache d'IMA":{prix:15,cat:'dessert',tva:10},
+  "Mille Feuilles":{prix:18,cat:'dessert',tva:10},
+  "Rose Achta":{prix:15,cat:'dessert',tva:10},
+  "Chocolate Mousse":{prix:26,cat:'dessert',tva:10},
+  // ===== CLUB — CHAMPAGNES ROSÉ =====
+  "PJ Belle Époque Rosé Club 75cl":{prix:1120,cat:'club_champagne',tva:20},
+  "Krug Rosé Club 75cl":{prix:1150,cat:'club_champagne',tva:20},
+  "Dom Pérignon Rosé Club 75cl":{prix:980,cat:'club_champagne',tva:20},
+  "PJ Belle Époque Rosé Club 150cl":{prix:2450,cat:'club_champagne',tva:20},
+  "Krug Rosé Club 150cl":{prix:2380,cat:'club_champagne',tva:20},
+  "Dom Pérignon Rosé Club 150cl":{prix:2380,cat:'club_champagne',tva:20},
+  // ===== CLUB — PARADES (multi-btl deals) =====
+  "PJ Blanc de Blancs x6":{prix:1350,cat:'club_parade',tva:20},
+  "PJ Blanc de Blancs x10":{prix:2250,cat:'club_parade',tva:20},
+  "PJ Belle Époque x6":{prix:3450,cat:'club_parade',tva:20},
+  "PJ Belle Époque x10":{prix:5760,cat:'club_parade',tva:20},
+  "Dom Pérignon x6":{prix:4050,cat:'club_parade',tva:20},
+  "Dom Pérignon x10":{prix:6750,cat:'club_parade',tva:20},
+  // ===== CLUB — VODKA =====
+  "Belvedere Club 75cl":{prix:650,cat:'club_vodka',tva:20},
+  "Beluga Noble Club 75cl":{prix:720,cat:'club_vodka',tva:20},
+  "Belvedere Ten Club 75cl":{prix:650,cat:'club_vodka',tva:20},
+  "Grey Goose Altius Club 75cl":{prix:680,cat:'club_vodka',tva:20},
+  "Beluga Gold Line Club 75cl":{prix:700,cat:'club_vodka',tva:20},
+  "Belvedere Ten Club 150cl":{prix:1350,cat:'club_vodka',tva:20},
+  "Grey Goose Altius Club 150cl":{prix:1500,cat:'club_vodka',tva:20},
+  "Beluga Gold Line Club 150cl":{prix:1600,cat:'club_vodka',tva:20},
+  // ===== CLUB — GIN =====
+  "Hendrick's Club 75cl":{prix:680,cat:'club_gin',tva:20},
+  "Tanqueray No Ten Club 75cl":{prix:340,cat:'club_gin',tva:20},
+  "Tanqueray No Ten Club 150cl":{prix:750,cat:'club_gin',tva:20},
+  // ===== CLUB — RHUM =====
+  "Havana 7 Ans Club 75cl":{prix:240,cat:'club_rhum',tva:20},
+  "Zacapa Solera Club 75cl":{prix:360,cat:'club_rhum',tva:20},
+  // ===== CLUB — TEQUILA =====
+  "Don Julio 1942 Club 75cl":{prix:680,cat:'club_tequila',tva:20},
+  "Don Julio Rosado Club 75cl":{prix:700,cat:'club_tequila',tva:20},
+  "Don Julio 1942 Club 150cl":{prix:1500,cat:'club_tequila',tva:20},
+  "Adiccion Mezcal Club 75cl":{prix:350,cat:'club_tequila',tva:20},
+  "Adiccion Reposado Club 75cl":{prix:500,cat:'club_tequila',tva:20},
+  "Adiccion Anejo Club 75cl":{prix:650,cat:'club_tequila',tva:20},
+  "Adiccion Reposado Club 150cl":{prix:1200,cat:'club_tequila',tva:20},
+  "818 Eight Reserve Club 75cl":{prix:700,cat:'club_tequila',tva:20},
+  "Clase Azul Mezcal Durango 75cl":{prix:1400,cat:'club_tequila',tva:20},
+  "Clase Azul Anejo 75cl":{prix:1600,cat:'club_tequila',tva:20},
+  "Clase Azul Ultra Anejo 75cl":{prix:7900,cat:'club_tequila',tva:20},
+  // ===== CLUB — WHISKY =====
+  "Johnnie Walker Blue Club 75cl":{prix:700,cat:'club_whisky',tva:20},
+  // ===== CLUB — CHAMPAGNES BRUT =====
+  "PJ Belle Époque Club 75cl":{prix:640,cat:'club_champagne',tva:20},
+  "PJ Belle Époque BdB Club 75cl":{prix:1150,cat:'club_champagne',tva:20},
+  "Krug Grande Cuvée Club 75cl":{prix:720,cat:'club_champagne',tva:20},
+  "Dom Pérignon Vibe Club 75cl":{prix:750,cat:'club_champagne',tva:20},
+  "Cristal Roederer Club 75cl":{prix:780,cat:'club_champagne',tva:20},
+  "Dom Pérignon P2 Club":{prix:1350,cat:'club_champagne',tva:20},
+  "PJ Belle Époque Club 150cl":{prix:1490,cat:'club_champagne',tva:20},
+  "PJ Belle Époque BdB Club 150cl":{prix:2900,cat:'club_champagne',tva:20},
+  "Krug Grande Cuvée Club 150cl":{prix:1850,cat:'club_champagne',tva:20},
+  // GO BIG
+  "PJ Belle Époque 3L":{prix:3800,cat:'club_big',tva:20},
+  "Krug Grande Cuvée 3L Club":{prix:4200,cat:'club_big',tva:20},
+  "Dom Pérignon 3L Club":{prix:5500,cat:'club_big',tva:20},
+  "Moët Chandon 12L":{prix:3900,cat:'club_big',tva:20},
+  // ===== CLUB — CHAMPAGNES PERRIER-JOUET =====
+  "PJ Brut Club 75cl":{prix:160,cat:'club_champagne',tva:20},
+  "PJ Brut Club 150cl":{prix:340,cat:'club_champagne',tva:20},
+  "PJ Brut Club 3L":{prix:680,cat:'club_champagne',tva:20}
+};
+
 // ===== POS =====
 function POSPage(){
   const hasTrivec=TrivecService.isConnected();
@@ -4876,14 +5365,20 @@ function MenuEngineering(){
         pMap[k].totalCA+=p.prix||0;
       });
     }
-    // Merge with RecipeCosts for food cost per unit
+    // Merge with RecipeCosts for food cost per unit and MENU_PRICES
     return Object.values(pMap).filter(function(p){return p.totalQty>0;}).map(function(p){
       var prixMoyen=p.totalCA/p.totalQty;
       var costUnit=RecipeCosts[p.nom];
       if(costUnit===undefined||costUnit===null)costUnit=null;
+      // Look up menu price (TTC)
+      var mp=MENU_PRICES[p.nom]||null;
+      var prixCarteTTC=mp?mp.prix:null;
+      var tvaRate=mp?mp.tva:10;
+      var prixCarteHT=prixCarteTTC?prixCarteTTC/(1+tvaRate/100):null;
       var marginPct=costUnit!==null&&prixMoyen>0?((prixMoyen-costUnit)/prixMoyen)*100:null;
+      var marginTheorique=costUnit!==null&&prixCarteHT?((prixCarteHT-costUnit)/prixCarteHT)*100:null;
       var totalCost=costUnit!==null?costUnit*p.totalQty:null;
-      return{nom:p.nom,cat:p.cat1,cat2:p.cat2,qty:p.totalQty,ca:p.totalCA,prixMoyen:prixMoyen,costUnit:costUnit,totalCost:totalCost,marginPct:marginPct};
+      return{nom:p.nom,cat:p.cat1,cat2:p.cat2,qty:p.totalQty,ca:p.totalCA,prixMoyen:prixMoyen,costUnit:costUnit,totalCost:totalCost,marginPct:marginPct,prixCarteTTC:prixCarteTTC,prixCarteHT:prixCarteHT,marginTheorique:marginTheorique,tvaRate:tvaRate};
     });
   },[]);
 
@@ -4928,6 +5423,10 @@ function MenuEngineering(){
       <div className={'tab '+(tab==='all'?'active':'')} onClick={function(){setTab('all');}}>Tous</div>
     </div>
 
+    <div style={{background:'var(--cream)',border:'1px solid var(--bordeaux-light)',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:11,color:'var(--gris-600)'}}>
+      <strong>Note TVA mixte :</strong> Les prix carte sont TTC. Les spiritueux servis avec mixers offerts (sauf Red Bull) ont une TVA mixte : alcool à 20%, soft à 10%. Les prix moyens Trivec sont HT.
+    </div>
+
     <div className="kpi-g">
       <div className="kpi"><div className="kpi-label">Articles vendus</div><div className="kpi-val">{totalItems}</div><div className="kpi-chg neu">{withCost.length} avec coût connu</div></div>
       <div className="kpi"><div className="kpi-label">CA Total</div><div className="kpi-val" style={{color:'var(--bordeaux)'}}>{eur(totalCA)}</div><div className="kpi-chg pos">{tab==='food'?'Nourriture':tab==='bar'?'Boissons':'Tous'}</div></div>
@@ -4967,13 +5466,15 @@ function MenuEngineering(){
     <div className="card">
       <div className="card-h"><div><div className="card-t">Top 15 articles par CA</div><div className="card-st">Tous articles vendus</div></div></div>
       <div className="card-b"><div className="tbl"><table>
-        <thead><tr><th>Article</th><th>Catégorie</th><th style={{textAlign:'right'}}>Qty</th><th style={{textAlign:'right'}}>CA</th><th style={{textAlign:'right'}}>Prix moy.</th><th style={{textAlign:'right'}}>Coût unit.</th><th style={{textAlign:'right'}}>Marge %</th><th>BCG</th></tr></thead>
+        <thead><tr><th>Article</th><th>Catégorie</th><th style={{textAlign:'right'}}>Qty</th><th style={{textAlign:'right'}}>CA</th><th style={{textAlign:'right'}}>Prix moy.</th><th style={{textAlign:'right'}}>Coût unit.</th><th style={{textAlign:'right'}}>Marge %</th><th style={{textAlign:'right'}}>Prix Carte</th><th style={{textAlign:'right'}}>Marge Théo.</th><th>BCG</th></tr></thead>
         <tbody>{topCA.map(function(p,i){return(
           <tr key={i}><td style={{fontWeight:500}}>{p.nom}</td><td><span className="badge b-ima" style={{fontSize:9}}>{p.cat}</span></td>
           <td style={{textAlign:'right'}}>{fmt(p.qty)}</td><td style={{textAlign:'right',fontWeight:600}}>{eur(p.ca)}</td>
           <td style={{textAlign:'right'}}>{eur(p.prixMoyen)}</td>
           <td style={{textAlign:'right'}}>{p.costUnit!==null?eur(p.costUnit):'—'}</td>
           <td style={{textAlign:'right',fontWeight:700,color:p.marginPct===null?'var(--gris-300)':p.marginPct>=avgMargin?'var(--vert)':'var(--rouge)'}}>{p.marginPct!==null?p.marginPct.toFixed(1)+'%':'—'}</td>
+          <td style={{textAlign:'right'}}>{p.prixCarteTTC!==null?eur(p.prixCarteTTC):'—'}</td>
+          <td style={{textAlign:'right',fontWeight:700,color:p.marginTheorique===null?'var(--gris-300)':p.marginTheorique>=avgMargin?'var(--vert)':'var(--orange)'}}>{p.marginTheorique!==null?p.marginTheorique.toFixed(1)+'%':'—'}</td>
           <td><span style={{fontSize:9,fontWeight:600,color:bcgColors[classify(p)]}}>{classify(p)}</span></td></tr>
         );})}</tbody>
       </table></div></div>
