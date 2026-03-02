@@ -1958,6 +1958,14 @@ function Costs(){
   const pCtx=usePeriod();
   const realStaffMS=pCtx.msProrata;
   const primeCost=(foodTotal+barTotal+realStaffMS);
+  // Season CA for ratio calculations
+  const _sCA=typeof TRIVEC_SEASON!=='undefined'?TRIVEC_SEASON:null;
+  const caNourriture=_sCA?_sCA.categories.find(c=>c.nom==='Nourriture')?.montant||0:0;
+  const caBoissons=_sCA?(_sCA.categories.find(c=>c.nom==='Boissons Alcoolisées')?.montant||0)+(_sCA.categories.find(c=>c.nom==='Boissons Sans Alcool')?.montant||0):0;
+  const caTotalSeason=_sCA?_sCA.ventesNet:0;
+  const foodCostPct=caNourriture>0&&foodTotal>0?Math.round(foodTotal/caNourriture*1000)/10:null;
+  const barCostPct=caBoissons>0&&barTotal>0?Math.round(barTotal/caBoissons*1000)/10:null;
+  const primeCostPct=caTotalSeason>0?Math.round(primeCost/caTotalSeason*1000)/10:null;
 
   const supplierGroups=useMemo(()=>{
     const groups={};
@@ -2027,6 +2035,14 @@ function Costs(){
     {!loading&&loaded&&<div>
     {/* KPI */}
     <div className="kpi-g">
+      <div className="kpi"><div className="kpi-label">Food Cost %</div><div className="kpi-val" style={{color:foodCostPct!==null?(foodCostPct<=30?'var(--vert)':foodCostPct<=35?'var(--orange)':'var(--rouge)'):'var(--gris-300)'}}>{foodCostPct!==null?foodCostPct+'%':'—'}</div><div className={`kpi-chg ${foodCostPct!==null&&foodCostPct<=30?'pos':'neg'}`}>{foodCostPct!==null?`${eur(foodTotal)} / CA ${eur(caNourriture)}`:'Objectif ≤ 30%'}</div></div>
+      <div className="kpi"><div className="kpi-label">Bar Cost %</div><div className="kpi-val" style={{color:barCostPct!==null?(barCostPct<=22?'var(--vert)':barCostPct<=28?'var(--orange)':'var(--rouge)'):'var(--gris-300)'}}>{barCostPct!==null?barCostPct+'%':'—'}</div><div className={`kpi-chg ${barCostPct!==null&&barCostPct<=22?'pos':'neg'}`}>{barCostPct!==null?`${eur(barTotal)} / CA ${eur(caBoissons)}`:'Objectif ≤ 22%'}</div></div>
+      <div className="kpi"><div className="kpi-label">Prime Cost %</div><div className="kpi-val" style={{color:primeCostPct!==null?(primeCostPct<=65?'var(--vert)':primeCostPct<=70?'var(--orange)':'var(--rouge)'):'var(--gris-300)'}}>{primeCostPct!==null?primeCostPct+'%':'—'}</div><div className={`kpi-chg ${primeCostPct!==null&&primeCostPct<=65?'pos':'neg'}`}>{primeCostPct!==null?`Food+Bar+Staff / CA Net`:'Objectif ≤ 65%'}</div></div>
+      <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:caTotalSeason>0?(realStaffMS/caTotalSeason>0.3?'var(--rouge)':realStaffMS/caTotalSeason>0.25?'var(--orange)':'var(--vert)'):'var(--gris-300)'}}>{caTotalSeason>0?Math.round(realStaffMS/caTotalSeason*1000)/10+'%':'—'}</div><div className={`kpi-chg ${caTotalSeason>0&&realStaffMS/caTotalSeason<=0.3?'pos':'neg'}`}>{caTotalSeason>0?`${eur(realStaffMS)} / CA ${eur(caTotalSeason)}`:'Objectif ≤ 30%'}</div></div>
+    </div>
+
+    {/* Détail achats */}
+    <div className="kpi-g" style={{marginBottom:0}}>
       <div className="kpi"><div className="kpi-label">Achats Food</div><div className="kpi-val" style={{color:'#059669'}}>{eur(foodTotal)}</div><div className="kpi-chg pos">{(categorized['Food']||[]).length} factures</div></div>
       <div className="kpi"><div className="kpi-label">Achats Bar</div><div className="kpi-val" style={{color:'#581527'}}>{eur(barTotal)}</div><div className="kpi-chg pos">{(categorized['Bar']||[]).length} factures</div></div>
       <div className="kpi"><div className="kpi-label">Total charges</div><div className="kpi-val">{eur(totalAll)}</div><div className="kpi-chg neu">{allInvoices.length} factures</div></div>
@@ -2387,9 +2403,10 @@ function StaffPage(){
   const payTotals=PayrollService.getTotals(payroll);
   const deptTotals=PayrollService.getDeptTotals(payroll);
 
-  // Use global period context for CA and masse salariale
-  const caTotal=pCtx.trivecPeriod.total;
-  const caSource=pCtx.trivecPeriod.days>0?`Trivec (${pCtx.trivecPeriod.days}j)`:'—';
+  // Use global period context for CA and masse salariale — fallback to season
+  const _staffUseSeason=pCtx.trivecPeriod.days===0&&typeof TRIVEC_SEASON!=='undefined';
+  const caTotal=_staffUseSeason?TRIVEC_SEASON.ventesNet:pCtx.trivecPeriod.total;
+  const caSource=_staffUseSeason?'Saison Trivec':pCtx.trivecPeriod.days>0?`Trivec (${pCtx.trivecPeriod.days}j)`:'—';
   const staffCostPct=caTotal>0?Math.round(pCtx.msProrata/caTotal*1000)/10:0;
   const evo=PayrollService.getEvolution();
   const upcoming=PayrollService.getUpcomingDepartures();
@@ -4362,8 +4379,9 @@ function Settings(){
             const rawCa=tm.totalCA||0;
             const tmDays=tm.days||0;
             const ca=tmDays>0&&tmDays<26?Math.round(rawCa/tmDays*26):rawCa;
-            const caTotal=ca;
-            const hasCa=rawCa>0;
+            const _sSeason=typeof TRIVEC_SEASON!=='undefined'?TRIVEC_SEASON:null;
+            const caTotal=ca>0?ca:(_sSeason?_sSeason.ventesNet:0);
+            const hasCa=caTotal>0;
             const tmVal=tm.ticketMoyen||0;
             // Aggregate Trivec products for COGS
             const data=TrivecService._getData();
