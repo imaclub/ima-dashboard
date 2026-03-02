@@ -1266,8 +1266,9 @@ const PennylaneService={
     // 2. localStorage cache (1h) — return instantly, refresh in background
     let lsData=this._getLsCache();
     if(lsData&&lsData.length>0){
-      // Dédupliquer le cache aussi
-      const seen2=new Set();lsData=lsData.filter(inv=>{const n=inv.invoice_number||'';const k=n?`${n}_${inv.supplier?.id||''}_${inv.date||''}_${inv.amount||''}`:(inv.id||'');if(seen2.has(k))return false;seen2.add(k);return true;});
+      // Dédupliquer le cache : par id puis par contenu
+      const si=new Set();lsData=lsData.filter(inv=>{if(!inv.id)return true;if(si.has(inv.id))return false;si.add(inv.id);return true;});
+      const sc=new Set();lsData=lsData.filter(inv=>{const n=inv.invoice_number||'';if(!n)return true;const k=`${n}_${inv.supplier?.id||''}_${inv.date||''}_${inv.amount||''}`;if(sc.has(k))return false;sc.add(k);return true;});
       this._cache[cacheKey]={data:lsData,ts:Date.now()};
       // Background refresh
       this._fetchAllInvoices({dateFrom,maxPages}).then(fresh=>{
@@ -1303,16 +1304,23 @@ const PennylaneService={
         cursor=response.next_cursor;page++;
       }
     }catch(e){console.error('Failed to fetch invoices:',e);}
-    // Dédupliquer par composite key: invoice_number+supplier+date+amount
-    const seen=new Set();
+    // Dédupliquer en 2 passes :
+    // 1) Par API id (basique)
+    const seenIds=new Set();
+    allInvoices=allInvoices.filter(inv=>{
+      if(!inv.id)return true;
+      if(seenIds.has(inv.id))return false;
+      seenIds.add(inv.id);return true;
+    });
+    // 2) Par contenu identique (même n° facture + fournisseur + date + montant)
+    // Ne s'applique qu'aux factures AVEC un numéro — les autres sont gardées
+    const seenContent=new Set();
     allInvoices=allInvoices.filter(inv=>{
       const invNum=inv.invoice_number||'';
-      const sid=inv.supplier?.id||'';
-      const amt=inv.amount||'';
-      const dt=inv.date||'';
-      const key=invNum?`${invNum}_${sid}_${dt}_${amt}`:(inv.id||JSON.stringify(inv));
-      if(seen.has(key))return false;
-      seen.add(key);return true;
+      if(!invNum)return true;
+      const key=`${invNum}_${inv.supplier?.id||''}_${inv.date||''}_${inv.amount||''}`;
+      if(seenContent.has(key))return false;
+      seenContent.add(key);return true;
     });
     return allInvoices;
   },
