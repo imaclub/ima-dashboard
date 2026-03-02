@@ -1852,7 +1852,11 @@ function Finance(){
     }
   },[]); */
 
-  const totals=useMemo(()=>SupplierMap.getTotals(allInvoices),[allInvoices]);
+  // Filtrer les factures à la période saison (exclure pré-ouverture novembre)
+  const _SF=typeof TRIVEC_SEASON!=='undefined'?TRIVEC_SEASON:null;
+  const _sfFrom=_SF?_SF.periode.from.split('/').reverse().join('-'):'2025-12-01';
+  const seasonInvFin=useMemo(()=>allInvoices.filter(function(inv){return inv.date&&inv.date>=_sfFrom;}),[allInvoices,_sfFrom]);
+  const totals=useMemo(()=>SupplierMap.getTotals(seasonInvFin),[seasonInvFin]);
   const groupTotals=useMemo(()=>SupplierMap.getGroupTotals(totals),[totals]);
   const totalCosts=Object.values(totals).reduce((s,v)=>s+v,0);
 
@@ -2049,19 +2053,28 @@ function Costs(){
   const totals=useMemo(()=>SupplierMap.getTotals(allInvoices),[allInvoices,mapVersion]);
   const groupTotals=useMemo(()=>SupplierMap.getGroupTotals(totals),[totals]);
   const totalAll=Object.values(totals).reduce((s,v)=>s+v,0);
-  const foodTotal=totals['Food']||0;
-  const barTotal=totals['Bar']||0;
   const pCtx=usePeriod();
   const tp=pCtx.trivecPeriod;
   const isSeason=tp._fromSeason||false;
   const realStaffMS=isSeason?pCtx.msActive:pCtx.msProrata;
-  const primeCost=(foodTotal+barTotal+realStaffMS);
-  // Pour les ratios de coût, utiliser les catégories Trivec comme dénominateur
-  // Car TVA 10% = Nourriture + Boissons SA, TVA 20% = Boissons Alc seulement
-  // Les catégories donnent le bon split : Nourriture vs Boissons (Alc+SA)
+  // Pour les ratios food/bar cost, ne prendre que les factures de la période Trivec
+  // (exclure les achats de stock pré-ouverture de novembre)
   const _S=typeof TRIVEC_SEASON!=='undefined'?TRIVEC_SEASON:null;
-  const caNourriture=isSeason&&_S?(_S.categories.find(function(c){return c.nom==='Nourriture';})||{}).montant||0:(tp.caResto||0);
-  const caBoissons=isSeason&&_S?((_S.categories.find(function(c){return c.nom==='Boissons Alcoolisées';})||{}).montant||0)+((_S.categories.find(function(c){return c.nom==='Boissons Sans Alcool';})||{}).montant||0):((tp.caBar||0)+(tp.caClub||0));
+  const seasonDateFrom=_S?_S.periode.from.split('/').reverse().join('-'):'2025-12-01';
+  const seasonInvoices=useMemo(()=>allInvoices.filter(function(inv){return inv.date&&inv.date>=seasonDateFrom;}),[allInvoices,seasonDateFrom]);
+  const seasonTotals=useMemo(()=>SupplierMap.getTotals(seasonInvoices),[seasonInvoices,mapVersion]);
+  const foodTotal=seasonTotals['Food']||0;
+  const barTotal=seasonTotals['Bar']||0;
+  const primeCost=(foodTotal+barTotal+realStaffMS);
+  // CA HT par catégorie Trivec (les montants Trivec sont TTC, on convertit en HT)
+  const caNourritureTTC=isSeason&&_S?(_S.categories.find(function(c){return c.nom==='Nourriture';})||{}).montant||0:(tp.caResto||0);
+  const caNourriture=isSeason?Math.round(caNourritureTTC/1.10):caNourritureTTC;
+  const caBoissonsTTC=isSeason&&_S?((_S.categories.find(function(c){return c.nom==='Boissons Alcoolisées';})||{}).montant||0)+((_S.categories.find(function(c){return c.nom==='Boissons Sans Alcool';})||{}).montant||0):((tp.caBar||0)+(tp.caClub||0));
+  const caBoissonsAlcTTC=isSeason&&_S?(_S.categories.find(function(c){return c.nom==='Boissons Alcoolisées';})||{}).montant||0:0;
+  const caBoissonsAlcHT=Math.round(caBoissonsAlcTTC/1.20);
+  const caBoissons_SA_TTC=isSeason&&_S?(_S.categories.find(function(c){return c.nom==='Boissons Sans Alcool';})||{}).montant||0:0;
+  const caBoissons_SA_HT=Math.round(caBoissons_SA_TTC/1.10);
+  const caBoissons=isSeason?(caBoissonsAlcHT+caBoissons_SA_HT):caBoissonsTTC;
   const caTotalSeason=tp.total||0;
   const foodCostPct=caNourriture>0&&foodTotal>0?Math.round(foodTotal/caNourriture*1000)/10:null;
   const barCostPct=caBoissons>0&&barTotal>0?Math.round(barTotal/caBoissons*1000)/10:null;
@@ -2131,7 +2144,7 @@ function Costs(){
     </div>
 
     <div style={{background:'var(--cream,#fdf6f0)',border:'1px solid #e8d5c4',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:11,color:'var(--gris-600)'}}>
-      <strong>Note TVA mixte :</strong> Le bar cost est calculé sur CA Boissons Alc. + Boissons SA (catégories Trivec). Les spiritueux servis avec mixers offerts (sauf Red Bull) ont une TVA mixte : la part alcool est à 20%, le soft offert est à 10%. Les prix carte intègrent le mixer dans le prix affiché.
+      <strong>Calcul des ratios :</strong> Food Cost et Bar Cost sont calculés <strong>HT/HT</strong> (achats Pennylane HT ÷ CA catégorie Trivec converti HT). Seules les factures de la période saison (déc-fév) sont prises en compte, les achats pré-ouverture (novembre) sont exclus des ratios. TVA mixte : les spiritueux avec mixers offerts (sauf Red Bull) ont une TVA mixte (alcool 20%, soft 10%).
     </div>
 
     {loading&&<div style={{textAlign:'center',padding:40}}><div className="spinner" style={{width:24,height:24}}/><div style={{marginTop:10,fontSize:13,color:'var(--gris-500)'}}>Chargement Pennylane...</div></div>}
@@ -2139,16 +2152,16 @@ function Costs(){
     {!loading&&loaded&&<div>
     {/* KPI */}
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">Food Cost %</div><div className="kpi-val" style={{color:foodCostPct!==null?(foodCostPct<=30?'var(--vert)':foodCostPct<=35?'var(--orange)':'var(--rouge)'):'var(--gris-300)'}}>{foodCostPct!==null?foodCostPct+'%':'—'}</div><div className={`kpi-chg ${foodCostPct!==null&&foodCostPct<=30?'pos':'neg'}`}>{foodCostPct!==null?`${eur(foodTotal)} / CA ${eur(caNourriture)}`:'Objectif ≤ 30%'}</div></div>
-      <div className="kpi"><div className="kpi-label">Bar Cost %</div><div className="kpi-val" style={{color:barCostPct!==null?(barCostPct<=22?'var(--vert)':barCostPct<=28?'var(--orange)':'var(--rouge)'):'var(--gris-300)'}}>{barCostPct!==null?barCostPct+'%':'—'}</div><div className={`kpi-chg ${barCostPct!==null&&barCostPct<=22?'pos':'neg'}`}>{barCostPct!==null?`${eur(barTotal)} / CA ${eur(caBoissons)}`:'Objectif ≤ 22%'}</div></div>
+      <div className="kpi"><div className="kpi-label">Food Cost %</div><div className="kpi-val" style={{color:foodCostPct!==null?(foodCostPct<=30?'var(--vert)':foodCostPct<=35?'var(--orange)':'var(--rouge)'):'var(--gris-300)'}}>{foodCostPct!==null?foodCostPct+'%':'—'}</div><div className={`kpi-chg ${foodCostPct!==null&&foodCostPct<=30?'pos':'neg'}`}>{foodCostPct!==null?`${eur(foodTotal)} HT / CA ${eur(caNourriture)} HT`:'Objectif ≤ 30%'}</div></div>
+      <div className="kpi"><div className="kpi-label">Bar Cost %</div><div className="kpi-val" style={{color:barCostPct!==null?(barCostPct<=22?'var(--vert)':barCostPct<=28?'var(--orange)':'var(--rouge)'):'var(--gris-300)'}}>{barCostPct!==null?barCostPct+'%':'—'}</div><div className={`kpi-chg ${barCostPct!==null&&barCostPct<=22?'pos':'neg'}`}>{barCostPct!==null?`${eur(barTotal)} HT / CA ${eur(caBoissons)} HT`:'Objectif ≤ 22%'}</div></div>
       <div className="kpi"><div className="kpi-label">Prime Cost %</div><div className="kpi-val" style={{color:primeCostPct!==null?(primeCostPct<=65?'var(--vert)':primeCostPct<=70?'var(--orange)':'var(--rouge)'):'var(--gris-300)'}}>{primeCostPct!==null?primeCostPct+'%':'—'}</div><div className={`kpi-chg ${primeCostPct!==null&&primeCostPct<=65?'pos':'neg'}`}>{primeCostPct!==null?`Food+Bar+Staff / CA Net`:'Objectif ≤ 65%'}</div></div>
       <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:caTotalSeason>0?(realStaffMS/caTotalSeason>0.3?'var(--rouge)':realStaffMS/caTotalSeason>0.25?'var(--orange)':'var(--vert)'):'var(--gris-300)'}}>{caTotalSeason>0?Math.round(realStaffMS/caTotalSeason*1000)/10+'%':'—'}</div><div className={`kpi-chg ${caTotalSeason>0&&realStaffMS/caTotalSeason<=0.3?'pos':'neg'}`}>{caTotalSeason>0?`${eur(realStaffMS)} / CA ${eur(caTotalSeason)}`:'Objectif ≤ 30%'}</div></div>
     </div>
 
     {/* Détail achats */}
     <div className="kpi-g" style={{marginBottom:0}}>
-      <div className="kpi"><div className="kpi-label">Achats Food</div><div className="kpi-val" style={{color:'#059669'}}>{eur(foodTotal)}</div><div className="kpi-chg pos">{(categorized['Food']||[]).length} factures</div></div>
-      <div className="kpi"><div className="kpi-label">Achats Bar</div><div className="kpi-val" style={{color:'#581527'}}>{eur(barTotal)}</div><div className="kpi-chg pos">{(categorized['Bar']||[]).length} factures</div></div>
+      <div className="kpi"><div className="kpi-label">Achats Food (saison)</div><div className="kpi-val" style={{color:'#059669'}}>{eur(foodTotal)}</div><div className="kpi-chg pos">{seasonInvoices.filter(function(inv){return SupplierMap.getCategory(String(inv.supplier&&inv.supplier.id||''))==='Food';}).length} factures déc-fév</div></div>
+      <div className="kpi"><div className="kpi-label">Achats Bar (saison)</div><div className="kpi-val" style={{color:'#581527'}}>{eur(barTotal)}</div><div className="kpi-chg pos">{seasonInvoices.filter(function(inv){return SupplierMap.getCategory(String(inv.supplier&&inv.supplier.id||''))==='Bar';}).length} factures déc-fév</div></div>
       <div className="kpi"><div className="kpi-label">Total charges</div><div className="kpi-val">{eur(totalAll)}</div><div className="kpi-chg neu">{allInvoices.length} factures</div></div>
       <div className="kpi"><div className="kpi-label">Non classé</div><div className="kpi-val" style={{color:(totals['Non classé']||0)>0?'var(--rouge)':'var(--vert)'}}>{eur(totals['Non classé']||0)}</div>
         <div className="kpi-chg neg">{supplierGroups.filter(s=>s.cat==='Non classé').length} fournisseurs</div></div>
@@ -5241,8 +5254,11 @@ function Tresorerie(){
     trivec.paiements.details.reduce((acc,p)=>{acc[p.mode]=p.montant;return acc;},{}):{};
 
   // --- CHARGES ---
-  // Achats fournisseurs (Pennylane) — utilise SupplierMap.getTotals pour cohérence avec la page Costs
-  const totals=useMemo(()=>SupplierMap.getTotals(invoices),[invoices]);
+  // Achats fournisseurs (Pennylane) — filtrés à la période saison (exclut pré-ouverture nov)
+  const _S_pl=typeof TRIVEC_SEASON!=='undefined'?TRIVEC_SEASON:null;
+  const seasonFrom=_S_pl?_S_pl.periode.from.split('/').reverse().join('-'):'2025-12-01';
+  const seasonInvPL=useMemo(()=>invoices.filter(function(inv){return inv.date&&inv.date>=seasonFrom;}),[invoices,seasonFrom]);
+  const totals=useMemo(()=>SupplierMap.getTotals(seasonInvPL),[seasonInvPL]);
   const totalAchats=useMemo(()=>Object.values(totals).reduce((s,v)=>s+v,0),[totals]);
   const foodTotal=totals['Food']||0;
   const barTotal=totals['Bar']||0;
@@ -5592,10 +5608,16 @@ function Alertes(){
   const loading=invCtx.loading;
 
   const totalCA=trivec?trivec.ventesNet:0;
-  const caNourriture=trivec?trivec.categories.find(c=>c.nom==='Nourriture').montant:0;
-  const caBoissons=trivec?(trivec.categories.find(c=>c.nom==='Boissons Alcoolisées').montant+trivec.categories.find(c=>c.nom==='Boissons Sans Alcool').montant):0;
+  // CA HT par catégorie (montants Trivec TTC → HT)
+  const caNourritureTTC=trivec?trivec.categories.find(c=>c.nom==='Nourriture').montant:0;
+  const caNourriture=Math.round(caNourritureTTC/1.10);
+  const caBoissonsTTC=trivec?(trivec.categories.find(c=>c.nom==='Boissons Alcoolisées').montant+trivec.categories.find(c=>c.nom==='Boissons Sans Alcool').montant):0;
+  const caBoissons=trivec?Math.round(trivec.categories.find(c=>c.nom==='Boissons Alcoolisées').montant/1.20+trivec.categories.find(c=>c.nom==='Boissons Sans Alcool').montant/1.10):0;
 
-  const totals=useMemo(()=>SupplierMap.getTotals(invoices),[invoices]);
+  // Filtrer factures à la période saison
+  const _sfA=trivec?trivec.periode.from.split('/').reverse().join('-'):'2025-12-01';
+  const seasonInvA=useMemo(()=>invoices.filter(function(inv){return inv.date&&inv.date>=_sfA;}),[invoices,_sfA]);
+  const totals=useMemo(()=>SupplierMap.getTotals(seasonInvA),[seasonInvA]);
   const foodCost=totals['Food']||0;
   const barCost=totals['Bar']||0;
   const staffCost=trivec?pCtx.msActive:pCtx.msProrata;
