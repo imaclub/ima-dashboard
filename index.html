@@ -1732,7 +1732,8 @@ function Dashboard(){
   const useSeason=tp.days===0&&typeof TRIVEC_SEASON!=='undefined';
   const caDisplay=useSeason?TRIVEC_SEASON.ventesNet:tp.total;
   const couvertsDisplay=useSeason?TRIVEC_SEASON.couverts:tp.couverts;
-  const tmDisplay=couvertsDisplay>0?Math.round(caDisplay/couvertsDisplay):0;
+  const caResto=useSeason?(TRIVEC_SEASON.categories.find(function(c){return c.nom==='Nourriture';})||{}).montant||0:tp.caResto;
+  const tmDisplay=couvertsDisplay>0?Math.round(caResto/couvertsDisplay):0;
   const caLabel=useSeason?'Saison':'';
   const msDisplay=useSeason?pCtx.msActive:pCtx.msProrata;
   const staffPct=caDisplay>0?Math.round(msDisplay/caDisplay*1000)/10:0;
@@ -1817,11 +1818,13 @@ function Dashboard(){
 
 // ===== FINANCE =====
 function Finance(){
-  const[allInvoices,setAllInvoices]=useState([]);
-  const[loading,setLoading]=useState(false);
-  const[loaded,setLoaded]=useState(false);
+  const invCtx=useInvoices();
+  const allInvoices=invCtx.invoices;
+  const loading=invCtx.loading;
+  const loaded=invCtx.loaded;
   const[expandedGroup,setExpandedGroup]=useState('Coûts Directs (Prime Cost)');
 
+  /* removed: each page no longer fetches its own invoices — shared via InvoiceContext
   useEffect(()=>{
     if(PennylaneService.getToken()){
       setLoading(true);
@@ -1832,7 +1835,7 @@ function Finance(){
         })
         .finally(()=>setLoading(false));
     }
-  },[]);
+  },[]); */
 
   const totals=useMemo(()=>SupplierMap.getTotals(allInvoices),[allInvoices]);
   const groupTotals=useMemo(()=>SupplierMap.getGroupTotals(totals),[totals]);
@@ -2004,9 +2007,10 @@ function Finance(){
 // ===== COSTS =====
 function Costs(){
   const[tab,setTab]=useState('overview');
-  const[allInvoices,setAllInvoices]=useState([]);
-  const[loading,setLoading]=useState(false);
-  const[loaded,setLoaded]=useState(false);
+  const invCtx=useInvoices();
+  const allInvoices=invCtx.invoices;
+  const loading=invCtx.loading;
+  const loaded=invCtx.loaded;
   const[supplierNames,setSupplierNames]=useState({});
   const[editingSupplier,setEditingSupplier]=useState(null);
   const[detailSupplier,setDetailSupplier]=useState(null);
@@ -2018,19 +2022,13 @@ function Costs(){
   const[syncProgress,setSyncProgress]=useState('');
   const[syncResults,setSyncResults]=useState(null);
 
+  // Build supplier names from shared invoices
   useEffect(()=>{
-    if(PennylaneService.getToken()){
-      setLoading(true);
-      const updateNames=(invs)=>{const n={};invs.forEach(inv=>{const sid=String(inv.supplier?.id||'');if(sid&&!n[sid])n[sid]=SupplierMap.extractName(inv);});setSupplierNames(n);};
-      PennylaneService.getAllSupplierInvoices({maxPages:50,onRefresh:(fresh)=>{setAllInvoices(fresh);updateNames(fresh);}})
-        .then(invoices=>{
-          setAllInvoices(invoices);
-          updateNames(invoices);
-          setLoaded(true);
-        })
-        .finally(()=>setLoading(false));
+    if(allInvoices.length>0){
+      const n={};allInvoices.forEach(inv=>{const sid=String(inv.supplier&&inv.supplier.id||'');if(sid&&!n[sid])n[sid]=SupplierMap.extractName(inv);});
+      setSupplierNames(n);
     }
-  },[]);
+  },[allInvoices]);
 
   const categorized=useMemo(()=>SupplierMap.categorize(allInvoices),[allInvoices,mapVersion]);
   const totals=useMemo(()=>SupplierMap.getTotals(allInvoices),[allInvoices,mapVersion]);
@@ -3620,7 +3618,8 @@ function POSPage(){
   const agg=pCtx.trivecPeriod;
   const dayDetail=pCtx.mode==='jour'?allDays[todayStr]:null;
 
-  const ticketMoyen=S.couverts>0?Math.round(S.ventesNet/S.couverts):0;
+  const caRestoSeason=(S.categories.find(function(c){return c.nom==='Nourriture';})||{}).montant||0;
+  const ticketMoyen=S.couverts>0?Math.round(caRestoSeason/S.couverts):0;
   const paiMax=Math.max(...S.paiements.details.map(p=>p.montant));
 
   return(<div className="fin">
@@ -4602,36 +4601,52 @@ function Settings(){
 function Tresorerie(){
   const pCtx=usePeriod();
   const trivec=typeof TRIVEC_SEASON!=='undefined'?TRIVEC_SEASON:null;
-  const[invoices,setInvoices]=useState([]);
-  const[loading,setLoading]=useState(false);
+  const invCtx=useInvoices();
+  const invoices=invCtx.invoices;
+  const loading=invCtx.loading;
 
-  useEffect(()=>{
-    if(PennylaneService.getToken()){
-      setLoading(true);
-      PennylaneService.getAllSupplierInvoices({maxPages:50,onRefresh:f=>setInvoices(f)})
-        .then(inv=>setInvoices(inv)).finally(()=>setLoading(false));
-    }
-  },[]);
+  // --- DONNÉES DE BASE ---
+  const _tresoUseSeason=trivec!==null;
 
-  // Encaissements (inflows from Trivec)
-  const totalEncaissements=trivec?trivec.ventesNet:0;
+  // CA TTC encaissé (ce que les clients ont réellement payé)
+  const encaissementsTTC=trivec?trivec.paiements.total:0;
+  // CA HT (hors taxes)
+  const caHT=trivec?trivec.ventesNet:0;
+
+  // Paiements par moyen
   const paymentBreakdown=trivec&&trivec.paiements&&trivec.paiements.details?
     trivec.paiements.details.reduce((acc,p)=>{acc[p.mode]=p.montant;return acc;},{}):{};
 
-  // Décaissements (outflows from Pennylane)
-  const totalDecaissements=useMemo(()=>Math.abs(invoices.reduce((s,i)=>s+(parseFloat(i.amount)||0),0)),[invoices]);
+  // --- CHARGES ---
+  // Achats fournisseurs (Pennylane) — utilise SupplierMap.getTotals pour cohérence avec la page Costs
+  const totals=useMemo(()=>SupplierMap.getTotals(invoices),[invoices]);
+  const totalAchats=useMemo(()=>Object.values(totals).reduce((s,v)=>s+v,0),[totals]);
+  const foodTotal=totals['Food']||0;
+  const barTotal=totals['Bar']||0;
+  const otherCharges=totalAchats-foodTotal-barTotal;
 
   // Masse salariale
-  const _tresoUseSeason=trivec!==null;
   const staffCost=_tresoUseSeason?pCtx.msActive:pCtx.msProrata;
 
-  // TVA from Trivec season data
-  const tvaAConverser=trivec&&trivec.tva?(trivec.tva.taux10.tva+trivec.tva.taux20.tva):Math.round(totalEncaissements*0.167);
+  // --- TVA NETTE ---
+  // TVA collectée (sur les ventes)
+  const tvaCollectee=trivec&&trivec.tva?(trivec.tva.taux10.tva+trivec.tva.taux20.tva):0;
+  // TVA déductible (estimée sur les achats)
+  // Food : TVA 5.5% → tva = montant * 5.5/105.5
+  // Bar/Autres : TVA 20% → tva = montant * 20/120
+  const tvaDeductFood=Math.round(foodTotal*5.5/105.5);
+  const tvaDeductBar=Math.round(barTotal*20/120);
+  const tvaDeductAutres=Math.round(otherCharges*20/120);
+  const tvaDeductible=tvaDeductFood+tvaDeductBar+tvaDeductAutres;
+  // TVA nette à reverser = collectée - déductible
+  const tvaNette=tvaCollectee-tvaDeductible;
 
-  // Net balance
-  const soldeNet=totalEncaissements-totalDecaissements-staffCost;
+  // --- RÉSULTAT D'EXPLOITATION ---
+  // = CA HT - Achats HT (estimé) - Masse Salariale
+  const achatsHT=totalAchats-tvaDeductible;
+  const resultatExploitation=caHT-achatsHT-staffCost;
 
-  // Top suppliers (biggest decaissements)
+  // --- TOP FOURNISSEURS ---
   const topSuppliers=useMemo(()=>{
     const map={};
     invoices.forEach(inv=>{
@@ -4643,62 +4658,77 @@ function Tresorerie(){
     return Object.values(map).sort((a,b)=>Math.abs(b.total)-Math.abs(a.total)).slice(0,10);
   },[invoices]);
 
+  const maxSupplier=topSuppliers.length>0?Math.abs(topSuppliers[0].total):1;
+
   return(<div className="fin">
+    {loading&&<div style={{textAlign:'center',padding:20}}><div className="spinner" style={{width:20,height:20}}/><div style={{fontSize:12,color:'var(--gris-400)',marginTop:8}}>Chargement Pennylane...</div></div>}
+
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">Encaissements</div><div className="kpi-val" style={{color:'var(--vert)'}}>{eur(totalEncaissements)}</div><div className="kpi-chg pos">Inflows (CA)</div></div>
-      <div className="kpi"><div className="kpi-label">Décaissements</div><div className="kpi-val" style={{color:'var(--rouge)'}}>{eur(totalDecaissements)}</div><div className="kpi-chg neg">Outflows (Achats)</div></div>
-      <div className="kpi"><div className="kpi-label">Solde Net</div><div className="kpi-val" style={{color:soldeNet>=0?'var(--vert)':'var(--rouge)'}}>{eur(soldeNet)}</div><div className="kpi-chg" style={{background:soldeNet>=0?'var(--vert-light)':'var(--rouge-light)',color:soldeNet>=0?'var(--vert)':'var(--rouge)'}}>{soldeNet>=0?'Positif':'Déficit'}</div></div>
-      <div className="kpi"><div className="kpi-label">TVA à reverser</div><div className="kpi-val" style={{color:'var(--orange)'}}>{eur(tvaAConverser)}</div><div className="kpi-chg neu">{trivec&&trivec.tva?'TVA 10% + 20%':'Estimé'}</div></div>
+      <div className="kpi"><div className="kpi-label">CA HT (Encaissé TTC)</div><div className="kpi-val" style={{color:'var(--vert)'}}>{eur(caHT)}</div><div className="kpi-chg pos">TTC encaissé: {eur(encaissementsTTC)}</div></div>
+      <div className="kpi"><div className="kpi-label">Total Charges</div><div className="kpi-val" style={{color:'var(--rouge)'}}>{eur(totalAchats+staffCost)}</div><div className="kpi-chg neg">Achats {eur(totalAchats)} + MS {eur(staffCost)}</div></div>
+      <div className="kpi"><div className="kpi-label">Résultat d'Exploitation</div><div className="kpi-val" style={{color:resultatExploitation>=0?'var(--vert)':'var(--rouge)'}}>{eur(resultatExploitation)}</div><div className="kpi-chg" style={{background:resultatExploitation>=0?'var(--vert-light)':'var(--rouge-light)',color:resultatExploitation>=0?'var(--vert)':'var(--rouge)'}}>{caHT>0?Math.round(resultatExploitation/caHT*100)+'% du CA':''}</div></div>
+      <div className="kpi"><div className="kpi-label">TVA Nette à reverser</div><div className="kpi-val" style={{color:'var(--orange)'}}>{eur(tvaNette)}</div><div className="kpi-chg neu">Collectée {eur(tvaCollectee)} - Déductible {eur(tvaDeductible)}</div></div>
     </div>
 
-    {loading&&<div style={{textAlign:'center',padding:20}}><div className="spinner" style={{width:20,height:20}}/></div>}
+    <div className="cg">
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Compte de résultat simplifié</div><div className="card-st">Saison {trivec?trivec.periode.label:''}</div></div></div>
+        <div className="card-b"><div className="tbl"><table>
+          <thead><tr><th>Poste</th><th style={{textAlign:'right'}}>Montant</th><th style={{textAlign:'right'}}>% CA</th></tr></thead>
+          <tbody>
+            <tr style={{background:'var(--vert-light)'}}><td style={{fontWeight:700}}>CA Net HT</td><td style={{textAlign:'right',fontWeight:700,color:'var(--vert)'}}>{eur(caHT)}</td><td style={{textAlign:'right'}}>100%</td></tr>
+            <tr><td style={{paddingLeft:20}}>Achats Food</td><td style={{textAlign:'right',color:'var(--rouge)'}}>{eur(foodTotal)}</td><td style={{textAlign:'right'}}>{caHT>0?Math.round(foodTotal/caHT*100)+'%':'—'}</td></tr>
+            <tr><td style={{paddingLeft:20}}>Achats Bar</td><td style={{textAlign:'right',color:'var(--rouge)'}}>{eur(barTotal)}</td><td style={{textAlign:'right'}}>{caHT>0?Math.round(barTotal/caHT*100)+'%':'—'}</td></tr>
+            <tr><td style={{paddingLeft:20}}>Autres charges</td><td style={{textAlign:'right',color:'var(--rouge)'}}>{eur(otherCharges)}</td><td style={{textAlign:'right'}}>{caHT>0?Math.round(otherCharges/caHT*100)+'%':'—'}</td></tr>
+            <tr style={{borderTop:'2px solid var(--gris-200)'}}><td style={{fontWeight:600}}>Total Achats</td><td style={{textAlign:'right',fontWeight:600,color:'var(--rouge)'}}>{eur(totalAchats)}</td><td style={{textAlign:'right',fontWeight:600}}>{caHT>0?Math.round(totalAchats/caHT*100)+'%':'—'}</td></tr>
+            <tr><td style={{fontWeight:600}}>Masse Salariale</td><td style={{textAlign:'right',fontWeight:600,color:'var(--orange)'}}>{eur(staffCost)}</td><td style={{textAlign:'right',fontWeight:600}}>{caHT>0?Math.round(staffCost/caHT*100)+'%':'—'}</td></tr>
+            <tr style={{background:resultatExploitation>=0?'var(--vert-light)':'var(--rouge-light)',borderTop:'2px solid var(--gris-300)'}}><td style={{fontWeight:700,fontSize:14}}>Résultat d'Exploitation</td><td style={{textAlign:'right',fontWeight:700,fontSize:14,color:resultatExploitation>=0?'var(--vert)':'var(--rouge)'}}>{eur(resultatExploitation)}</td><td style={{textAlign:'right',fontWeight:700}}>{caHT>0?Math.round(resultatExploitation/caHT*100)+'%':'—'}</td></tr>
+          </tbody>
+        </table></div></div>
+      </div>
 
-    <div className="card">
-      <div className="card-h"><div><div className="card-t">Flux de trésorerie</div><div className="card-st">Vue synthétique des flux</div></div></div>
-      <div className="card-b">
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:14,marginBottom:20}}>
-          <div style={{background:'var(--vert-light)',padding:16,borderRadius:8,borderLeft:'4px solid var(--vert)'}}>
-            <div style={{fontSize:11,color:'var(--vert)',fontWeight:600,marginBottom:4}}>ENCAISSEMENTS</div>
-            <div style={{fontSize:22,fontWeight:700,color:'var(--vert)'}}>{eur(totalEncaissements)}</div>
-          </div>
-          <div style={{background:'var(--rouge-light)',padding:16,borderRadius:8,borderLeft:'4px solid var(--rouge)'}}>
-            <div style={{fontSize:11,color:'var(--rouge)',fontWeight:600,marginBottom:4}}>DÉCAISSEMENTS</div>
-            <div style={{fontSize:22,fontWeight:700,color:'var(--rouge)'}}>{eur(totalDecaissements)}</div>
-          </div>
-          <div style={{background:'var(--orange-light)',padding:16,borderRadius:8,borderLeft:'4px solid var(--orange)'}}>
-            <div style={{fontSize:11,color:'var(--orange)',fontWeight:600,marginBottom:4}}>MASSE SALARIALE</div>
-            <div style={{fontSize:22,fontWeight:700,color:'var(--orange)'}}>{eur(staffCost)}</div>
-          </div>
-          <div style={{background:soldeNet>=0?'var(--vert-light)':'var(--rouge-light)',padding:16,borderRadius:8,borderLeft:`4px solid ${soldeNet>=0?'var(--vert)':'var(--rouge)'}`}}>
-            <div style={{fontSize:11,fontWeight:600,marginBottom:4,color:soldeNet>=0?'var(--vert)':'var(--rouge)'}}>SOLDE NET</div>
-            <div style={{fontSize:22,fontWeight:700,color:soldeNet>=0?'var(--vert)':'var(--rouge)'}}>{eur(soldeNet)}</div>
-          </div>
-        </div>
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">TVA</div><div className="card-st">Estimation de la TVA nette</div></div></div>
+        <div className="card-b"><div className="tbl"><table>
+          <thead><tr><th>Poste</th><th style={{textAlign:'right'}}>Montant</th></tr></thead>
+          <tbody>
+            <tr><td>TVA collectée 10% (Nourriture)</td><td style={{textAlign:'right'}}>{trivec&&trivec.tva?eur(trivec.tva.taux10.tva):'—'}</td></tr>
+            <tr><td>TVA collectée 20% (Boissons)</td><td style={{textAlign:'right'}}>{trivec&&trivec.tva?eur(trivec.tva.taux20.tva):'—'}</td></tr>
+            <tr style={{fontWeight:600,borderTop:'1px solid var(--gris-200)'}}><td>Total TVA collectée</td><td style={{textAlign:'right'}}>{eur(tvaCollectee)}</td></tr>
+            <tr style={{marginTop:8}}><td>TVA déductible Food (5.5%)</td><td style={{textAlign:'right',color:'var(--vert)'}}>{eur(tvaDeductFood)}</td></tr>
+            <tr><td>TVA déductible Bar (20%)</td><td style={{textAlign:'right',color:'var(--vert)'}}>{eur(tvaDeductBar)}</td></tr>
+            <tr><td>TVA déductible Autres (20%)</td><td style={{textAlign:'right',color:'var(--vert)'}}>{eur(tvaDeductAutres)}</td></tr>
+            <tr style={{fontWeight:600,borderTop:'1px solid var(--gris-200)'}}><td>Total TVA déductible</td><td style={{textAlign:'right',color:'var(--vert)'}}>{eur(tvaDeductible)}</td></tr>
+            <tr style={{fontWeight:700,background:'var(--orange-light)',borderTop:'2px solid var(--gris-300)'}}><td>TVA Nette à reverser</td><td style={{textAlign:'right',color:'var(--orange)'}}>{eur(tvaNette)}</td></tr>
+          </tbody>
+        </table></div></div>
       </div>
     </div>
 
-    <div className="card">
-      <div className="card-h"><div><div className="card-t">Paiements par moyen</div><div className="card-st">Répartition des encaissements</div></div></div>
-      <div className="card-b">
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:10}}>
-          {Object.entries(paymentBreakdown).filter(([,v])=>v>0).map(([method,amt])=>(<div key={method} style={{background:'var(--gris-50)',padding:12,borderRadius:8,textAlign:'center',border:'1px solid var(--gris-200)'}}>
-            <div style={{fontSize:11,color:'var(--gris-500)',fontWeight:600,marginBottom:4}}>{method}</div>
-            <div style={{fontSize:18,fontWeight:700,color:'var(--bordeaux)'}}>{eur(amt)}</div>
-            <div style={{fontSize:10,color:'var(--gris-400)',marginTop:4}}>{((amt/totalEncaissements)*100).toFixed(1)}%</div>
-          </div>))}
+    <div className="cg">
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Paiements par moyen</div><div className="card-st">Répartition des encaissements TTC</div></div></div>
+        <div className="card-b">
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:10}}>
+            {Object.entries(paymentBreakdown).filter(function(e){return e[1]>0;}).map(function(e){return(<div key={e[0]} style={{background:'var(--gris-50)',padding:12,borderRadius:8,textAlign:'center',border:'1px solid var(--gris-200)'}}>
+              <div style={{fontSize:11,color:'var(--gris-500)',fontWeight:600,marginBottom:4}}>{e[0]}</div>
+              <div style={{fontSize:16,fontWeight:700,color:'var(--bordeaux)'}}>{eur(e[1])}</div>
+              <div style={{fontSize:10,color:'var(--gris-400)',marginTop:4}}>{encaissementsTTC>0?((e[1]/encaissementsTTC)*100).toFixed(1)+'%':''}</div>
+            </div>);})}
+          </div>
         </div>
       </div>
-    </div>
 
-    <div className="card">
-      <div className="card-h"><div><div className="card-t">Top 10 Fournisseurs (Dépenses)</div><div className="card-st">Décaissements cumulés par fournisseur</div></div></div>
-      <div className="card-b"><div className="tbl"><table>
-        <thead><tr><th>Fournisseur</th><th style={{textAlign:'right'}}>Montant</th><th style={{textAlign:'right'}}>Factures</th><th>% du total</th></tr></thead>
-        <tbody>{topSuppliers.map((s,i)=>(
-          <tr key={i}><td style={{fontWeight:500}}>{s.name}</td><td style={{textAlign:'right',fontWeight:600}}>{eur(s.total)}</td><td style={{textAlign:'right'}}>{s.count}</td>
-          <td><div className="pbar"><div className="pfill" style={{width:`${(Math.abs(s.total)/totalDecaissements)*100}%`,background:'var(--bordeaux)'}}/></div></td></tr>
-        ))}</tbody>
-      </table></div></div>
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Top 10 Fournisseurs</div><div className="card-st">Plus gros postes de dépenses</div></div></div>
+        <div className="card-b"><div className="tbl"><table>
+          <thead><tr><th>Fournisseur</th><th style={{textAlign:'right'}}>Montant</th><th style={{textAlign:'right'}}>Nb</th><th style={{width:'30%'}}></th></tr></thead>
+          <tbody>{topSuppliers.map(function(s,i){return(
+            <tr key={i}><td style={{fontWeight:500}}>{s.name}</td><td style={{textAlign:'right',fontWeight:600}}>{eur(Math.abs(s.total))}</td><td style={{textAlign:'right'}}>{s.count}</td>
+            <td><div className="pbar"><div className="pfill" style={{width:(Math.abs(s.total)/maxSupplier*100)+'%',background:'var(--bordeaux)'}}/></div></td></tr>
+          );})}</tbody>
+        </table></div></div>
+      </div>
     </div>
   </div>);
 }
@@ -4755,82 +4785,164 @@ function Productivite(){
 
 // ===== MENU ENGINEERING =====
 function MenuEngineering(){
-  const trivec=typeof TRIVEC_SEASON!=='undefined'?TRIVEC_SEASON:null;
-  const products=trivec?trivec.products||[]:[];
+  const[tab,setTab]=useState('food');
 
-  // Build menu items with costs
-  const menuItems=products.map(p=>{
-    const cost=RecipeCosts[p.nom]||null;
-    const margin=cost!==null?(p.prixMoyen-cost)/p.prixMoyen*100:null;
-    return{nom:p.nom,cat:p.categorie1,qty:p.totalQty||0,ca:p.totalMontant||0,cost:cost*p.totalQty||0,marginPct:margin};
-  }).filter(p=>p.qty>0);
+  // Aggregate Trivec products from all days
+  const menuItems=useMemo(function(){
+    const data=TrivecService._getData();
+    const assorts=data.assortiments||{};
+    const pMap={};
+    for(var ds in assorts){
+      if(!assorts.hasOwnProperty(ds))continue;
+      var prods=assorts[ds].products||[];
+      prods.forEach(function(p){
+        var k=p.nom;
+        if(!pMap[k])pMap[k]={nom:p.nom,cat1:p.categorie1||'',cat2:p.categorie2||'',cat3:p.categorie3||'',totalQty:0,totalCA:0};
+        pMap[k].totalQty+=p.quantite||0;
+        pMap[k].totalCA+=p.prix||0;
+      });
+    }
+    // Merge with RecipeCosts for food cost per unit
+    return Object.values(pMap).filter(function(p){return p.totalQty>0;}).map(function(p){
+      var prixMoyen=p.totalCA/p.totalQty;
+      var costUnit=RecipeCosts[p.nom];
+      if(costUnit===undefined||costUnit===null)costUnit=null;
+      var marginPct=costUnit!==null&&prixMoyen>0?((prixMoyen-costUnit)/prixMoyen)*100:null;
+      var totalCost=costUnit!==null?costUnit*p.totalQty:null;
+      return{nom:p.nom,cat:p.cat1,cat2:p.cat2,qty:p.totalQty,ca:p.totalCA,prixMoyen:prixMoyen,costUnit:costUnit,totalCost:totalCost,marginPct:marginPct};
+    });
+  },[]);
 
-  // BCG Matrix classification
-  const avgQty=menuItems.reduce((s,p)=>s+p.qty,0)/menuItems.length||1;
-  const avgMargin=menuItems.reduce((s,p)=>s+(p.marginPct||0),0)/menuItems.length||0;
+  // Filter by tab
+  var isFood=function(item){return item.cat==='FOOD'||item.cat==='Nourriture'||item.cat==='Food'||item.cat==='RESTAURANT'||item.cat==='NOURRITURE';};
+  var isBar=function(item){return !isFood(item)&&item.cat!=='TIPS'&&item.nom!=='TIPS';};
+  var filtered=tab==='food'?menuItems.filter(isFood):tab==='bar'?menuItems.filter(isBar):menuItems;
+  // Only items with known cost for BCG
+  var withCost=filtered.filter(function(p){return p.marginPct!==null;});
+  var noCost=filtered.filter(function(p){return p.marginPct===null;});
 
-  const classify=(item)=>{
-    const highQty=item.qty>=avgQty;
-    const highMargin=item.marginPct>=avgMargin;
+  // BCG Matrix classification (only on items with known costs)
+  var avgQty=withCost.length>0?withCost.reduce(function(s,p){return s+p.qty;},0)/withCost.length:1;
+  var avgMargin=withCost.length>0?withCost.reduce(function(s,p){return s+p.marginPct;},0)/withCost.length:0;
+
+  var classify=function(item){
+    if(item.marginPct===null)return'N/A';
+    var highQty=item.qty>=avgQty;
+    var highMargin=item.marginPct>=avgMargin;
     if(highQty&&highMargin)return'Star';
     if(!highQty&&highMargin)return'Puzzle';
     if(highQty&&!highMargin)return'Cheval';
     return'Dog';
   };
 
-  const bestMargin=[...menuItems].sort((a,b)=>(b.marginPct||0)-(a.marginPct||0)).slice(0,10);
-  const worstMargin=[...menuItems].sort((a,b)=>(a.marginPct||0)-(b.marginPct||0)).slice(0,10);
+  var bcgColors={'Star':'var(--vert)','Puzzle':'var(--orange)','Cheval':'var(--bleu)','Dog':'var(--rouge)','N/A':'var(--gris-400)'};
+  var bestMargin=withCost.slice().sort(function(a,b){return b.marginPct-a.marginPct;}).slice(0,10);
+  var worstMargin=withCost.slice().sort(function(a,b){return a.marginPct-b.marginPct;}).slice(0,10);
+  var topCA=filtered.slice().sort(function(a,b){return b.ca-a.ca;}).slice(0,15);
+
+  var totalItems=filtered.length;
+  var totalCA=filtered.reduce(function(s,p){return s+p.ca;},0);
+  var stars=withCost.filter(function(p){return classify(p)==='Star';});
+  var puzzles=withCost.filter(function(p){return classify(p)==='Puzzle';});
+  var chevaux=withCost.filter(function(p){return classify(p)==='Cheval';});
+  var dogs=withCost.filter(function(p){return classify(p)==='Dog';});
 
   return(<div className="fin">
+    <div className="tabs">
+      <div className={'tab '+(tab==='food'?'active':'')} onClick={function(){setTab('food');}}>Food</div>
+      <div className={'tab '+(tab==='bar'?'active':'')} onClick={function(){setTab('bar');}}>Bar</div>
+      <div className={'tab '+(tab==='all'?'active':'')} onClick={function(){setTab('all');}}>Tous</div>
+    </div>
+
+    <div className="kpi-g">
+      <div className="kpi"><div className="kpi-label">Articles vendus</div><div className="kpi-val">{totalItems}</div><div className="kpi-chg neu">{withCost.length} avec coût connu</div></div>
+      <div className="kpi"><div className="kpi-label">CA Total</div><div className="kpi-val" style={{color:'var(--bordeaux)'}}>{eur(totalCA)}</div><div className="kpi-chg pos">{tab==='food'?'Nourriture':tab==='bar'?'Boissons':'Tous'}</div></div>
+      <div className="kpi"><div className="kpi-label">Marge moyenne</div><div className="kpi-val" style={{color:avgMargin>=60?'var(--vert)':'var(--orange)'}}>{avgMargin.toFixed(1)}%</div><div className="kpi-chg neu">Sur articles avec coût</div></div>
+      <div className="kpi"><div className="kpi-label">Sans coût connu</div><div className="kpi-val" style={{color:noCost.length>0?'var(--orange)':'var(--vert)'}}>{noCost.length}</div><div className="kpi-chg neu">À renseigner dans RecipeCosts</div></div>
+    </div>
+
     <div className="card">
-      <div className="card-h"><div><div className="card-t">Menu Engineering BCG Matrix</div><div className="card-st">Classification des plats par marge et volume</div></div></div>
+      <div className="card-h"><div><div className="card-t">Matrice BCG</div><div className="card-st">Classification par marge et volume — seuil: marge {avgMargin.toFixed(0)}%, volume {Math.round(avgQty)} unités</div></div></div>
       <div className="card-b">
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:20}}>
+        {withCost.length===0&&<div style={{textAlign:'center',padding:30,color:'var(--gris-400)'}}>Aucun article avec coût connu. Importez des données Trivec (Assortiments) et vérifiez RecipeCosts.</div>}
+        {withCost.length>0&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:20}}>
           <div style={{background:'var(--vert-light)',padding:16,borderRadius:8,borderLeft:'4px solid var(--vert)'}}>
-            <div style={{fontSize:11,color:'var(--vert)',fontWeight:600,marginBottom:8}}>STARS (Marge haute + Volume haut)</div>
-            <div style={{fontSize:14,fontWeight:700,color:'var(--vert)'}}>{menuItems.filter(p=>classify(p)==='Star').length} articles</div>
+            <div style={{fontSize:11,color:'var(--vert)',fontWeight:600,marginBottom:4}}>STARS — Marge haute + Volume haut</div>
+            <div style={{fontSize:20,fontWeight:700,color:'var(--vert)'}}>{stars.length} articles</div>
+            <div style={{fontSize:10,color:'var(--vert)',marginTop:4}}>{stars.length>0?stars.slice(0,3).map(function(s){return s.nom;}).join(', '):''}</div>
           </div>
           <div style={{background:'var(--orange-light)',padding:16,borderRadius:8,borderLeft:'4px solid var(--orange)'}}>
-            <div style={{fontSize:11,color:'var(--orange)',fontWeight:600,marginBottom:8}}>PUZZLES (Marge haute + Volume bas)</div>
-            <div style={{fontSize:14,fontWeight:700,color:'var(--orange)'}}>{menuItems.filter(p=>classify(p)==='Puzzle').length} articles</div>
+            <div style={{fontSize:11,color:'var(--orange)',fontWeight:600,marginBottom:4}}>PUZZLES — Marge haute + Volume bas</div>
+            <div style={{fontSize:20,fontWeight:700,color:'var(--orange)'}}>{puzzles.length} articles</div>
+            <div style={{fontSize:10,color:'var(--orange)',marginTop:4}}>{puzzles.length>0?puzzles.slice(0,3).map(function(s){return s.nom;}).join(', '):''}</div>
           </div>
           <div style={{background:'var(--bleu-light)',padding:16,borderRadius:8,borderLeft:'4px solid var(--bleu)'}}>
-            <div style={{fontSize:11,color:'var(--bleu)',fontWeight:600,marginBottom:8}}>CHEVAUX (Marge basse + Volume haut)</div>
-            <div style={{fontSize:14,fontWeight:700,color:'var(--bleu)'}}>{menuItems.filter(p=>classify(p)==='Cheval').length} articles</div>
+            <div style={{fontSize:11,color:'var(--bleu)',fontWeight:600,marginBottom:4}}>CHEVAUX — Marge basse + Volume haut</div>
+            <div style={{fontSize:20,fontWeight:700,color:'var(--bleu)'}}>{chevaux.length} articles</div>
+            <div style={{fontSize:10,color:'var(--bleu)',marginTop:4}}>{chevaux.length>0?chevaux.slice(0,3).map(function(s){return s.nom;}).join(', '):''}</div>
           </div>
           <div style={{background:'var(--rouge-light)',padding:16,borderRadius:8,borderLeft:'4px solid var(--rouge)'}}>
-            <div style={{fontSize:11,color:'var(--rouge)',fontWeight:600,marginBottom:8}}>DOGS (Marge basse + Volume bas)</div>
-            <div style={{fontSize:14,fontWeight:700,color:'var(--rouge)'}}>{menuItems.filter(p=>classify(p)==='Dog').length} articles</div>
+            <div style={{fontSize:11,color:'var(--rouge)',fontWeight:600,marginBottom:4}}>DOGS — Marge basse + Volume bas</div>
+            <div style={{fontSize:20,fontWeight:700,color:'var(--rouge)'}}>{dogs.length} articles</div>
+            <div style={{fontSize:10,color:'var(--rouge)',marginTop:4}}>{dogs.length>0?dogs.slice(0,3).map(function(s){return s.nom;}).join(', '):''}</div>
           </div>
-        </div>
+        </div>}
       </div>
     </div>
 
     <div className="card">
-      <div className="card-h"><div><div className="card-t">Top 10 articles par marge</div></div></div>
+      <div className="card-h"><div><div className="card-t">Top 15 articles par CA</div><div className="card-st">Tous articles vendus</div></div></div>
       <div className="card-b"><div className="tbl"><table>
-        <thead><tr><th>Article</th><th>Catégorie</th><th style={{textAlign:'right'}}>Qty vendue</th><th style={{textAlign:'right'}}>CA</th><th style={{textAlign:'right'}}>Food Cost</th><th style={{textAlign:'right'}}>Marge %</th><th>BCG</th></tr></thead>
-        <tbody>{bestMargin.map((p,i)=>(
+        <thead><tr><th>Article</th><th>Catégorie</th><th style={{textAlign:'right'}}>Qty</th><th style={{textAlign:'right'}}>CA</th><th style={{textAlign:'right'}}>Prix moy.</th><th style={{textAlign:'right'}}>Coût unit.</th><th style={{textAlign:'right'}}>Marge %</th><th>BCG</th></tr></thead>
+        <tbody>{topCA.map(function(p,i){return(
           <tr key={i}><td style={{fontWeight:500}}>{p.nom}</td><td><span className="badge b-ima" style={{fontSize:9}}>{p.cat}</span></td>
-          <td style={{textAlign:'right'}}>{fmt(p.qty)}</td><td style={{textAlign:'right',fontWeight:600}}>{eur(p.ca)}</td><td style={{textAlign:'right'}}>{eur(p.cost)}</td>
-          <td style={{textAlign:'right',fontWeight:700,color:p.marginPct>=avgMargin?'var(--vert)':'var(--rouge)'}}>{(p.marginPct||0).toFixed(1)}%</td>
-          <td><span className="badge b-ok" style={{fontSize:9}}>{classify(p)}</span></td></tr>
-        ))}</tbody>
+          <td style={{textAlign:'right'}}>{fmt(p.qty)}</td><td style={{textAlign:'right',fontWeight:600}}>{eur(p.ca)}</td>
+          <td style={{textAlign:'right'}}>{eur(p.prixMoyen)}</td>
+          <td style={{textAlign:'right'}}>{p.costUnit!==null?eur(p.costUnit):'—'}</td>
+          <td style={{textAlign:'right',fontWeight:700,color:p.marginPct===null?'var(--gris-300)':p.marginPct>=avgMargin?'var(--vert)':'var(--rouge)'}}>{p.marginPct!==null?p.marginPct.toFixed(1)+'%':'—'}</td>
+          <td><span style={{fontSize:9,fontWeight:600,color:bcgColors[classify(p)]}}>{classify(p)}</span></td></tr>
+        );})}</tbody>
       </table></div></div>
     </div>
 
-    <div className="card">
-      <div className="card-h"><div><div className="card-t">Bottom 10 articles par marge</div></div></div>
+    {bestMargin.length>0&&<div className="cg">
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Meilleures marges</div></div></div>
+        <div className="card-b"><div className="tbl"><table>
+          <thead><tr><th>Article</th><th style={{textAlign:'right'}}>Qty</th><th style={{textAlign:'right'}}>Prix moy.</th><th style={{textAlign:'right'}}>Coût</th><th style={{textAlign:'right'}}>Marge</th><th>BCG</th></tr></thead>
+          <tbody>{bestMargin.map(function(p,i){return(
+            <tr key={i}><td style={{fontWeight:500}}>{p.nom}</td>
+            <td style={{textAlign:'right'}}>{fmt(p.qty)}</td><td style={{textAlign:'right'}}>{eur(p.prixMoyen)}</td><td style={{textAlign:'right'}}>{eur(p.costUnit)}</td>
+            <td style={{textAlign:'right',fontWeight:700,color:'var(--vert)'}}>{p.marginPct.toFixed(1)}%</td>
+            <td><span style={{fontSize:9,fontWeight:600,color:bcgColors[classify(p)]}}>{classify(p)}</span></td></tr>
+          );})}</tbody>
+        </table></div></div>
+      </div>
+      <div className="card">
+        <div className="card-h"><div><div className="card-t">Pires marges</div><div className="card-st">Articles à retravailler</div></div></div>
+        <div className="card-b"><div className="tbl"><table>
+          <thead><tr><th>Article</th><th style={{textAlign:'right'}}>Qty</th><th style={{textAlign:'right'}}>Prix moy.</th><th style={{textAlign:'right'}}>Coût</th><th style={{textAlign:'right'}}>Marge</th><th>Action</th></tr></thead>
+          <tbody>{worstMargin.map(function(p,i){return(
+            <tr key={i} style={{background:p.marginPct<0?'rgba(220,38,38,.04)':'transparent'}}><td style={{fontWeight:500}}>{p.nom}</td>
+            <td style={{textAlign:'right'}}>{fmt(p.qty)}</td><td style={{textAlign:'right'}}>{eur(p.prixMoyen)}</td><td style={{textAlign:'right'}}>{eur(p.costUnit)}</td>
+            <td style={{textAlign:'right',fontWeight:700,color:'var(--rouge)'}}>{p.marginPct.toFixed(1)}%</td>
+            <td><span className="badge b-warn" style={{fontSize:9}}>{p.qty>=avgQty?'Renégocier':'Retirer?'}</span></td></tr>
+          );})}</tbody>
+        </table></div></div>
+      </div>
+    </div>}
+
+    {noCost.length>0&&<div className="card">
+      <div className="card-h"><div><div className="card-t">Articles sans coût connu ({noCost.length})</div><div className="card-st">Ajoutez les coûts dans RecipeCosts pour compléter l'analyse</div></div></div>
       <div className="card-b"><div className="tbl"><table>
-        <thead><tr><th>Article</th><th>Catégorie</th><th style={{textAlign:'right'}}>Qty vendue</th><th style={{textAlign:'right'}}>CA</th><th style={{textAlign:'right'}}>Food Cost</th><th style={{textAlign:'right'}}>Marge %</th><th>Action</th></tr></thead>
-        <tbody>{worstMargin.map((p,i)=>(
-          <tr key={i} style={{background:p.marginPct!==null&&p.marginPct<0?'rgba(220,38,38,.04)':'transparent'}}><td style={{fontWeight:500}}>{p.nom}</td><td><span className="badge b-ima" style={{fontSize:9}}>{p.cat}</span></td>
-          <td style={{textAlign:'right'}}>{fmt(p.qty)}</td><td style={{textAlign:'right',fontWeight:600}}>{eur(p.ca)}</td><td style={{textAlign:'right'}}>{eur(p.cost)}</td>
-          <td style={{textAlign:'right',fontWeight:700,color:'var(--rouge)'}}>{(p.marginPct||0).toFixed(1)}%</td>
-          <td><span className="badge b-warn" style={{fontSize:9}}>{p.qty>avgQty?'Baisser prix':'Retirer?'}</span></td></tr>
-        ))}</tbody>
+        <thead><tr><th>Article</th><th>Catégorie</th><th style={{textAlign:'right'}}>Qty</th><th style={{textAlign:'right'}}>CA</th><th style={{textAlign:'right'}}>Prix moy.</th></tr></thead>
+        <tbody>{noCost.sort(function(a,b){return b.ca-a.ca;}).slice(0,20).map(function(p,i){return(
+          <tr key={i}><td style={{fontWeight:500}}>{p.nom}</td><td><span className="badge b-ima" style={{fontSize:9}}>{p.cat}</span></td>
+          <td style={{textAlign:'right'}}>{fmt(p.qty)}</td><td style={{textAlign:'right',fontWeight:600}}>{eur(p.ca)}</td>
+          <td style={{textAlign:'right'}}>{eur(p.prixMoyen)}</td></tr>
+        );})}</tbody>
       </table></div></div>
-    </div>
+    </div>}
   </div>);
 }
 
@@ -4838,16 +4950,9 @@ function MenuEngineering(){
 function Alertes(){
   const trivec=typeof TRIVEC_SEASON!=='undefined'?TRIVEC_SEASON:null;
   const pCtx=usePeriod();
-  const[invoices,setInvoices]=useState([]);
-  const[loading,setLoading]=useState(false);
-
-  useEffect(()=>{
-    if(PennylaneService.getToken()){
-      setLoading(true);
-      PennylaneService.getAllSupplierInvoices({maxPages:50,onRefresh:f=>setInvoices(f)})
-        .then(inv=>setInvoices(inv)).finally(()=>setLoading(false));
-    }
-  },[]);
+  const invCtx=useInvoices();
+  const invoices=invCtx.invoices;
+  const loading=invCtx.loading;
 
   const totalCA=trivec?trivec.ventesNet:0;
   const caNourriture=trivec?trivec.categories.find(c=>c.nom==='Nourriture').montant:0;
@@ -4922,8 +5027,8 @@ function Comparatif(){
     const dt=new Date(parseInt(dateStr.split('/')[2]),parseInt(dateStr.split('/')[1])-1,parseInt(dateStr.split('/')[0]));
     const day=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'][dt.getDay()];
     if(!doW[day])doW[day]={ca:0,couverts:0,count:0};
-    doW[day].ca+=data.ventes?.total||0;
-    doW[day].couverts+=(data.couverts?.restaurant?.total||0)+(data.couverts?.club?.total||0)+(data.couverts?.bar?.total||0);
+    doW[day].ca+=data.ventes?.restaurant||data.ventes?.total||0;
+    doW[day].couverts+=(data.couverts?.restaurant?.total||0);
     doW[day].count++;
   });
 
@@ -4985,7 +5090,24 @@ function Reputation(){
       <div className="kpi"><div className="kpi-label">Note moyenne</div><div className="kpi-val" style={{color:avgScore>=4?'var(--vert)':avgScore>=3?'var(--orange)':'var(--rouge)'}}>{avgScore.toFixed(1)}/5</div><div className="kpi-chg pos">{ratings.length} avis enregistrés</div></div>
       <div className="kpi"><div className="kpi-label">Meilleure note</div><div className="kpi-val">{ratings.length>0?Math.max(...ratings.map(r=>r.score)):0}/5</div><div className="kpi-chg pos">Positif</div></div>
       <div className="kpi"><div className="kpi-label">Tendance</div><div className="kpi-val" style={{color:'var(--gris-400)'}}>—</div><div className="kpi-chg neu">À suivre</div></div>
-      <div className="kpi"><div className="kpi-label">Avis à traiter</div><div className="kpi-val">{ratings.length}</div><div className="kpi-chg neu">Voir ci-dessous</div></div>
+      <div className="kpi"><div className="kpi-label">Avis enregistrés</div><div className="kpi-val">{ratings.length}</div><div className="kpi-chg neu">Suivi manuel</div></div>
+    </div>
+
+    <div className="card" style={{marginBottom:16}}>
+      <div className="card-h"><div><div className="card-t">Liens rapides</div><div className="card-st">Consultez vos avis en ligne</div></div></div>
+      <div className="card-b">
+        <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+          <a href="https://www.google.com/search?q=ima+val+d%27isere" target="_blank" rel="noopener noreferrer" style={{display:'flex',alignItems:'center',gap:8,padding:'10px 16px',background:'var(--gris-50)',borderRadius:8,border:'1px solid var(--gris-200)',textDecoration:'none',color:'var(--gris-900)',fontSize:13,fontWeight:500}}>
+            <span style={{fontSize:18}}>G</span> Google Reviews
+          </a>
+          <a href="https://www.tripadvisor.com/Search?q=ima+val+d%27isere" target="_blank" rel="noopener noreferrer" style={{display:'flex',alignItems:'center',gap:8,padding:'10px 16px',background:'var(--gris-50)',borderRadius:8,border:'1px solid var(--gris-200)',textDecoration:'none',color:'var(--gris-900)',fontSize:13,fontWeight:500}}>
+            <span style={{fontSize:18}}>TA</span> TripAdvisor
+          </a>
+          <a href="https://www.instagram.com/explore/tags/imavaldisere/" target="_blank" rel="noopener noreferrer" style={{display:'flex',alignItems:'center',gap:8,padding:'10px 16px',background:'var(--gris-50)',borderRadius:8,border:'1px solid var(--gris-200)',textDecoration:'none',color:'var(--gris-900)',fontSize:13,fontWeight:500}}>
+            <span style={{fontSize:18}}>IG</span> Instagram
+          </a>
+        </div>
+      </div>
     </div>
 
     <div className="card">
@@ -5030,6 +5152,25 @@ function Reputation(){
 const PeriodContext=React.createContext();
 function usePeriod(){return React.useContext(PeriodContext);}
 
+// Shared Pennylane invoice context — single fetch for all pages
+const InvoiceContext=React.createContext({invoices:[],loading:false});
+function useInvoices(){return React.useContext(InvoiceContext);}
+function InvoiceProvider({children}){
+  const[invoices,setInvoices]=useState([]);
+  const[loading,setLoading]=useState(false);
+  const[loaded,setLoaded]=useState(false);
+  useEffect(()=>{
+    if(PennylaneService.getToken()&&!loaded){
+      setLoading(true);
+      PennylaneService.getAllSupplierInvoices({maxPages:50,onRefresh:function(fresh){setInvoices(fresh);}})
+        .then(function(inv){setInvoices(inv);setLoaded(true);})
+        .finally(function(){setLoading(false);});
+    }
+  },[loaded]);
+  const value=useMemo(function(){return{invoices:invoices,loading:loading,loaded:loaded};},[invoices,loading,loaded]);
+  return React.createElement(InvoiceContext.Provider,{value:value},children);
+}
+
 // Helper: parse dd/mm/yyyy → Date
 const parseDDMMYYYY=(s)=>{const p=s.split('/');return new Date(parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));};
 const toDDMMYYYY=(d)=>String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
@@ -5061,14 +5202,14 @@ function PeriodProvider({children}){
         caResto+=data.ventes?.restaurant||0;
         caClub+=data.ventes?.club||0;
         caBar+=data.ventes?.bar||0;
-        couverts+=(data.couverts?.restaurant?.total||0)+(data.couverts?.club?.total||0)+(data.couverts?.bar?.total||0);
+        couverts+=(data.couverts?.restaurant?.total||0);
         especes+=data.paiements?.especes||0;
         cb+=data.paiements?.cb||0;
         amex+=data.paiements?.amex||0;
         count++;
       }
     }
-    return{total,days:count,caResto,caClub,caBar,couverts,especes,cb,amex,ticketMoyen:couverts>0?total/couverts:0};
+    return{total,days:count,caResto,caClub,caBar,couverts,especes,cb,amex,ticketMoyen:couverts>0?caResto/couverts:0};
   },[dates]);
 
   // Masse salariale prorata — msActive = total Dec+Jan, prorata sur la période
@@ -5174,7 +5315,7 @@ function AppInner(){
 }
 
 // App wrapper with PeriodProvider
-function App(){return <PeriodProvider><AppInner/></PeriodProvider>;}
+function App(){return <PeriodProvider><InvoiceProvider><AppInner/></InvoiceProvider></PeriodProvider>;}
 
 // ErrorBoundary to prevent blank pages on crash
 class ErrorBoundary extends React.Component{
