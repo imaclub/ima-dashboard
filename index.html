@@ -1308,9 +1308,11 @@ const PennylaneService={
     // 2. localStorage cache (1h) — return instantly, refresh in background
     let lsData=this._getLsCache();
     if(lsData&&lsData.length>0){
-      // Dédupliquer le cache : par id puis par contenu
+      // Dédupliquer le cache : par id puis par n° facture + fournisseur + date (garder meilleur montant)
       const si=new Set();lsData=lsData.filter(inv=>{if(!inv.id)return true;if(si.has(inv.id))return false;si.add(inv.id);return true;});
-      const sc=new Set();lsData=lsData.filter(inv=>{const n=inv.invoice_number||'';if(!n)return true;const k=`${n}_${inv.supplier?.id||''}_${inv.date||''}_${inv.amount||''}`;if(sc.has(k))return false;sc.add(k);return true;});
+      const bestC={};lsData.forEach(inv=>{const n=inv.invoice_number||'';if(!n)return;const k=`${n}_${inv.supplier?.id||''}_${inv.date||''}`;const t=Math.abs(parseFloat(inv.amount||0));if(!bestC[k]||t>bestC[k].t)bestC[k]={inv,t};});
+      const bestCIds=new Set(Object.values(bestC).map(b=>b.inv.id||''));
+      const seenC=new Set();lsData=lsData.filter(inv=>{const n=inv.invoice_number||'';if(!n)return true;const k=`${n}_${inv.supplier?.id||''}_${inv.date||''}`;if(seenC.has(k))return false;seenC.add(k);const b=bestC[k];return b&&(inv.id||'')===(b.inv.id||'');});
       this._cache[cacheKey]={data:lsData,ts:Date.now()};
       // Background refresh
       this._fetchAllInvoices({dateFrom,maxPages}).then(fresh=>{
@@ -1348,7 +1350,7 @@ const PennylaneService={
         if(page<maxPages)await new Promise(r=>setTimeout(r,300));
       }
     }catch(e){console.error('Failed to fetch invoices:',e);}
-    // Dédupliquer en 2 passes :
+    // Dédupliquer en 3 passes :
     // 1) Par API id (basique)
     const seenIds=new Set();
     allInvoices=allInvoices.filter(inv=>{
@@ -1356,16 +1358,38 @@ const PennylaneService={
       if(seenIds.has(inv.id))return false;
       seenIds.add(inv.id);return true;
     });
-    // 2) Par contenu identique (même n° facture + fournisseur + date + montant)
-    // Ne s'applique qu'aux factures AVEC un numéro — les autres sont gardées
-    const seenContent=new Set();
+    // 2) Par n° facture + fournisseur + date (SANS montant — Pennylane retourne parfois
+    //    la même facture avec des montants différents : brouillon vs finalisée)
+    //    On garde celle avec le montant TTC le plus élevé (en absolu = la version complète)
+    const bestByKey={};
+    allInvoices.forEach(inv=>{
+      const invNum=inv.invoice_number||'';
+      if(!invNum)return;
+      const key=`${invNum}_${inv.supplier?.id||''}_${inv.date||''}`;
+      const ttc=Math.abs(parseFloat(inv.amount||0));
+      if(!bestByKey[key]||ttc>bestByKey[key].ttc){
+        bestByKey[key]={inv:inv,ttc:ttc};
+      }
+    });
+    const bestInvIds=new Set(Object.values(bestByKey).map(b=>b.inv.id||JSON.stringify(b.inv)));
+    const seenKeys=new Set();
     allInvoices=allInvoices.filter(inv=>{
       const invNum=inv.invoice_number||'';
-      if(!invNum)return true;
-      const key=`${invNum}_${inv.supplier?.id||''}_${inv.date||''}_${inv.amount||''}`;
-      if(seenContent.has(key))return false;
-      seenContent.add(key);return true;
+      if(!invNum)return true; // pas de n° = on garde
+      const key=`${invNum}_${inv.supplier?.id||''}_${inv.date||''}`;
+      if(seenKeys.has(key))return false; // déjà vu ce combo → doublon
+      seenKeys.add(key);
+      // Garder seulement la meilleure version (montant le plus élevé)
+      const best=bestByKey[key];
+      if(best){
+        const thisId=inv.id||JSON.stringify(inv);
+        const bestId=best.inv.id||JSON.stringify(best.inv);
+        if(thisId!==bestId)return false; // cette version n'est pas la meilleure
+      }
+      return true;
     });
+    // 3) Log doublons supprimés pour debug
+    console.log('[IMA] Dédup: '+allInvoices.length+' factures après dédoublonnage');
     return allInvoices;
   },
 
