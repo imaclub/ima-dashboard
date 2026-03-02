@@ -2167,6 +2167,66 @@ function Costs(){
         <div className="kpi-chg neg">{supplierGroups.filter(s=>s.cat==='Non classé').length} fournisseurs</div></div>
     </div>
 
+    {/* Détail fournisseurs Food & Bar (saison) */}
+    {(foodTotal>0||barTotal>0)&&<div className="card" style={{marginBottom:14}}>
+      <div className="card-h"><div><div className="card-t">Détail achats saison (déc-fév) par fournisseur</div><div className="card-st">Factures de la période Trivec uniquement — exclut les achats pré-ouverture (novembre)</div></div></div>
+      <div className="card-b" style={{padding:'0 14px 14px'}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+          {['Food','Bar'].map(function(cat){
+            var catInvs=seasonInvoices.filter(function(inv){return SupplierMap.getCategory(String(inv.supplier&&inv.supplier.id||''))===cat;});
+            var bySupplier={};
+            catInvs.forEach(function(inv){
+              var sid=String(inv.supplier&&inv.supplier.id||'unknown');
+              var name=SupplierMap.extractName(inv);
+              if(!bySupplier[sid])bySupplier[sid]={name:name,totalHT:0,totalTTC:0,count:0,invoices:[]};
+              bySupplier[sid].totalHT+=parseFloat(inv.currency_amount_before_tax||0);
+              bySupplier[sid].totalTTC+=parseFloat(inv.amount||0);
+              bySupplier[sid].count++;
+              bySupplier[sid].invoices.push(inv);
+            });
+            var suppliers=Object.values(bySupplier).sort(function(a,b){return Math.abs(b.totalHT)-Math.abs(a.totalHT);});
+            var catTotal=suppliers.reduce(function(s,sup){return s+sup.totalHT;},0);
+            return React.createElement('div',{key:cat},
+              React.createElement('div',{style:{fontWeight:700,fontSize:14,color:cat==='Food'?'#059669':'#581527',marginBottom:8}},
+                'Achats '+cat+' : '+eur(catTotal)+' HT ('+catInvs.length+' factures)'
+              ),
+              React.createElement('table',{style:{width:'100%',fontSize:11}},
+                React.createElement('thead',null,
+                  React.createElement('tr',{style:{background:'var(--gris-100)'}},
+                    React.createElement('th',{style:{textAlign:'left',padding:'4px 6px'}},'Fournisseur'),
+                    React.createElement('th',{style:{textAlign:'right',padding:'4px 6px'}},'Montant HT'),
+                    React.createElement('th',{style:{textAlign:'right',padding:'4px 6px'}},'TTC'),
+                    React.createElement('th',{style:{textAlign:'center',padding:'4px 6px'}},'Nb')
+                  )
+                ),
+                React.createElement('tbody',null,
+                  suppliers.map(function(sup,i){
+                    return React.createElement('tr',{key:i,style:{background:i%2===0?'#fff':'var(--gris-50)',color:sup.totalHT<0?'var(--rouge)':'inherit'}},
+                      React.createElement('td',{style:{padding:'3px 6px',fontWeight:500}},sup.name),
+                      React.createElement('td',{style:{textAlign:'right',padding:'3px 6px'}},eur(sup.totalHT)),
+                      React.createElement('td',{style:{textAlign:'right',padding:'3px 6px',color:'var(--gris-400)'}},eur(sup.totalTTC)),
+                      React.createElement('td',{style:{textAlign:'center',padding:'3px 6px'}},sup.count)
+                    );
+                  })
+                ),
+                React.createElement('tfoot',null,
+                  React.createElement('tr',{style:{fontWeight:700,borderTop:'2px solid var(--gris-200)'}},
+                    React.createElement('td',{style:{padding:'4px 6px'}},'TOTAL'),
+                    React.createElement('td',{style:{textAlign:'right',padding:'4px 6px'}},eur(catTotal)),
+                    React.createElement('td',{style:{textAlign:'right',padding:'4px 6px',color:'var(--gris-400)'}},eur(suppliers.reduce(function(s,sup){return s+sup.totalTTC;},0))),
+                    React.createElement('td',{style:{textAlign:'center',padding:'4px 6px'}},catInvs.length)
+                  )
+                )
+              )
+            );
+          })}
+        </div>
+        <div style={{marginTop:10,fontSize:10,color:'var(--gris-400)',fontStyle:'italic'}}>
+          Les montants négatifs (en rouge) sont des avoirs/remboursements. Si un fournisseur semble mal classé, modifiez sa catégorie dans l'onglet "Mapping" ci-dessous.
+        </div>
+      </div>
+    </div>}
+
     {/* ===== TAB: OVERVIEW ===== */}
     {tab==='overview'&&<div>
       {/* Cost groups summary */}
@@ -5715,8 +5775,8 @@ function Comparatif(){
               React.createElement('td',{style:{fontWeight:600}},m.mois,m===bestMonth?' ★':'',prev?React.createElement('span',{style:{fontSize:10,marginLeft:6,color:delta>=0?'var(--vert)':'var(--rouge)'}},(delta>=0?'+':'')+delta.toFixed(1)+'%'):null),
               React.createElement('td',{style:{textAlign:'right',fontWeight:700}},eur(m.ventesNet)),
               React.createElement('td',{style:{textAlign:'right'}},eur(htTotal)),
-              React.createElement('td',{style:{textAlign:'right'}},fmtN(m.tickets)),
-              React.createElement('td',{style:{textAlign:'right'}},fmtN(m.couverts)),
+              React.createElement('td',{style:{textAlign:'right'}},fmt(m.tickets)),
+              React.createElement('td',{style:{textAlign:'right'}},fmt(m.couverts)),
               React.createElement('td',{style:{textAlign:'right',fontWeight:600}},eur(tmResto)),
               React.createElement('td',{style:{textAlign:'right',fontSize:12}},eur(m.tva.taux10.tva+m.tva.taux20.tva)),
               React.createElement('td',{style:{textAlign:'right',fontSize:12}},eur(m.interne)),
@@ -5734,8 +5794,8 @@ function Comparatif(){
             React.createElement('td',null,'TOTAL SAISON'),
             React.createElement('td',{style:{textAlign:'right',color:'var(--bordeaux)'}},eur(S.ventesNet)),
             React.createElement('td',{style:{textAlign:'right'}},eur(S.tva.taux10.ht+S.tva.taux20.ht)),
-            React.createElement('td',{style:{textAlign:'right'}},fmtN(S.tickets)),
-            React.createElement('td',{style:{textAlign:'right'}},fmtN(S.couverts)),
+            React.createElement('td',{style:{textAlign:'right'}},fmt(S.tickets)),
+            React.createElement('td',{style:{textAlign:'right'}},fmt(S.couverts)),
             React.createElement('td',{style:{textAlign:'right'}},S.couverts>0?eur(Math.round(S.tva.taux10.ht/S.couverts)):'—'),
             React.createElement('td',{style:{textAlign:'right',fontSize:12}},eur(S.tva.taux10.tva+S.tva.taux20.tva)),
             React.createElement('td',{style:{textAlign:'right',fontSize:12}},eur(S.interne)),
@@ -5750,7 +5810,7 @@ function Comparatif(){
       <div className="kpi"><div className="kpi-label">Meilleur mois</div><div className="kpi-val" style={{color:'var(--vert)'}}>{bestMonth?bestMonth.mois:''}</div><div className="kpi-chg pos">{bestMonth?eur(bestMonth.ventesNet)+' net':''}</div></div>
       <div className="kpi"><div className="kpi-label">CA moyen / mois</div><div className="kpi-val">{eur(Math.round(S.ventesNet/monthly.length))}</div><div className="kpi-chg neu">Sur {monthly.length} mois</div></div>
       <div className="kpi"><div className="kpi-label">Croissance Fév vs Déc</div><div className="kpi-val" style={{color:monthly.length>=3&&monthly[2].ventesNet>monthly[0].ventesNet?'var(--vert)':'var(--rouge)'}}>{monthly.length>=3?((monthly[2].ventesNet-monthly[0].ventesNet)/monthly[0].ventesNet*100).toFixed(1)+'%':'—'}</div><div className="kpi-chg pos">{monthly.length>=3?eur(monthly[2].ventesNet-monthly[0].ventesNet):''}</div></div>
-      <div className="kpi"><div className="kpi-label">Couverts / mois moyen</div><div className="kpi-val">{fmtN(Math.round(S.couverts/monthly.length))}</div><div className="kpi-chg neu">{fmtN(S.couverts)} total saison</div></div>
+      <div className="kpi"><div className="kpi-label">Couverts / mois moyen</div><div className="kpi-val">{fmt(Math.round(S.couverts/monthly.length))}</div><div className="kpi-chg neu">{fmt(S.couverts)} total saison</div></div>
     </div>}
 
     <div className="card" style={{marginBottom:16}}>
@@ -5958,7 +6018,7 @@ function Reputation(){
       ),
       React.createElement('div',{className:'kpi'},
         React.createElement('div',{className:'kpi-label'},'Nombre d\'avis'),
-        React.createElement('div',{className:'kpi-val'},fmtN(totalReviews)),
+        React.createElement('div',{className:'kpi-val'},fmt(totalReviews)),
         React.createElement('div',{className:'kpi-chg neu'},'Total Google Reviews')
       ),
       React.createElement('div',{className:'kpi'},
