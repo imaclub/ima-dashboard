@@ -5188,13 +5188,30 @@ function Settings(){
           <div className="fg-row" style={{marginBottom:10}}>
             <div className="fg" style={{flex:1}}>
               <label className="fl">Google API Key</label>
-              <input className="fi" type="password" placeholder="AIza..." defaultValue={localStorage.getItem('ima_google_api_key')||''} onBlur={function(e){if(e.target.value)localStorage.setItem('ima_google_api_key',e.target.value);else localStorage.removeItem('ima_google_api_key');}}/>
+              <input className="fi" id="ima_gapi_key" type="password" placeholder="AIza..." defaultValue={localStorage.getItem('ima_google_api_key')||''}/>
             </div>
             <div className="fg" style={{flex:1}}>
               <label className="fl">Place ID</label>
-              <input className="fi" type="text" placeholder="ChIJ..." defaultValue={localStorage.getItem('ima_google_place_id')||''} onBlur={function(e){if(e.target.value)localStorage.setItem('ima_google_place_id',e.target.value);else localStorage.removeItem('ima_google_place_id');}}/>
+              <input className="fi" id="ima_gapi_place" type="text" placeholder="ChIJ..." defaultValue={localStorage.getItem('ima_google_place_id')||''}/>
             </div>
           </div>
+          <button className="btn btn-primary" style={{fontSize:12,marginBottom:8}} onClick={function(){
+            var key=document.getElementById('ima_gapi_key').value.trim();
+            var pid=document.getElementById('ima_gapi_place').value.trim();
+            if(!key||!pid){alert('Veuillez remplir les deux champs.');return;}
+            localStorage.setItem('ima_google_api_key',key);
+            localStorage.setItem('ima_google_place_id',pid);
+            // Test API
+            var url='https://places.googleapis.com/v1/places/'+pid+'?fields=displayName,rating,userRatingCount&languageCode=fr&key='+key;
+            fetch(url).then(function(r){return r.json();}).then(function(data){
+              if(data.error){alert('❌ Erreur API : '+data.error.message);return;}
+              alert('✅ Connexion réussie !\n\n'+
+                'Restaurant : '+(data.displayName?.text||'?')+'\n'+
+                'Note : '+(data.rating||'?')+'/5\n'+
+                'Avis : '+(data.userRatingCount||'?'));
+              window.location.reload();
+            }).catch(function(err){alert('❌ Erreur réseau : '+err.message);});
+          }}>Sauvegarder & Tester la connexion</button>
         </div>
       </div>
 
