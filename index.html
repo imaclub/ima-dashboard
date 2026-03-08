@@ -6405,42 +6405,43 @@ function ComparatifBP(){
   const monthly=S.monthly||[];
   const{invoices}=useInvoices();
 
-  // Helper: Get season invoices for cost calculations
-  const getSeasonInvoices=(startDate,endDate)=>invoices.filter(inv=>{
-    const d=new Date(inv.date);
-    return d>=new Date(startDate)&&d<=new Date(endDate);
-  });
+  // Helper: convert DD/MM/YYYY → YYYY-MM-DD
+  const toISO=d=>d.split('/').reverse().join('-');
 
-  // Get food/bev costs from supplier invoices
-  const getFoodCosts=(monthStr)=>{
-    const m=BP_DATA.monthly.find(x=>x.mois.includes(monthStr));
-    if(!m)return{food:0,bev:0};
-    // Use BP values
-    return{food:Math.abs(m.foodCharges),bev:Math.abs(m.bevCharges)};
+  // Filter invoices for a given month using from/to dates
+  const getMonthInvoices=(month)=>{
+    const start=toISO(month.from);
+    const end=toISO(month.to);
+    return invoices.filter(inv=>inv.date&&inv.date>=start&&inv.date<=end);
   };
 
-  // Get staff costs for period
-  const getStaffCosts=(monthStr)=>{
-    const m=BP_DATA.monthly.find(x=>x.mois.includes(monthStr));
-    return m?Math.abs(m.staffCosts):0;
+  // Staff costs per month from PayrollService
+  const staffPerMonth={
+    'Décembre 2025':PayrollService.getMasseSalarialeDec(),
+    'Janvier 2026':PayrollService.getMasseSalariale(),
+    'Février 2026':PayrollService.getMasseSalarialeEstFev()
   };
 
   // Month data with BP comparison
   const monthData=monthly.map(month=>{
-    const bpMonth=BP_DATA.monthly.find(x=>x.mois.includes(month.mois.slice(0,7)));
-    const monthStr=month.mois.slice(0,7);
+    const bpMonth=BP_DATA.monthly.find(x=>x.mois===month.mois);
 
-    // Real data from Trivec
+    // Real CA from Trivec
     const realCA=month.ventesNet;
-    const realCAHT=month.tva.taux10.ht+month.tva.taux20.ht;
 
-    // Get real costs from invoices (estimated from monthly data)
-    const realFoodBevCosts=SupplierMap.getTotals(getSeasonInvoices(month.dateDebut,month.dateFin)).total||0;
-    const realStaffCosts=PayrollService.getMonthlyTotal?PayrollService.getMonthlyTotal(monthStr):0;
+    // Real COGS from invoices (Food + Bar HT)
+    const mInv=getMonthInvoices(month);
+    const totals=SupplierMap.getTotals(mInv);
+    const realCOGS=(totals['Food']||0)+(totals['Bar']||0);
+
+    // Real staff from payroll
+    const realStaff=staffPerMonth[month.mois]||0;
+
+    // Real EBITDA simplified = CA - COGS - Staff
+    const realEBITDA=realCA-realCOGS-realStaff;
 
     return{
-      mois:month.mois,
-      realCA,realCAHT,realFoodBevCosts,realStaffCosts,
+      mois:month.mois,realCA,realCOGS,realStaff,realEBITDA,
       bpCA:bpMonth?bpMonth.caTotal:0,
       bpCOGS:bpMonth?Math.abs(bpMonth.cogsTotal):0,
       bpStaff:bpMonth?Math.abs(bpMonth.staffCosts):0,
@@ -6448,9 +6449,11 @@ function ComparatifBP(){
     };
   });
 
-  // Calculate annual actuals
-  const annualRealCA=monthly.reduce((s,m)=>s+m.ventesNet,0);
-  const annualRealStaff=monthData.reduce((s,m)=>s+m.realStaffCosts,0);
+  // Calculate season totals
+  const annualRealCA=monthData.reduce((s,m)=>s+m.realCA,0);
+  const annualRealCOGS=monthData.reduce((s,m)=>s+m.realCOGS,0);
+  const annualRealStaff=monthData.reduce((s,m)=>s+m.realStaff,0);
+  const annualRealEBITDA=monthData.reduce((s,m)=>s+m.realEBITDA,0);
 
   return(<div className="fin">
     <div className="card" style={{marginBottom:16}}>
@@ -6468,11 +6471,11 @@ function ComparatifBP(){
                 <td style={{textAlign:'right'}}>{eur(m.realCA)}</td>
                 <td style={{textAlign:'right',color:caColor,fontWeight:'bold'}}>{caEcart>0?'+':''}{caEcart}%</td>
                 <td style={{textAlign:'right'}}>{eur(m.bpCOGS)}</td>
-                <td style={{textAlign:'right'}}>{eur(m.realFoodBevCosts)}</td>
+                <td style={{textAlign:'right'}}>{eur(m.realCOGS)}</td>
                 <td style={{textAlign:'right'}}>{eur(m.bpStaff)}</td>
-                <td style={{textAlign:'right'}}>{eur(m.realStaffCosts)}</td>
+                <td style={{textAlign:'right'}}>{eur(m.realStaff)}</td>
                 <td style={{textAlign:'right'}}>{eur(m.bpEBITDA)}</td>
-                <td style={{textAlign:'right'}}>{eur(m.realCA-m.realFoodBevCosts-m.realStaffCosts)}</td>
+                <td style={{textAlign:'right'}}>{eur(m.realEBITDA)}</td>
               </tr>);
             })}
             <tr style={{borderTop:'2px solid var(--gris-4)',fontWeight:'bold',backgroundColor:'var(--gris-1)'}}>
@@ -6483,11 +6486,11 @@ function ComparatifBP(){
                 {Math.round((annualRealCA-BP_DATA.annual.caTotal)/BP_DATA.annual.caTotal*1000)/10}%
               </td>
               <td style={{textAlign:'right'}}>{eur(Math.abs(BP_DATA.annual.cogsTotal))}</td>
-              <td style={{textAlign:'right'}}>{eur(monthData.reduce((s,m)=>s+m.realFoodBevCosts,0))}</td>
+              <td style={{textAlign:'right'}}>{eur(annualRealCOGS)}</td>
               <td style={{textAlign:'right'}}>{eur(Math.abs(BP_DATA.annual.staffCosts))}</td>
               <td style={{textAlign:'right'}}>{eur(annualRealStaff)}</td>
               <td style={{textAlign:'right'}}>{eur(BP_DATA.annual.ebitda)}</td>
-              <td style={{textAlign:'right'}}>{eur(annualRealCA-monthData.reduce((s,m)=>s+m.realFoodBevCosts,0)-annualRealStaff)}</td>
+              <td style={{textAlign:'right'}}>{eur(annualRealEBITDA)}</td>
             </tr>
           </tbody>
         </table></div>
