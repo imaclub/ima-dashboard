@@ -295,6 +295,10 @@ const I={
   Alert:()=><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
   Compare:()=><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><polyline points="10 6 10 18 14 18 14 6"/></svg>,
   Reput:()=><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6"/><path d="M3.218 10.218A7 7 0 0 0 15 3.5M2.5 22v-6h6"/><path d="M20.782 13.782A7 7 0 0 1 9 20.5"/></svg>,
+  Forecast:()=><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v7a7 7 0 0 0 7 7h8"/><polyline points="21 10 17 14 13 10"/></svg>,
+  Event:()=><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+  Health:()=><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
+  Daily:()=><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>,
 };
 
 // ===== FORMATTERS =====
@@ -3800,6 +3804,26 @@ const TRIVEC_SEASON={
   ]
 };
 
+// ===== BUSINESS PLAN DATA =====
+const BP_DATA={
+  label:'Business Plan 25/26',
+  monthly:[
+    {mois:'Décembre 2025',
+      caRestaurant:263219,caFoodSales:157932,caBevSales:105288,caBar:243144,caTotal:506363,
+      foodCharges:-34745,bevCharges:-69686,cogsTotal:-104431,
+      staffCosts:-140682,opex:-127641,ebitda:133609,netResult:83484},
+    {mois:'Janvier 2026',
+      caRestaurant:321572,caFoodSales:192943,caBevSales:128629,caBar:385664,caTotal:707235,
+      foodCharges:-42447,bevCharges:-102858,cogsTotal:-145306,
+      staffCosts:-140682,opex:-135646,ebitda:285602,netResult:199665},
+    {mois:'Février 2026',
+      caRestaurant:376539,caFoodSales:225924,caBevSales:150616,caBar:496750,caTotal:873289,
+      foodCharges:-49703,bevCharges:-129473,cogsTotal:-179176,
+      staffCosts:-140682,opex:-141769,ebitda:411662,netResult:294211}
+  ],
+  annual:{caTotal:2948807,cogsTotal:-605961,staffCosts:-703409,opex:-979887,ebitda:659549,netResult:394714}
+};
+
 // ===== PRIX DE VENTE CARTE (TTC) =====
 // Source : Cartes IMA (Food, Boissons, Vins, VIP) — hors suggestions
 // Note : ALL DRINKS INCLUDE COMPLIMENTARY MIXERS EXCEPT REDBULL
@@ -5569,6 +5593,42 @@ function Productivite(){
         ))}</tbody>
       </table></div></div>
     </div>
+
+    {/* Ratio CA/heure et staffing optimal */}
+    <div className="card" style={{marginBottom:14}}>
+      <div className="card-h"><div><div className="card-t">Productivité €/heure & Staffing Optimal</div><div className="card-st">CA par heure travaillée et recommandation effectif par jour</div></div></div>
+      <div className="card-b">
+        {(function(){
+          const effectif=PayrollService.getEffectifActif();
+          const msActive=PayrollService.getMasseSalarialeActive();
+          const hoursPerMonth=151;
+          const totalHours=effectif*hoursPerMonth*3;
+          const caPerHour=totalHours>0?totalCA/totalHours:0;
+          const staffCostPerHour=totalHours>0?msActive/totalHours:0;
+          const prodRatio=staffCostPerHour>0?caPerHour/staffCostPerHour:0;
+
+          return React.createElement(React.Fragment,null,
+            React.createElement('div',{className:'kpi-g'},
+              React.createElement('div',{className:'kpi'},
+                React.createElement('div',{className:'kpi-label'},'CA / heure travaillée'),
+                React.createElement('div',{className:'kpi-val',style:{color:'var(--bordeaux)'}},eur(caPerHour)),
+                React.createElement('div',{className:'kpi-chg neu'},'Objectif : ≥ 80€/h')
+              ),
+              React.createElement('div',{className:'kpi'},
+                React.createElement('div',{className:'kpi-label'},'Coût staff / heure'),
+                React.createElement('div',{className:'kpi-val'},eur(staffCostPerHour)),
+                React.createElement('div',{className:'kpi-chg neu'},'Masse salariale ÷ heures')
+              ),
+              React.createElement('div',{className:'kpi'},
+                React.createElement('div',{className:'kpi-label'},'Ratio productivité'),
+                React.createElement('div',{className:'kpi-val',style:{color:prodRatio>=2.5?'var(--vert)':prodRatio>=2?'var(--orange)':'var(--rouge)'}},prodRatio.toFixed(1)+'x'),
+                React.createElement('div',{className:'kpi-chg neu'},'CA÷Coût staff — Objectif ≥ 2.5x')
+              )
+            )
+          );
+        })()}
+      </div>
+    </div>
   </div>);
 }
 
@@ -5734,6 +5794,50 @@ function MenuEngineering(){
       </div>
     </div>}
 
+    {/* Matrice BCG visuelle */}
+    {withCost.length>0&&<div className="card" style={{marginBottom:14}}>
+      <div className="card-h"><div><div className="card-t">Matrice BCG — Menu Engineering</div><div className="card-st">Popularité (quantité) vs Rentabilité (marge %)</div></div></div>
+      <div className="card-b">
+        {/* 4 quadrants grid */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:2,marginBottom:14}}>
+          <div style={{background:'#ecfdf5',padding:14,borderRadius:'8px 0 0 0',minHeight:120}}>
+            <div style={{fontWeight:700,color:'var(--vert)',marginBottom:6}}>★ Stars ({stars.length})</div>
+            <div style={{fontSize:11,color:'var(--gris-600)',marginBottom:6}}>Populaires & rentables — Maintenir en avant</div>
+            {stars.slice(0,5).map(function(p,i){return <div key={i} style={{fontSize:11,padding:'2px 0'}}>{p.nom} <span style={{color:'var(--vert)',fontWeight:600}}>{p.marginPct.toFixed(0)}%</span> — {p.qty} vendus</div>;})}
+            {stars.length>5&&<div style={{fontSize:10,color:'var(--gris-400)'}}>+{stars.length-5} autres</div>}
+          </div>
+          <div style={{background:'#fef3c7',padding:14,borderRadius:'0 8px 0 0',minHeight:120}}>
+            <div style={{fontWeight:700,color:'var(--orange)',marginBottom:6}}>? Puzzles ({puzzles.length})</div>
+            <div style={{fontSize:11,color:'var(--gris-600)',marginBottom:6}}>Rentables mais peu vendus — Promouvoir</div>
+            {puzzles.slice(0,5).map(function(p,i){return <div key={i} style={{fontSize:11,padding:'2px 0'}}>{p.nom} <span style={{color:'var(--orange)',fontWeight:600}}>{p.marginPct.toFixed(0)}%</span> — {p.qty} vendus</div>;})}
+            {puzzles.length>5&&<div style={{fontSize:10,color:'var(--gris-400)'}}>+{puzzles.length-5} autres</div>}
+          </div>
+          <div style={{background:'#dbeafe',padding:14,borderRadius:'0 0 0 8px',minHeight:120}}>
+            <div style={{fontWeight:700,color:'#2563eb',marginBottom:6}}>🐴 Chevaux ({chevaux.length})</div>
+            <div style={{fontSize:11,color:'var(--gris-600)',marginBottom:6}}>Populaires mais faible marge — Augmenter prix ou réduire coût</div>
+            {chevaux.slice(0,5).map(function(p,i){return <div key={i} style={{fontSize:11,padding:'2px 0'}}>{p.nom} <span style={{color:'#2563eb',fontWeight:600}}>{p.marginPct.toFixed(0)}%</span> — {p.qty} vendus</div>;})}
+            {chevaux.length>5&&<div style={{fontSize:10,color:'var(--gris-400)'}}>+{chevaux.length-5} autres</div>}
+          </div>
+          <div style={{background:'#fef2f2',padding:14,borderRadius:'0 0 8px 0',minHeight:120}}>
+            <div style={{fontWeight:700,color:'var(--rouge)',marginBottom:6}}>🐕 Dogs ({dogs.length})</div>
+            <div style={{fontSize:11,color:'var(--gris-600)',marginBottom:6}}>Ni populaire ni rentable — Retirer ou reformuler</div>
+            {dogs.slice(0,5).map(function(p,i){return <div key={i} style={{fontSize:11,padding:'2px 0'}}>{p.nom} <span style={{color:'var(--rouge)',fontWeight:600}}>{p.marginPct.toFixed(0)}%</span> — {p.qty} vendus</div>;})}
+            {dogs.length>5&&<div style={{fontSize:10,color:'var(--gris-400)'}}>+{dogs.length-5} autres</div>}
+          </div>
+        </div>
+        {/* Recommendations */}
+        <div style={{background:'var(--cream,#fdf6f0)',border:'1px solid #e8d5c4',borderRadius:8,padding:14}}>
+          <div style={{fontWeight:700,fontSize:13,marginBottom:8,color:'var(--bordeaux)'}}>Recommandations</div>
+          <div style={{fontSize:12,lineHeight:1.6}}>
+            {puzzles.length>0&&<div>📈 <strong>Promouvoir :</strong> {puzzles.slice(0,3).map(function(p){return p.nom;}).join(', ')} — bonne marge mais peu vendus. Mettre en avant sur la carte ou en suggestion serveur.</div>}
+            {chevaux.length>0&&<div style={{marginTop:4}}>💰 <strong>Optimiser le prix :</strong> {chevaux.slice(0,3).map(function(p){return p.nom;}).join(', ')} — populaires mais marge faible. Envisager +1-2€ ou réduire la portion/coût.</div>}
+            {dogs.length>0&&<div style={{marginTop:4}}>❌ <strong>Repenser :</strong> {dogs.slice(0,3).map(function(p){return p.nom;}).join(', ')} — ni populaires ni rentables. Retirer du menu ou reformuler la recette.</div>}
+            {stars.length>0&&<div style={{marginTop:4}}>✅ <strong>Conserver :</strong> {stars.slice(0,3).map(function(p){return p.nom;}).join(', ')} — vos best-sellers rentables. Ne pas toucher !</div>}
+          </div>
+        </div>
+      </div>
+    </div>}
+
     {noCost.length>0&&<div className="card">
       <div className="card-h"><div><div className="card-t">Articles sans coût connu ({noCost.length})</div><div className="card-st">Ajoutez les coûts dans RecipeCosts pour compléter l'analyse</div></div></div>
       <div className="card-b"><div className="tbl"><table>
@@ -5756,6 +5860,20 @@ function Alertes(){
   const invoices=invCtx.invoices;
   const loading=invCtx.loading;
 
+  // Load configurable thresholds from localStorage
+  const [thresholds,setThresholds]=useState(function(){
+    const stored=localStorage.getItem('ima_alert_thresholds');
+    return stored?JSON.parse(stored):{foodCostMax:30,barCostMax:22,staffCostMax:30,primeCostMax:65};
+  });
+  const [showThresholdConfig,setShowThresholdConfig]=useState(false);
+  const [editThresholds,setEditThresholds]=useState(thresholds);
+
+  const saveThresholds=function(){
+    localStorage.setItem('ima_alert_thresholds',JSON.stringify(editThresholds));
+    setThresholds(editThresholds);
+    setShowThresholdConfig(false);
+  };
+
   const totalCA=trivec?trivec.ventesNet:0;
   // CA HT par catégorie (montants Trivec TTC → HT)
   const caNourritureTTC=trivec?trivec.categories.find(c=>c.nom==='Nourriture').montant:0;
@@ -5776,11 +5894,18 @@ function Alertes(){
   const staffPct=totalCA>0?staffCost/totalCA*100:0;
   const primePct=totalCA>0?(foodCost+barCost+staffCost)/totalCA*100:0;
 
+  // Calculate health score (0-100)
+  const foodScore=Math.max(0,Math.min(25,(thresholds.foodCostMax-foodPct)*2.5));
+  const barScore=Math.max(0,Math.min(25,(thresholds.barCostMax-barPct)*2.5));
+  const staffScore=Math.max(0,Math.min(25,(thresholds.staffCostMax-staffPct)*2.5));
+  const trendScore=primePct<(thresholds.primeCostMax-5)?25:primePct<=thresholds.primeCostMax?12:0;
+  const healthScore=Math.round(foodScore+barScore+staffScore+trendScore);
+
   const alerts=[];
-  if(foodPct>30)alerts.push({type:'err',title:'Food Cost élevé',msg:`${foodPct.toFixed(1)}% (objectif: ≤30%)`,priority:10});
-  if(barPct>22)alerts.push({type:'err',title:'Bar Cost élevé',msg:`${barPct.toFixed(1)}% (objectif: ≤22%)`,priority:9});
-  if(staffPct>30)alerts.push({type:'warn',title:'Staff Cost élevé',msg:`${staffPct.toFixed(1)}% (objectif: ≤30%)`,priority:8});
-  if(primePct>65)alerts.push({type:'err',title:'Prime Cost élevée',msg:`${primePct.toFixed(1)}% (objectif: ≤65%)`,priority:7});
+  if(foodPct>thresholds.foodCostMax)alerts.push({type:'err',title:'Food Cost élevé',msg:`${foodPct.toFixed(1)}% (objectif: ≤${thresholds.foodCostMax}%)`,priority:10});
+  if(barPct>thresholds.barCostMax)alerts.push({type:'err',title:'Bar Cost élevé',msg:`${barPct.toFixed(1)}% (objectif: ≤${thresholds.barCostMax}%)`,priority:9});
+  if(staffPct>thresholds.staffCostMax)alerts.push({type:'warn',title:'Staff Cost élevé',msg:`${staffPct.toFixed(1)}% (objectif: ≤${thresholds.staffCostMax}%)`,priority:8});
+  if(primePct>thresholds.primeCostMax)alerts.push({type:'err',title:'Prime Cost élevée',msg:`${primePct.toFixed(1)}% (objectif: ≤${thresholds.primeCostMax}%)`,priority:7});
 
   const nonClasses=Object.keys(totals).filter(k=>k==='Non classé'&&totals[k]>0).length>0?
     invoices.filter(i=>SupplierMap.getCategory(String(i.supplier&&i.supplier.id||''))==='Non classé').length:0;
@@ -5793,11 +5918,76 @@ function Alertes(){
 
   return(<div className="fin">
     {loading&&<div style={{textAlign:'center',padding:20}}><div className="spinner" style={{width:20,height:20}}/><div style={{fontSize:12,color:'var(--gris-400)',marginTop:8}}>Chargement Pennylane...</div></div>}
+
+    {/* Score de Santé */}
+    <div className="card" style={{marginBottom:16}}>
+      <div className="card-h"><div><div className="card-t">Score de Santé Financière</div><div className="card-st">Indicateur global de performance opérationnelle</div></div></div>
+      <div className="card-b">
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <div style={{display:'flex',alignItems:'center',gap:20,flex:1}}>
+            {/* Gauge circulaire */}
+            <div style={{width:120,height:120,position:'relative',display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <svg style={{width:'100%',height:'100%',transform:'rotate(-90deg)'}} viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r="50" fill="none" stroke="var(--gris-200)" strokeWidth="8"/>
+                <circle cx="60" cy="60" r="50" fill="none" stroke={healthScore>=75?'var(--vert)':healthScore>=50?'var(--orange)':'var(--rouge)'} strokeWidth="8" strokeDasharray={`${healthScore*3.14/100*100} 314`} strokeLinecap="round"/>
+              </svg>
+              <div style={{position:'absolute',textAlign:'center'}}>
+                <div style={{fontSize:32,fontWeight:700,color:healthScore>=75?'var(--vert)':healthScore>=50?'var(--orange)':'var(--rouge)'}}>{healthScore}</div>
+                <div style={{fontSize:10,color:'var(--gris-500)'}}>/ 100</div>
+              </div>
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:12,marginBottom:12,lineHeight:1.6,color:'var(--gris-600)'}}>
+                <div style={{marginBottom:4}}>Nourriture: <span style={{fontWeight:600}}>{foodScore.toFixed(0)}/25</span> points</div>
+                <div style={{marginBottom:4}}>Boissons: <span style={{fontWeight:600}}>{barScore.toFixed(0)}/25</span> points</div>
+                <div style={{marginBottom:4}}>Staff: <span style={{fontWeight:600}}>{staffScore.toFixed(0)}/25</span> points</div>
+                <div>Prime Cost: <span style={{fontWeight:600}}>{trendScore.toFixed(0)}/25</span> points</div>
+              </div>
+            </div>
+          </div>
+          <div style={{textAlign:'center',paddingLeft:20}}>
+            <div style={{fontSize:48,fontWeight:700,color:healthScore>=75?'var(--vert)':healthScore>=50?'var(--orange)':'var(--rouge)',marginBottom:4}}>{healthScore}</div>
+            <div style={{fontSize:11,color:'var(--gris-500)',marginBottom:12}}>Santé financière</div>
+            <button onClick={function(){setShowThresholdConfig(!showThresholdConfig);setEditThresholds(thresholds);}} style={{padding:'6px 12px',fontSize:11,background:'var(--gris-100)',border:'1px solid var(--gris-300)',borderRadius:4,cursor:'pointer',fontWeight:600}}>Config. seuils</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Configuration des seuils */}
+    {showThresholdConfig&&<div className="card" style={{marginBottom:16,background:'var(--cream,#fdf6f0)',borderLeft:'4px solid var(--bordeaux)'}}>
+      <div className="card-h"><div><div className="card-t">Configuration des seuils d'alerte</div></div></div>
+      <div className="card-b">
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:14,marginBottom:16}}>
+          <div>
+            <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:4}}>Food Cost Max (%)</label>
+            <input type="number" value={editThresholds.foodCostMax} onChange={function(e){setEditThresholds({...editThresholds,foodCostMax:parseFloat(e.target.value)||30});}} style={{width:'100%',padding:'6px 8px',fontSize:12,border:'1px solid var(--gris-300)',borderRadius:4}}/>
+          </div>
+          <div>
+            <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:4}}>Bar Cost Max (%)</label>
+            <input type="number" value={editThresholds.barCostMax} onChange={function(e){setEditThresholds({...editThresholds,barCostMax:parseFloat(e.target.value)||22});}} style={{width:'100%',padding:'6px 8px',fontSize:12,border:'1px solid var(--gris-300)',borderRadius:4}}/>
+          </div>
+          <div>
+            <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:4}}>Staff Cost Max (%)</label>
+            <input type="number" value={editThresholds.staffCostMax} onChange={function(e){setEditThresholds({...editThresholds,staffCostMax:parseFloat(e.target.value)||30});}} style={{width:'100%',padding:'6px 8px',fontSize:12,border:'1px solid var(--gris-300)',borderRadius:4}}/>
+          </div>
+          <div>
+            <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:4}}>Prime Cost Max (%)</label>
+            <input type="number" value={editThresholds.primeCostMax} onChange={function(e){setEditThresholds({...editThresholds,primeCostMax:parseFloat(e.target.value)||65});}} style={{width:'100%',padding:'6px 8px',fontSize:12,border:'1px solid var(--gris-300)',borderRadius:4}}/>
+          </div>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={saveThresholds} style={{padding:'8px 16px',fontSize:12,background:'var(--vert)',color:'white',border:'none',borderRadius:4,cursor:'pointer',fontWeight:600}}>Enregistrer</button>
+          <button onClick={function(){setShowThresholdConfig(false);}} style={{padding:'8px 16px',fontSize:12,background:'var(--gris-200)',border:'none',borderRadius:4,cursor:'pointer',fontWeight:600}}>Annuler</button>
+        </div>
+      </div>
+    </div>}
+
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">Food Cost %</div><div className="kpi-val" style={{color:foodPct<=30?'var(--vert)':foodPct<=35?'var(--orange)':'var(--rouge)'}}>{foodPct>0?foodPct.toFixed(1)+'%':'—'}</div><div className={`kpi-chg ${foodPct<=30?'pos':'neg'}`}>Objectif ≤ 30%</div></div>
-      <div className="kpi"><div className="kpi-label">Bar Cost %</div><div className="kpi-val" style={{color:barPct<=22?'var(--vert)':barPct<=28?'var(--orange)':'var(--rouge)'}}>{barPct>0?barPct.toFixed(1)+'%':'—'}</div><div className={`kpi-chg ${barPct<=22?'pos':'neg'}`}>Objectif ≤ 22%</div></div>
-      <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:staffPct<=30?'var(--vert)':'var(--rouge)'}}>{staffPct>0?staffPct.toFixed(1)+'%':'—'}</div><div className={`kpi-chg ${staffPct<=30?'pos':'neg'}`}>Objectif ≤ 30%</div></div>
-      <div className="kpi"><div className="kpi-label">Prime Cost %</div><div className="kpi-val" style={{color:primePct<=65?'var(--vert)':'var(--rouge)'}}>{primePct>0?primePct.toFixed(1)+'%':'—'}</div><div className={`kpi-chg ${primePct<=65?'pos':'neg'}`}>Objectif ≤ 65%</div></div>
+      <div className="kpi"><div className="kpi-label">Food Cost %</div><div className="kpi-val" style={{color:foodPct<=thresholds.foodCostMax?'var(--vert)':foodPct<=thresholds.foodCostMax+5?'var(--orange)':'var(--rouge)'}}>{foodPct>0?foodPct.toFixed(1)+'%':'—'}</div><div className={`kpi-chg ${foodPct<=thresholds.foodCostMax?'pos':'neg'}`}>Objectif ≤ {thresholds.foodCostMax}%</div></div>
+      <div className="kpi"><div className="kpi-label">Bar Cost %</div><div className="kpi-val" style={{color:barPct<=thresholds.barCostMax?'var(--vert)':barPct<=thresholds.barCostMax+6?'var(--orange)':'var(--rouge)'}}>{barPct>0?barPct.toFixed(1)+'%':'—'}</div><div className={`kpi-chg ${barPct<=thresholds.barCostMax?'pos':'neg'}`}>Objectif ≤ {thresholds.barCostMax}%</div></div>
+      <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:staffPct<=thresholds.staffCostMax?'var(--vert)':'var(--rouge)'}}>{staffPct>0?staffPct.toFixed(1)+'%':'—'}</div><div className={`kpi-chg ${staffPct<=thresholds.staffCostMax?'pos':'neg'}`}>Objectif ≤ {thresholds.staffCostMax}%</div></div>
+      <div className="kpi"><div className="kpi-label">Prime Cost %</div><div className="kpi-val" style={{color:primePct<=thresholds.primeCostMax?'var(--vert)':'var(--rouge)'}}>{primePct>0?primePct.toFixed(1)+'%':'—'}</div><div className={`kpi-chg ${primePct<=thresholds.primeCostMax?'pos':'neg'}`}>Objectif ≤ {thresholds.primeCostMax}%</div></div>
     </div>
 
     <div className="card">
@@ -6209,6 +6399,374 @@ function Reputation(){
   );
 }
 
+// ===== COMPARATIF BP =====
+function ComparatifBP(){
+  const S=TRIVEC_SEASON;
+  const monthly=S.monthly||[];
+  const{invoices}=useInvoices();
+
+  // Helper: Get season invoices for cost calculations
+  const getSeasonInvoices=(startDate,endDate)=>invoices.filter(inv=>{
+    const d=new Date(inv.date);
+    return d>=new Date(startDate)&&d<=new Date(endDate);
+  });
+
+  // Get food/bev costs from supplier invoices
+  const getFoodCosts=(monthStr)=>{
+    const m=BP_DATA.monthly.find(x=>x.mois.includes(monthStr));
+    if(!m)return{food:0,bev:0};
+    // Use BP values
+    return{food:Math.abs(m.foodCharges),bev:Math.abs(m.bevCharges)};
+  };
+
+  // Get staff costs for period
+  const getStaffCosts=(monthStr)=>{
+    const m=BP_DATA.monthly.find(x=>x.mois.includes(monthStr));
+    return m?Math.abs(m.staffCosts):0;
+  };
+
+  // Month data with BP comparison
+  const monthData=monthly.map(month=>{
+    const bpMonth=BP_DATA.monthly.find(x=>x.mois.includes(month.mois.slice(0,7)));
+    const monthStr=month.mois.slice(0,7);
+
+    // Real data from Trivec
+    const realCA=month.ventesNet;
+    const realCAHT=month.tva.taux10.ht+month.tva.taux20.ht;
+
+    // Get real costs from invoices (estimated from monthly data)
+    const realFoodBevCosts=SupplierMap.getTotals(getSeasonInvoices(month.dateDebut,month.dateFin)).total||0;
+    const realStaffCosts=PayrollService.getMonthlyTotal?PayrollService.getMonthlyTotal(monthStr):0;
+
+    return{
+      mois:month.mois,
+      realCA,realCAHT,realFoodBevCosts,realStaffCosts,
+      bpCA:bpMonth?bpMonth.caTotal:0,
+      bpCOGS:bpMonth?Math.abs(bpMonth.cogsTotal):0,
+      bpStaff:bpMonth?Math.abs(bpMonth.staffCosts):0,
+      bpEBITDA:bpMonth?bpMonth.ebitda:0
+    };
+  });
+
+  // Calculate annual actuals
+  const annualRealCA=monthly.reduce((s,m)=>s+m.ventesNet,0);
+  const annualRealStaff=monthData.reduce((s,m)=>s+m.realStaffCosts,0);
+
+  return(<div className="fin">
+    <div className="card" style={{marginBottom:16}}>
+      <div className="card-h"><div><div className="card-t">BP vs Réalité</div><div className="card-st">Comparaison Business Plan vs Réalisé</div></div></div>
+      <div className="card-b">
+        <div className="tbl"><table style={{fontSize:13}}>
+          <thead><tr><th>Période</th><th style={{textAlign:'right'}}>CA BP</th><th style={{textAlign:'right'}}>CA Réel</th><th style={{textAlign:'right'}}>Écart %</th><th style={{textAlign:'right'}}>COGS BP</th><th style={{textAlign:'right'}}>COGS Réel</th><th style={{textAlign:'right'}}>Staff BP</th><th style={{textAlign:'right'}}>Staff Réel</th><th style={{textAlign:'right'}}>EBITDA BP</th><th style={{textAlign:'right'}}>EBITDA Réel</th></tr></thead>
+          <tbody>
+            {monthData.map((m,i)=>{
+              const caEcart=m.bpCA>0?Math.round((m.realCA-m.bpCA)/m.bpCA*1000)/10:0;
+              const caColor=caEcart>=0?'var(--vert)':'var(--rouge)';
+              return(<tr key={i}>
+                <td>{m.mois}</td>
+                <td style={{textAlign:'right'}}>{eur(m.bpCA)}</td>
+                <td style={{textAlign:'right'}}>{eur(m.realCA)}</td>
+                <td style={{textAlign:'right',color:caColor,fontWeight:'bold'}}>{caEcart>0?'+':''}{caEcart}%</td>
+                <td style={{textAlign:'right'}}>{eur(m.bpCOGS)}</td>
+                <td style={{textAlign:'right'}}>{eur(m.realFoodBevCosts)}</td>
+                <td style={{textAlign:'right'}}>{eur(m.bpStaff)}</td>
+                <td style={{textAlign:'right'}}>{eur(m.realStaffCosts)}</td>
+                <td style={{textAlign:'right'}}>{eur(m.bpEBITDA)}</td>
+                <td style={{textAlign:'right'}}>{eur(m.realCA-m.realFoodBevCosts-m.realStaffCosts)}</td>
+              </tr>);
+            })}
+            <tr style={{borderTop:'2px solid var(--gris-4)',fontWeight:'bold',backgroundColor:'var(--gris-1)'}}>
+              <td>TOTAL SAISON</td>
+              <td style={{textAlign:'right'}}>{eur(BP_DATA.annual.caTotal)}</td>
+              <td style={{textAlign:'right'}}>{eur(annualRealCA)}</td>
+              <td style={{textAlign:'right',color:BP_DATA.annual.caTotal>0?'var(--vert)':'var(--rouge)'}}>
+                {Math.round((annualRealCA-BP_DATA.annual.caTotal)/BP_DATA.annual.caTotal*1000)/10}%
+              </td>
+              <td style={{textAlign:'right'}}>{eur(Math.abs(BP_DATA.annual.cogsTotal))}</td>
+              <td style={{textAlign:'right'}}>{eur(monthData.reduce((s,m)=>s+m.realFoodBevCosts,0))}</td>
+              <td style={{textAlign:'right'}}>{eur(Math.abs(BP_DATA.annual.staffCosts))}</td>
+              <td style={{textAlign:'right'}}>{eur(annualRealStaff)}</td>
+              <td style={{textAlign:'right'}}>{eur(BP_DATA.annual.ebitda)}</td>
+              <td style={{textAlign:'right'}}>{eur(annualRealCA-monthData.reduce((s,m)=>s+m.realFoodBevCosts,0)-annualRealStaff)}</td>
+            </tr>
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+  </div>);
+}
+
+// ===== FORECAST =====
+function Forecast(){
+  const S=TRIVEC_SEASON;
+  const[ticketMoyen,setTicketMoyen]=useState(180);
+  const[couverts,setCouverts]=useState(280);
+  const[foodCostPct,setFoodCostPct]=useState(20);
+  const[barCostPct,setBarCostPct]=useState(18);
+
+  const monthly=S.monthly||[];
+  const totalDaysElapsed=monthly.reduce((s,m)=>s+(m.days||30),0);
+  const totalCARealized=monthly.reduce((s,m)=>s+m.ventesNet,0);
+  const avgCAPerDay=totalDaysElapsed>0?totalCARealized/totalDaysElapsed:0;
+
+  // Current trajectory: assuming 3 months, 90 days total
+  const totalDaysInSeason=90;
+  const daysRemaining=Math.max(0,totalDaysInSeason-totalDaysElapsed);
+  const projectedCA=totalCARealized+avgCAPerDay*daysRemaining;
+
+  // Objective: based on sliders
+  const objectiveCA=ticketMoyen*couverts*(totalDaysInSeason/30)*1.3; // 1.3 = bar multiplier
+
+  return(<div className="fin">
+    <div className="kpi-g" style={{marginBottom:24}}>
+      <div className="card" style={{flex:1}}>
+        <div className="card-h"><div><div className="card-t">Trajectoire actuelle</div></div></div>
+        <div className="card-b">
+          <div className="kpi">
+            <div className="kpi-label">Projection saison</div>
+            <div className="kpi-val">{eur(projectedCA)}</div>
+            <div className="kpi-chg">vs BP {eur(BP_DATA.annual.caTotal)}</div>
+          </div>
+        </div>
+      </div>
+      <div className="card" style={{flex:1}}>
+        <div className="card-h"><div><div className="card-t">Objectif</div></div></div>
+        <div className="card-b">
+          <div className="kpi">
+            <div className="kpi-label">CA objectif</div>
+            <div className="kpi-val">{eur(objectiveCA)}</div>
+            <div className="kpi-chg" style={{color:objectiveCA>=projectedCA?'var(--rouge)':'var(--vert)'}}>
+              {objectiveCA>=projectedCA?'+':'−'}{eur(Math.abs(objectiveCA-projectedCA))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div className="card">
+      <div className="card-h"><div><div className="card-t">Simulation</div><div className="card-st">Ajuste les paramètres pour voir l'impact</div></div></div>
+      <div className="card-b">
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
+          <div>
+            <label style={{display:'block',marginBottom:8,fontSize:12,fontWeight:'bold',color:'var(--gris-6)'}}>Ticket moyen: {eur(ticketMoyen)}</label>
+            <input type="range" min="100" max="300" value={ticketMoyen} onChange={e=>setTicketMoyen(Number(e.target.value))} style={{width:'100%'}}/>
+          </div>
+          <div>
+            <label style={{display:'block',marginBottom:8,fontSize:12,fontWeight:'bold',color:'var(--gris-6)'}}>Couverts/jour: {couverts}</label>
+            <input type="range" min="100" max="500" value={couverts} onChange={e=>setCouverts(Number(e.target.value))} style={{width:'100%'}}/>
+          </div>
+          <div>
+            <label style={{display:'block',marginBottom:8,fontSize:12,fontWeight:'bold',color:'var(--gris-6)'}}>Food Cost %: {fmt(foodCostPct)}%</label>
+            <input type="range" min="15" max="35" value={foodCostPct} onChange={e=>setFoodCostPct(Number(e.target.value))} style={{width:'100%'}}/>
+          </div>
+          <div>
+            <label style={{display:'block',marginBottom:8,fontSize:12,fontWeight:'bold',color:'var(--gris-6)'}}>Bar Cost %: {fmt(barCostPct)}%</label>
+            <input type="range" min="10" max="30" value={barCostPct} onChange={e=>setBarCostPct(Number(e.target.value))} style={{width:'100%'}}/>
+          </div>
+        </div>
+        <div style={{padding:12,backgroundColor:'var(--gris-1)',borderRadius:6}}>
+          <div style={{marginBottom:12}}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+              <span style={{fontWeight:'bold'}}>CA Saison (objectif)</span>
+              <span style={{fontWeight:'bold',color:'var(--bordeaux)'}}>{eur(objectiveCA)}</span>
+            </div>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+              <span>Food Cost ({fmt(foodCostPct)}%)</span>
+              <span style={{color:'var(--rouge)'}}>{eur(objectiveCA*foodCostPct/100)}</span>
+            </div>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+              <span>Bar Cost ({fmt(barCostPct)}%)</span>
+              <span style={{color:'var(--rouge)'}}>{eur(objectiveCA*barCostPct/100)}</span>
+            </div>
+            <div style={{display:'flex',justifyContent:'space-between',paddingTop:8,borderTop:'1px solid var(--gris-3)',marginTop:8}}>
+              <span style={{fontWeight:'bold'}}>Prime Cost</span>
+              <span style={{fontWeight:'bold',color:'var(--bordeaux)'}}>{eur(objectiveCA*(foodCostPct+barCostPct)/100)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>);
+}
+
+// ===== INVENTAIRE & ÉCARTS =====
+function InventaireEcarts(){
+  const[inventaire,setInventaire]=useState(JSON.parse(localStorage.getItem('ima_inventaire_v1')||'[]'));
+  const[newMonth,setNewMonth]=useState('');
+  const[items,setItems]=useState({});
+
+  const recipes=RecipeCosts.recipes||{};
+  const monthlyData=TRIVEC_SEASON.monthly||[];
+
+  const handleAddInventaire=()=>{
+    if(!newMonth)return;
+    const inv={date:newMonth,items:Object.assign({},items),timestamp:new Date().toISOString()};
+    const updated=[...inventaire,inv];
+    setInventaire(updated);
+    localStorage.setItem('ima_inventaire_v1',JSON.stringify(updated));
+    setNewMonth('');
+    setItems({});
+  };
+
+  const calcEcart=(ingredientName,realQty)=>{
+    const recipe=recipes[ingredientName];
+    if(!recipe)return null;
+    const monthCA=monthlyData.length>0?monthlyData[monthlyData.length-1].ventesNet:0;
+    const theorique=monthCA*recipe.costPct/100;
+    const real=realQty||0;
+    const ecart=real-theorique;
+    const ecartPct=theorique>0?ecart/theorique*100:0;
+    return{theorique,real,ecart,ecartPct};
+  };
+
+  const totalFood=monthlyData.length>0?monthlyData.reduce((s,m)=>s+m.tva.taux10.ht,0):0;
+
+  return(<div className="fin">
+    <div className="card" style={{marginBottom:16}}>
+      <div className="card-h"><div><div className="card-t">Enregistrement Inventaire</div><div className="card-st">Saisie du stock physique mensuel</div></div></div>
+      <div className="card-b">
+        <div style={{marginBottom:12}}>
+          <label style={{display:'block',marginBottom:6,fontSize:12,fontWeight:'bold'}}>Mois</label>
+          <input type="month" value={newMonth} onChange={e=>setNewMonth(e.target.value)} style={{padding:8,border:'1px solid var(--gris-3)',borderRadius:4,width:'100%',maxWidth:200}}/>
+        </div>
+        <div style={{marginBottom:12}}>
+          <label style={{display:'block',marginBottom:6,fontSize:12,fontWeight:'bold'}}>Articles principaux</label>
+          {Object.keys(recipes).slice(0,5).map(ing=>(
+            <div key={ing} style={{marginBottom:8,padding:8,backgroundColor:'var(--gris-1)',borderRadius:4}}>
+              <label style={{fontSize:12,display:'block',marginBottom:4}}>{ing} (€)</label>
+              <input type="number" value={items[ing]||''} onChange={e=>setItems({...items,[ing]:Number(e.target.value)||0})}
+                style={{padding:6,border:'1px solid var(--gris-3)',borderRadius:3,width:'100%'}}/>
+            </div>
+          ))}
+        </div>
+        <button onClick={handleAddInventaire} className="btn btn-primary">Enregistrer Inventaire</button>
+      </div>
+    </div>
+
+    {inventaire.length>0&&<div className="card">
+      <div className="card-h"><div><div className="card-t">Écarts détectés</div><div className="card-st">Analyse des écarts théorique vs réel</div></div></div>
+      <div className="card-b">
+        <div className="tbl"><table style={{fontSize:12}}>
+          <thead><tr><th>Article</th><th style={{textAlign:'right'}}>Théorique</th><th style={{textAlign:'right'}}>Réel</th><th style={{textAlign:'right'}}>Écart</th><th style={{textAlign:'right'}}>%</th><th>Statut</th></tr></thead>
+          <tbody>
+            {inventaire.slice(-1)[0]&&Object.entries(inventaire.slice(-1)[0].items).map(([ing,real])=>{
+              const ec=calcEcart(ing,real);
+              if(!ec)return null;
+              const color=Math.abs(ec.ecartPct)>10?'var(--rouge)':'var(--gris-5)';
+              return(<tr key={ing}>
+                <td>{ing}</td>
+                <td style={{textAlign:'right'}}>{eur(ec.theorique)}</td>
+                <td style={{textAlign:'right'}}>{eur(ec.real)}</td>
+                <td style={{textAlign:'right',color}}>{eur(ec.ecart)}</td>
+                <td style={{textAlign:'right',color,fontWeight:'bold'}}>{Math.round(ec.ecartPct*10)/10}%</td>
+                <td>{Math.abs(ec.ecartPct)>10?'⚠️ Écart':'✓'}</td>
+              </tr>);
+            })}
+          </tbody>
+        </table></div>
+      </div>
+    </div>}
+  </div>);
+}
+
+// ===== ÉVÉNEMENTS & PRIVATISATIONS =====
+function Evenements(){
+  const[events,setEvents]=useState(JSON.parse(localStorage.getItem('ima_events_v1')||'[]'));
+  const[form,setForm]=useState({date:'',name:'',type:'privatisation',ca:0,guests:0,notes:''});
+
+  const handleAddEvent=()=>{
+    if(!form.date||!form.name)return;
+    const ev={...form,timestamp:new Date().toISOString()};
+    const updated=[...events,ev].sort((a,b)=>new Date(b.date)-new Date(a.date));
+    setEvents(updated);
+    localStorage.setItem('ima_events_v1',JSON.stringify(updated));
+    setForm({date:'',name:'',type:'privatisation',ca:0,guests:0,notes:''});
+  };
+
+  const totalCA=events.reduce((s,e)=>s+e.ca,0);
+  const avgCA=events.length>0?totalCA/events.length:0;
+
+  return(<div className="fin">
+    <div className="kpi-g" style={{marginBottom:16}}>
+      <div className="card" style={{flex:1}}>
+        <div className="card-b"><div className="kpi"><div className="kpi-label">Total événements</div><div className="kpi-val">{events.length}</div></div></div>
+      </div>
+      <div className="card" style={{flex:1}}>
+        <div className="card-b"><div className="kpi"><div className="kpi-label">CA total</div><div className="kpi-val">{eur(totalCA)}</div></div></div>
+      </div>
+      <div className="card" style={{flex:1}}>
+        <div className="card-b"><div className="kpi"><div className="kpi-label">CA moyen</div><div className="kpi-val">{eur(avgCA)}</div></div></div>
+      </div>
+    </div>
+
+    <div className="card" style={{marginBottom:16}}>
+      <div className="card-h"><div><div className="card-t">Ajouter un événement</div></div></div>
+      <div className="card-b">
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+          <div>
+            <label style={{display:'block',fontSize:12,fontWeight:'bold',marginBottom:4}}>Date</label>
+            <input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}
+              style={{padding:8,border:'1px solid var(--gris-3)',borderRadius:4,width:'100%'}}/>
+          </div>
+          <div>
+            <label style={{display:'block',fontSize:12,fontWeight:'bold',marginBottom:4}}>Nom</label>
+            <input type="text" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Privatisation..."
+              style={{padding:8,border:'1px solid var(--gris-3)',borderRadius:4,width:'100%'}}/>
+          </div>
+          <div>
+            <label style={{display:'block',fontSize:12,fontWeight:'bold',marginBottom:4}}>Type</label>
+            <select value={form.type} onChange={e=>setForm({...form,type:e.target.value})}
+              style={{padding:8,border:'1px solid var(--gris-3)',borderRadius:4,width:'100%'}}>
+              <option value="privatisation">Privatisation</option>
+              <option value="dj">DJ Event</option>
+              <option value="brunch">Brunch</option>
+              <option value="autre">Autre</option>
+            </select>
+          </div>
+          <div>
+            <label style={{display:'block',fontSize:12,fontWeight:'bold',marginBottom:4}}>CA (€)</label>
+            <input type="number" value={form.ca} onChange={e=>setForm({...form,ca:Number(e.target.value)||0})}
+              style={{padding:8,border:'1px solid var(--gris-3)',borderRadius:4,width:'100%'}}/>
+          </div>
+          <div>
+            <label style={{display:'block',fontSize:12,fontWeight:'bold',marginBottom:4}}>Nb Guests</label>
+            <input type="number" value={form.guests} onChange={e=>setForm({...form,guests:Number(e.target.value)||0})}
+              style={{padding:8,border:'1px solid var(--gris-3)',borderRadius:4,width:'100%'}}/>
+          </div>
+          <div>
+            <label style={{display:'block',fontSize:12,fontWeight:'bold',marginBottom:4}}>Notes</label>
+            <input type="text" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Notes..."
+              style={{padding:8,border:'1px solid var(--gris-3)',borderRadius:4,width:'100%'}}/>
+          </div>
+        </div>
+        <button onClick={handleAddEvent} className="btn btn-primary">Ajouter événement</button>
+      </div>
+    </div>
+
+    <div className="card">
+      <div className="card-h"><div><div className="card-t">Historique</div></div></div>
+      <div className="card-b">
+        {events.length===0?<div style={{textAlign:'center',padding:20,color:'var(--gris-5)'}}>Aucun événement enregistré</div>:
+        <div className="tbl"><table style={{fontSize:12}}>
+          <thead><tr><th>Date</th><th>Nom</th><th>Type</th><th style={{textAlign:'right'}}>CA</th><th style={{textAlign:'right'}}>Guests</th><th>Notes</th></tr></thead>
+          <tbody>
+            {events.map((e,i)=>(
+              <tr key={i}>
+                <td>{new Date(e.date).toLocaleDateString('fr-FR')}</td>
+                <td>{e.name}</td>
+                <td><span className="badge">{e.type}</span></td>
+                <td style={{textAlign:'right',fontWeight:'bold'}}>{eur(e.ca)}</td>
+                <td style={{textAlign:'right'}}>{e.guests}</td>
+                <td style={{fontSize:11,color:'var(--gris-5)'}}>{e.notes}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table></div>}
+      </div>
+    </div>
+  </div>);
+}
+
 // ===== APP =====
 // ===== GLOBAL PERIOD CONTEXT =====
 const PeriodContext=React.createContext();
@@ -6387,13 +6945,17 @@ function AppInner(){
       {id:'menueng',l:'Menu Engineering',ic:<I.Menu/>},
       {id:'alertes',l:'Alertes',ic:<I.Alert/>},
       {id:'comparatif',l:'Comparatif',ic:<I.Compare/>},
+      {id:'comparatif-bp',l:'BP vs Réel',ic:<I.Compare/>},
+      {id:'forecast',l:'Prévisionnel',ic:<I.Forecast/>},
     ]},
     {sec:'Opérations',items:[
       {id:'stocks',l:'Stocks',ic:<I.Stock/>},
+      {id:'inventaire',l:'Inventaire & Écarts',ic:<I.Stock/>},
       {id:'crm',l:'CRM & Réservations',ic:<I.CRM/>},
       {id:'pos',l:'Caisses (Trivec)',ic:<I.POS/>},
       {id:'caisse',l:'Clôture Caisse',ic:<I.Cash/>},
       {id:'tips',l:'Tips & Pourboires',ic:<I.Tips/>},
+      {id:'evenements',l:'Événements',ic:<I.Event/>},
       {id:'reputation',l:'Réputation',ic:<I.Reput/>},
     ]},
     {sec:'Système',items:[
@@ -6401,7 +6963,7 @@ function AppInner(){
     ]},
   ];
 
-  const titles={dashboard:'Dashboard',finance:'Finance & P&L',costs:'Food & Bar Cost',staff:'Staff & RH',tresorerie:'Trésorerie',productivite:'Productivité Staff',menueng:'Menu Engineering',alertes:'Alertes',comparatif:'Comparatif',stocks:'Stocks & Inventaire',crm:'CRM & Réservations',reputation:'Réputation',pos:'Caisses (Trivec)',caisse:'Clôture de Caisse',tips:'Tips & Pourboires',settings:'Administration'};
+  const titles={dashboard:'Dashboard',finance:'Finance & P&L',costs:'Food & Bar Cost',staff:'Staff & RH',tresorerie:'Trésorerie',productivite:'Productivité Staff',menueng:'Menu Engineering',alertes:'Alertes',comparatif:'Comparatif','comparatif-bp':'BP vs Réel',forecast:'Prévisionnel',stocks:'Stocks & Inventaire',inventaire:'Inventaire & Écarts',crm:'CRM & Réservations',reputation:'Réputation',pos:'Caisses (Trivec)',caisse:'Clôture de Caisse',tips:'Tips & Pourboires',evenements:'Événements & Privatisations',settings:'Administration'};
 
   if(!currentUser) return <Login onLogin={handleLogin}/>;
 
@@ -6409,8 +6971,9 @@ function AppInner(){
     case 'dashboard':return <Dashboard/>;case 'finance':return <Finance/>;case 'costs':return <Costs/>;
     case 'staff':return <StaffPage/>;case 'tresorerie':return <Tresorerie/>;case 'productivite':return <Productivite/>;
     case 'menueng':return <MenuEngineering/>;case 'alertes':return <Alertes/>;case 'comparatif':return <Comparatif/>;
-    case 'stocks':return <Stocks/>;case 'crm':return <CRMPage/>;case 'reputation':return <Reputation/>;
-    case 'pos':return <POSPage/>;case 'caisse':return <CaissePage/>;case 'tips':return <TipsPage/>;case 'settings':return <Settings/>;default:return <Dashboard/>;
+    case 'comparatif-bp':return <ComparatifBP/>;case 'forecast':return <Forecast/>;
+    case 'stocks':return <Stocks/>;case 'inventaire':return <InventaireEcarts/>;case 'crm':return <CRMPage/>;case 'reputation':return <Reputation/>;
+    case 'pos':return <POSPage/>;case 'caisse':return <CaissePage/>;case 'tips':return <TipsPage/>;case 'evenements':return <Evenements/>;case 'settings':return <Settings/>;default:return <Dashboard/>;
   }};
 
   return(
