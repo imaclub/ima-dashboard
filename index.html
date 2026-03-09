@@ -430,13 +430,20 @@ const SupplierMap={
   getTotals(invoices){
     const totals={};
     ALL_CATEGORIES.forEach(c=>{totals[c]=0;});
+    if(!invoices)return totals;
     invoices.forEach(inv=>{
       const sid=String(inv.supplier?.id||'');
       const cat=this.getCategory(sid);
-      // Utiliser HT (currency_amount_before_tax) pour cohérence avec CA HT Trivec
-      const ht=parseFloat(inv.currency_amount_before_tax||0);
+      // Priorité au HT Pennylane, sinon conversion TTC→HT selon catégorie
+      let ht=parseFloat(inv.currency_amount_before_tax||0);
       const ttc=parseFloat(inv.amount||0);
-      totals[cat]=(totals[cat]||0)+(ht||ttc);
+      if(!ht&&ttc){
+        // Pas de HT dispo → convertir TTC en HT avec le bon taux TVA
+        if(cat==='Food')ht=Math.round(ttc/1.10*100)/100;
+        else if(cat==='Bar')ht=Math.round(ttc/1.20*100)/100;
+        else ht=Math.round(ttc/1.20*100)/100; // défaut 20%
+      }
+      totals[cat]=(totals[cat]||0)+ht;
     });
     return totals;
   },
@@ -1774,16 +1781,8 @@ function Dashboard(){
       .catch(e=>{console.error('Google Places error:',e);setGoogleLoading(false);});
   },[]);
 
-  // Filter invoices to season period (Dec 2025 - Feb 2026)
-  const seasonInvoices=useMemo(()=>{
-    if(!hasSeason)return[];
-    const from='2025-12-01';
-    const to='2026-02-28';
-    return allInvoices.filter(inv=>{
-      const invDate=inv.date||'';
-      return invDate>=from&&invDate<=to;
-    });
-  },[allInvoices,hasSeason]);
+  // Utiliser TOUTES les factures (Nov 1 → aujourd'hui) pour les KPIs coûts
+  const seasonInvoices=allInvoices;
 
   // Calculate KPIs
   const s=hasSeason?TRIVEC_SEASON:null;
@@ -1793,7 +1792,7 @@ function Dashboard(){
   const caSaison=s?s.ventesNet:0;
   const caEcart=bp.annual.caTotal>0?Math.round((caSaison-bp.annual.caTotal)/bp.annual.caTotal*1000)/10:0;
 
-  const supplierTotals=useMemo(()=>SupplierMap.getTotals(seasonInvoices),[seasonInvoices]);
+  const supplierTotals=useMemo(()=>SupplierMap.getTotals(allInvoices),[allInvoices]);
   const foodCostHT=supplierTotals['Food']||0;
   const caNourritureHT=s?s.categories.find(c=>c.nom==='Nourriture').montant/1.10:0;
   const foodCostPct=caNourritureHT>0?Math.round(foodCostHT/caNourritureHT*1000)/10:0;
@@ -2002,11 +2001,8 @@ function Finance(){
     }
   },[]); */
 
-  // Filtrer les factures à la période saison (exclure pré-ouverture novembre)
-  const _SF=typeof TRIVEC_SEASON!=='undefined'?TRIVEC_SEASON:null;
-  const _sfFrom=_SF?_SF.periode.from.split('/').reverse().join('-'):'2025-12-01';
-  const seasonInvFin=useMemo(()=>allInvoices.filter(function(inv){return inv.date&&inv.date>=_sfFrom;}),[allInvoices,_sfFrom]);
-  const totals=useMemo(()=>SupplierMap.getTotals(seasonInvFin),[seasonInvFin]);
+  // Utiliser TOUTES les factures (Nov 1 → aujourd'hui) pour le P&L
+  const totals=useMemo(()=>SupplierMap.getTotals(allInvoices),[allInvoices]);
   const groupTotals=useMemo(()=>SupplierMap.getGroupTotals(totals),[totals]);
   const totalCosts=Object.values(totals).reduce((s,v)=>s+v,0);
 
@@ -2321,22 +2317,20 @@ function Costs(){
     }
   },[allInvoices]);
 
-  const categorized=useMemo(()=>SupplierMap.categorize(allInvoices),[allInvoices,mapVersion]);
-  const totals=useMemo(()=>SupplierMap.getTotals(allInvoices),[allInvoices,mapVersion]);
-  const groupTotals=useMemo(()=>SupplierMap.getGroupTotals(totals),[totals]);
-  const totalAll=Object.values(totals).reduce((s,v)=>s+v,0);
   const pCtx=usePeriod();
   const tp=pCtx.trivecPeriod;
   const isSeason=tp._fromSeason||false;
   const realStaffMS=isSeason?pCtx.msActive:pCtx.msProrata;
-  // Pour les ratios food/bar cost, ne prendre que les factures de la période Trivec
-  // (exclure les achats de stock pré-ouverture de novembre)
   const _S=typeof TRIVEC_SEASON!=='undefined'?TRIVEC_SEASON:null;
-  const seasonDateFrom=_S?_S.periode.from.split('/').reverse().join('-'):'2025-12-01';
-  const seasonInvoices=useMemo(()=>allInvoices.filter(function(inv){return inv.date&&inv.date>=seasonDateFrom;}),[allInvoices,seasonDateFrom]);
-  const seasonTotals=useMemo(()=>SupplierMap.getTotals(seasonInvoices),[seasonInvoices,mapVersion]);
-  const foodTotal=seasonTotals['Food']||0;
-  const barTotal=seasonTotals['Bar']||0;
+  // Utiliser TOUTES les factures (Nov 1 → aujourd'hui, déjà filtré dans InvoiceProvider)
+  // Alias pour compatibilité avec le reste du code
+  const seasonInvoices=allInvoices;
+  const categorized=useMemo(()=>SupplierMap.categorize(allInvoices),[allInvoices,mapVersion]);
+  const totals=useMemo(()=>SupplierMap.getTotals(allInvoices),[allInvoices,mapVersion]);
+  const groupTotals=useMemo(()=>SupplierMap.getGroupTotals(totals),[totals]);
+  const totalAll=Object.values(totals).reduce((s,v)=>s+v,0);
+  const foodTotal=totals['Food']||0;
+  const barTotal=totals['Bar']||0;
   const primeCost=(foodTotal+barTotal+realStaffMS);
   // CA HT par catégorie Trivec (les montants Trivec sont TTC, on convertit en HT)
   const caNourritureTTC=isSeason&&_S?(_S.categories.find(function(c){return c.nom==='Nourriture';})||{}).montant||0:(tp.caResto||0);
@@ -2354,7 +2348,7 @@ function Costs(){
 
   const supplierGroups=useMemo(()=>{
     const groups={};
-    allInvoices.forEach(inv=>{
+    seasonInvoices.forEach(inv=>{
       const sid=String(inv.supplier?.id||'');
       if(!sid)return;
       if(!groups[sid])groups[sid]={id:sid,name:supplierNames[sid]||'Inconnu',total:0,totalHT:0,count:0,cat:SupplierMap.getCategory(sid)};
@@ -2363,7 +2357,7 @@ function Costs(){
       groups[sid].count++;
     });
     return Object.values(groups).sort((a,b)=>Math.abs(b.total)-Math.abs(a.total));
-  },[allInvoices,supplierNames,mapVersion]);
+  },[seasonInvoices,supplierNames,mapVersion]);
 
   const handleCategoryChange=(supplierId,newCat)=>{
     SupplierMap.setCategory(supplierId,newCat);
@@ -2432,9 +2426,9 @@ function Costs(){
 
     {/* Détail achats */}
     <div className="kpi-g" style={{marginBottom:0}}>
-      <div className="kpi"><div className="kpi-label">Achats Food (saison)</div><div className="kpi-val" style={{color:'#059669'}}>{eur(foodTotal)}</div><div className="kpi-chg pos">{seasonInvoices.filter(function(inv){return SupplierMap.getCategory(String(inv.supplier&&inv.supplier.id||''))==='Food';}).length} factures déc-fév</div></div>
-      <div className="kpi"><div className="kpi-label">Achats Bar (saison)</div><div className="kpi-val" style={{color:'#581527'}}>{eur(barTotal)}</div><div className="kpi-chg pos">{seasonInvoices.filter(function(inv){return SupplierMap.getCategory(String(inv.supplier&&inv.supplier.id||''))==='Bar';}).length} factures déc-fév</div></div>
-      <div className="kpi"><div className="kpi-label">Total charges</div><div className="kpi-val">{eur(totalAll)}</div><div className="kpi-chg neu">{allInvoices.length} factures</div></div>
+      <div className="kpi"><div className="kpi-label">Achats Food</div><div className="kpi-val" style={{color:'#059669'}}>{eur(foodTotal)}</div><div className="kpi-chg pos">{allInvoices.filter(function(inv){return SupplierMap.getCategory(String(inv.supplier&&inv.supplier.id||''))==='Food';}).length} factures</div></div>
+      <div className="kpi"><div className="kpi-label">Achats Bar</div><div className="kpi-val" style={{color:'#581527'}}>{eur(barTotal)}</div><div className="kpi-chg pos">{allInvoices.filter(function(inv){return SupplierMap.getCategory(String(inv.supplier&&inv.supplier.id||''))==='Bar';}).length} factures</div></div>
+      <div className="kpi"><div className="kpi-label">Total charges</div><div className="kpi-val">{eur(totalAll)}</div><div className="kpi-chg neu">{allInvoices.length} factures (nov→auj.)</div></div>
       <div className="kpi"><div className="kpi-label">Non classé</div><div className="kpi-val" style={{color:(totals['Non classé']||0)>0?'var(--rouge)':'var(--vert)'}}>{eur(totals['Non classé']||0)}</div>
         <div className="kpi-chg neg">{supplierGroups.filter(s=>s.cat==='Non classé').length} fournisseurs</div></div>
     </div>
@@ -2699,7 +2693,7 @@ function Costs(){
     {/* ===== TAB: ALL INVOICES ===== */}
     {tab==='fournisseurs'&&<div>
       <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
-        <button className={`btn btn-sm ${filterCat==='Tous'?'btn-primary':'btn-secondary'}`} onClick={()=>setFilterCat('Tous')}>Tous ({allInvoices.length})</button>
+        <button className={`btn btn-sm ${filterCat==='Tous'?'btn-primary':'btn-secondary'}`} onClick={()=>setFilterCat('Tous')}>Tous ({seasonInvoices.length})</button>
         {ALL_CATEGORIES.filter(c=>(categorized[c]||[]).length>0).map(c=>(
           <button key={c} className={`btn btn-sm ${filterCat===c?'btn-primary':'btn-secondary'}`} onClick={()=>setFilterCat(c)}
             style={{borderLeft:`3px solid ${CAT_COLORS[c]||'var(--gris-400)'}`}}>{c} ({(categorized[c]||[]).length})</button>
@@ -2709,7 +2703,7 @@ function Costs(){
         <div className="card-h"><div><div className="card-t">{filterCat==='Tous'?'Toutes les factures':filterCat}</div><div className="card-st">Données Pennylane</div></div><span className="badge b-ima">Live</span></div>
         <div className="card-b"><div className="tbl"><table>
           <thead><tr><th>Fournisseur</th><th>Catégorie</th><th>N°</th><th>Date</th><th style={{textAlign:'right'}}>HT</th><th style={{textAlign:'right'}}>TTC</th><th>Statut</th></tr></thead>
-          <tbody>{(filterCat==='Tous'?allInvoices:(categorized[filterCat]||[])).sort((a,b)=>new Date(b.date)-new Date(a.date)).map((inv,i)=>{
+          <tbody>{(filterCat==='Tous'?seasonInvoices:(categorized[filterCat]||[])).sort((a,b)=>new Date(b.date)-new Date(a.date)).map((inv,i)=>{
             const sid=String(inv.supplier?.id||'');
             const cat=SupplierMap.getCategory(sid);
             return(<tr key={inv.id||i}>
@@ -2829,7 +2823,7 @@ function Costs(){
             <tbody>{suppliersToShow.sort((a,b)=>a.cat==='Non classé'?-1:b.cat==='Non classé'?1:Math.abs(b.total)-Math.abs(a.total)).map(s=>{
               const quickCats=['Food','Bar','Hygiène & Entretien','Matériel & Équipement','Énergie & Fluides','Travaux & Maintenance','Communication & Marketing','IT & Logiciels','Administratif & Juridique','Loyer & Charges','Blanchisserie','Transport & Véhicules','Assurances','Divers','Non classé'];
               const isOpen=detailSupplier===s.id;
-              const invs=isOpen?allInvoices.filter(inv=>String(inv.supplier?.id||'')===s.id).sort((a,b)=>new Date(b.date)-new Date(a.date)):[];
+              const invs=isOpen?seasonInvoices.filter(inv=>String(inv.supplier?.id||'')===s.id).sort((a,b)=>new Date(b.date)-new Date(a.date)):[];
               const rows=[];
               rows.push(<tr key={s.id} style={{background:s.cat==='Non classé'?'rgba(220,38,38,.04)':'transparent',cursor:'pointer'}} onClick={()=>setDetailSupplier(isOpen?null:s.id)}>
                 <td style={{fontWeight:500}}>{s.name} <span style={{fontSize:9,color:'var(--gris-400)'}}>{isOpen?'▼':'▶'}</span></td>
