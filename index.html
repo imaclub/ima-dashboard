@@ -1436,14 +1436,18 @@ const PennylaneService={
     });
 
     // Passe 2: Supprimer les entrées SANS numéro de facture (souvent des récaps ou écritures bancaires)
+    var pass2Count=0,pass2Total=0;
     allInvoices=allInvoices.filter(inv=>{
       const num=inv.invoice_number||'';
       if(!num||num==='?'||num.trim()===''){
+        const amt=Math.abs(parseFloat(inv.amount||0));
+        pass2Count++;pass2Total+=amt;
         console.log('[IMA] Clean2: sans n° facture supprimé, montant:',inv.amount+'€','date:',inv.date,'fournisseur:',inv.supplier?.name||'?');
         return false;
       }
       return true;
     });
+    if(pass2Count>0)console.log('%c[IMA] Passe 2: '+pass2Count+' entrées sans n° facture supprimées, total: '+Math.round(pass2Total)+'€','color:orange;font-weight:bold');
 
     // Passe 3: Supprimer les récapitulatifs mensuels Pennylane
     // Pattern: certains fournisseurs (Tresallet, David, etc.) ont des entrées avec un n° facture
@@ -1539,22 +1543,17 @@ const PennylaneService={
         }
       }
 
-      // Pattern 2: facture > 5× la médiane = récap/relevé mensuel
-      // Seulement pour fournisseurs avec assez de factures normales pour calculer une médiane fiable
-      if(amounts.length>=5&&median>50){
-        invs.forEach(inv=>{
-          const a=Math.abs(parseFloat(inv.amount||0));
-          if(a>median*5&&a>5000){
-            console.log('[IMA] Clean7b: outlier',inv.invoice_number,inv.amount+'€','(médiane:'+Math.round(median)+'€, ×'+Math.round(a/median)+') pour',inv.supplier?.name);
-            recapIds.add(inv.id);
-          }
-        });
-      }
+      // Pattern 2 (désactivé) : l'outlier >5× médiane supprimait des factures légitimes
+      // (Côté Frais 8538€, Tresallet 5018€/6644€, etc.) — on garde uniquement le Pattern 1 (récap-somme)
     }
     if(recapIds.size>0){
       console.log('[IMA] Passe 7: '+recapIds.size+' récaps/outliers supprimés');
       allInvoices=allInvoices.filter(inv=>!recapIds.has(inv.id));
     }
+
+    // === RÉSUMÉ POST-NETTOYAGE ===
+    const postCleanTotal=Math.round(allInvoices.reduce((s,inv)=>s+Math.abs(parseFloat(inv.amount||0)),0));
+    console.log('%c[IMA] POST-NETTOYAGE: '+allInvoices.length+' factures conservées, total: '+postCleanTotal+'€ TTC','color:green;font-weight:bold');
 
     // === DIAGNOSTIC : statuts et types uniques dans les données API ===
     const statusDist={};
