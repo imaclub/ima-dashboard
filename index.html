@@ -947,6 +947,33 @@ const PayrollDataDec=[
   {name:'Aurore VASSE',emploi:'CHEF DE RANG',dept:'salle',heures:169,brut:2649.26,chargesP:559.37,coutGlobal:3208.63}
 ];
 
+// February 2026 (real data from BP brouillons 02-2026)
+const PayrollDataFeb=[
+  {name:'Enzo ANGELO',emploi:'COMMIS DE CUISINE',dept:'cuisine',heures:117,brut:1880.21,chargesP:473.53,coutGlobal:2245.84,totalVerse:2353.74,allegements:366.97,status:'actif'},
+  {name:'Lison BERNARD',emploi:'BARMAID',dept:'bar',heures:169,brut:2431.85,chargesP:443.90,coutGlobal:2743.90,totalVerse:2875.75,allegements:634.46,status:'actif'},
+  {name:'Thibaud CHEDEME',emploi:'COMMIS',dept:'cuisine',heures:78,brut:1076.15,chargesP:180.85,coutGlobal:1184.70,totalVerse:1257.00,allegements:313.00,status:'actif'},
+  {name:'Samir DAKHMOUCH',emploi:'CHEF DE CUISINE',dept:'cuisine',heures:169,brut:5339.60,chargesP:2186.59,coutGlobal:7251.59,totalVerse:7526.19,allegements:152.01,status:'actif'},
+  {name:'Damsey DEBORD',emploi:'Employé polyvalent',dept:'salle',heures:12,brut:217.58,chargesP:67.66,coutGlobal:285.24,totalVerse:285.24,allegements:28.33,status:'sdtc'},
+  {name:'Jérémy DUBOURG',emploi:'EMPLOYE POLYVALENT',dept:'salle',heures:169,brut:2184.06,chargesP:221.66,coutGlobal:2273.87,totalVerse:2405.72,allegements:749.85,status:'actif'},
+  {name:'Mathieu FLAHAUT',emploi:'COMMIS',dept:'salle',heures:169,brut:2328.50,chargesP:353.95,coutGlobal:2533.95,totalVerse:2682.45,allegements:679.87,status:'actif'},
+  {name:'Niklas FRANTASSIEV',emploi:'EMPLOYE POLYVALENT',dept:'salle',heures:169,brut:2482.46,chargesP:698.91,coutGlobal:2981.22,totalVerse:3181.37,allegements:499.85,status:'actif'},
+  {name:'Florian GINER',emploi:'CHEF DE RANG',dept:'salle',heures:169,brut:2741.70,chargesP:692.71,coutGlobal:3252.71,totalVerse:3434.41,allegements:518.30,status:'actif'},
+  {name:'Yaya KA',emploi:'PLONGEUR',dept:'cuisine',heures:169,brut:2200.71,chargesP:237.18,coutGlobal:2289.39,totalVerse:2437.89,allegements:740.50,status:'actif'},
+  {name:'Abdelazize LAAROUSSI',emploi:'PLONGEUR',dept:'cuisine',heures:0,brut:0,chargesP:0,coutGlobal:0,totalVerse:0,allegements:0,status:'sdtc'},
+  {name:'Vincent LAPLANCHE',emploi:'SOUS CHEF JUNIOR',dept:'cuisine',heures:169,brut:3591.70,chargesP:1265.80,coutGlobal:4695.80,totalVerse:4857.50,allegements:313.60,status:'actif'},
+  {name:'Ahès LOUSSOUARN',emploi:'COMMIS DE SALLE',dept:'salle',heures:10,brut:145.06,chargesP:45.09,coutGlobal:190.15,totalVerse:190.15,allegements:0,status:'sdtc'},
+  {name:'Guillaume MARANDON MIRC',emploi:'DJ',dept:'bar',heures:169,brut:2741.70,chargesP:692.71,coutGlobal:3252.71,totalVerse:3434.41,allegements:518.30,status:'actif'},
+  {name:'Eléonore MARTENNE-DUPLAN',emploi:'BARMAID',dept:'bar',heures:169,brut:2431.85,chargesP:443.89,coutGlobal:2743.89,totalVerse:2875.74,allegements:634.46,status:'actif'},
+  {name:'Abdoukarim MARZOLF',emploi:'Directeur',dept:'direction',heures:169,brut:3296.40,chargesP:1081.30,coutGlobal:4156.30,totalVerse:4377.70,allegements:370.00,status:'actif'},
+  {name:'Daniel NEGRU',emploi:'SOUS CHEF JUNIOR',dept:'cuisine',heures:169,brut:3595.95,chargesP:1268.78,coutGlobal:4698.78,totalVerse:4864.73,allegements:313.00,status:'actif'},
+  {name:'Nolann PAPA',emploi:'Barman',dept:'bar',heures:169,brut:361.38,chargesP:119.09,coutGlobal:480.47,totalVerse:480.47,allegements:0,status:'actif'},
+  {name:'Elodie REYMOND',emploi:'CHEFFE HOTESSE',dept:'salle',heures:169,brut:3642.75,chargesP:1297.24,coutGlobal:4842.24,totalVerse:4939.99,allegements:303.00,status:'actif'},
+  {name:'Sascha RUBI',emploi:'HOTE VESTIAIRE',dept:'salle',heures:169,brut:2017.65,chargesP:208.13,coutGlobal:2102.48,totalVerse:2225.78,allegements:631.00,status:'actif'},
+  {name:'Abdoulaye SOW',emploi:'PLONGEUR',dept:'cuisine',heures:169,brut:2200.71,chargesP:237.33,coutGlobal:2289.54,totalVerse:2437.89,allegements:740.50,status:'actif'},
+  {name:'Benoit TAHON',emploi:'CHEF BARMAN',dept:'bar',heures:169,brut:2737.45,chargesP:689.97,coutGlobal:3249.97,totalVerse:3427.42,allegements:518.00,status:'actif'},
+  {name:'Aurore VASSE',emploi:'CHEF DE RANG',dept:'salle',heures:169,brut:2637.32,chargesP:612.39,coutGlobal:3147.71,totalVerse:3349.56,allegements:553.80,status:'actif'}
+];
+
 // SDTC tracking (Solde de Tout Compte)
 const SDTCData=[
   // Departed in December 2025
@@ -969,12 +996,15 @@ const SDTCData=[
   {name:'Chafion BACO',month:'01-2026',emploi:'PLONGEUR',dept:'cuisine'},
   // Departing in February 2026
   {name:'Martial AUBERTIN',month:'02-2026',emploi:'PLONGEUR',dept:'cuisine'},
-  {name:'Lucas FLAHAUT',month:'02-2026',emploi:'COMMIS DE CUISINE',dept:'cuisine'}
+  {name:'Lucas FLAHAUT',month:'02-2026',emploi:'COMMIS DE CUISINE',dept:'cuisine'},
+  {name:'Damsey DEBORD',month:'02-2026',emploi:'Employé polyvalent',dept:'salle'},
+  {name:'Ahès LOUSSOUARN',month:'02-2026',emploi:'COMMIS DE SALLE',dept:'salle'},
+  {name:'Abdelazize LAAROUSSI',month:'02-2026',emploi:'PLONGEUR',dept:'cuisine'}
 ];
 
 const PayrollService={
-  getData(month){return month==='dec'?PayrollDataDec:PayrollDataJan;},
-  getActive(){return PayrollDataJan.filter(e=>e.status==='actif');},
+  getData(month){return month==='dec'?PayrollDataDec:month==='feb'?PayrollDataFeb:PayrollDataJan;},
+  getActive(){return PayrollDataFeb.filter(e=>e.status==='actif');},
   getSDTC(){return SDTCData;},
   getByDept(data,dept){return data.filter(e=>e.dept===dept);},
   getTotals(data){
@@ -994,32 +1024,30 @@ const PayrollService={
   },
   getMasseSalariale(){return PayrollDataJan.reduce((s,e)=>s+(e.coutGlobal||0),0);},
   getMasseSalarialeDec(){return PayrollDataDec.reduce((s,e)=>s+(e.coutGlobal||0),0);},
-  // Masse salariale saison : Dec + Jan + estimation Fév
+  getMasseSalarialeFev(){return PayrollDataFeb.reduce((s,e)=>s+(e.coutGlobal||0),0);},
+  // Masse salariale saison : Dec + Jan + Fév (données réelles)
   getMasseSalarialeActive(){
     const decTotal=PayrollDataDec.reduce((s,e)=>s+(e.coutGlobal||0),0);
-    const janActive=PayrollDataJan.filter(e=>e.status==='actif'||e.status==='sdtc-fev').reduce((s,e)=>s+(e.coutGlobal||0),0);
-    // Estimation février : actifs à taux plein + départs fév à 50%
-    const febActif=PayrollDataJan.filter(e=>e.status==='actif').reduce((s,e)=>s+(e.coutGlobal||0),0);
-    const febSdtc=PayrollDataJan.filter(e=>e.status==='sdtc-fev').reduce((s,e)=>s+(e.coutGlobal||0),0);
-    const febEstimate=febActif+Math.round(febSdtc*0.5);
-    return decTotal+janActive+febEstimate;
+    const janTotal=PayrollDataJan.filter(e=>e.status==='actif'||e.status==='sdtc-fev').reduce((s,e)=>s+(e.coutGlobal||0),0);
+    const febTotal=PayrollDataFeb.reduce((s,e)=>s+(e.coutGlobal||0),0);
+    return decTotal+janTotal+febTotal;
   },
   getMasseSalarialeEstFev(){
-    const febActif=PayrollDataJan.filter(e=>e.status==='actif').reduce((s,e)=>s+(e.coutGlobal||0),0);
-    const febSdtc=PayrollDataJan.filter(e=>e.status==='sdtc-fev').reduce((s,e)=>s+(e.coutGlobal||0),0);
-    return febActif+Math.round(febSdtc*0.5);
+    // Données réelles maintenant disponibles
+    return PayrollDataFeb.reduce((s,e)=>s+(e.coutGlobal||0),0);
   },
   // Nombre de mois de données (Dec + Jan + Feb estimé)
   _nMonthsData:3,
   getMasseSalarialeMensuelle(){return this.getMasseSalarialeActive()/this._nMonthsData;},
   getStaffCostPct(ca){const ms=this.getMasseSalarialeActive();return ca>0?Math.round(ms/ca*1000)/10:0;},
-  getEffectifActif(){return PayrollDataJan.filter(e=>e.status==='actif'||e.status==='sdtc-fev').length;},
+  getEffectifActif(){return PayrollDataFeb.filter(e=>e.status==='actif').length;},
   getEvolution(){
     const janTotal=this.getMasseSalariale();
     const decTotal=this.getMasseSalarialeDec();
-    const diff=janTotal-decTotal;
-    const pct=decTotal>0?Math.round(diff/decTotal*1000)/10:0;
-    return{janTotal,decTotal,diff,pct,janCount:PayrollDataJan.length,decCount:PayrollDataDec.length};
+    const febTotal=this.getMasseSalarialeFev();
+    const diff=febTotal-janTotal;
+    const pct=janTotal>0?Math.round(diff/janTotal*1000)/10:0;
+    return{janTotal,decTotal,febTotal,diff,pct,janCount:PayrollDataJan.length,decCount:PayrollDataDec.length,febCount:PayrollDataFeb.length};
   },
   getUpcomingDepartures(){return SDTCData.filter(s=>s.month==='02-2026');},
   periode:'Déc 2025 → Fév 2026'
@@ -1283,9 +1311,10 @@ const PennylaneService={
   _companyInfo:null,
   _cache:{},
   _lsCacheKey:'ima_pennylane_invoices_cache',
+  _lsCacheVersion:3, // Incrémenter pour forcer invalidation après changement de nettoyage
   _lsCacheTTL:3600000, // 1 heure
-  _getLsCache(){try{const c=JSON.parse(localStorage.getItem(this._lsCacheKey));if(c&&Date.now()-c.ts<this._lsCacheTTL)return c.data;return null;}catch(e){return null;}},
-  _setLsCache(data){try{localStorage.setItem(this._lsCacheKey,JSON.stringify({data,ts:Date.now()}));}catch(e){console.warn('Cache write failed',e);}},
+  _getLsCache(){try{const c=JSON.parse(localStorage.getItem(this._lsCacheKey));if(!c||c.v!==this._lsCacheVersion){console.log('[IMA] Cache invalidé (version',c?.v,'→',this._lsCacheVersion,')');localStorage.removeItem(this._lsCacheKey);return null;}if(Date.now()-c.ts<this._lsCacheTTL)return c.data;return null;}catch(e){return null;}},
+  _setLsCache(data){try{localStorage.setItem(this._lsCacheKey,JSON.stringify({data,ts:Date.now(),v:this._lsCacheVersion}));}catch(e){console.warn('Cache write failed',e);}},
   clearCache(){localStorage.removeItem(this._lsCacheKey);this._cache={};},
 
   async request(endpoint,params={},_retries=0){
@@ -3078,8 +3107,8 @@ function StaffPage(){
 
   return(<div className="fin">
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">Effectif actif</div><div className="kpi-val">{PayrollService.getEffectifActif()}</div><div className="kpi-chg neu">{PayrollDataJan.filter(e=>e.status==='sdtc').length} SDTC + {PayrollDataJan.filter(e=>e.status==='sdtc-fev').length} départs fév</div></div>
-      <div className="kpi"><div className="kpi-label">Masse salariale {_staffIsSeason?'Saison':'('+pCtx.dates.days+'j)'}</div><div className="kpi-val">{eur(msDisplay)}</div><div className="kpi-chg neu">{_staffIsSeason?'Dec+Jan+Fév(est.)':pCtx.mode!=='mois'?`Prorata ${pCtx.dates.days}j / 30j`:''} • {eur(pCtx.msMensuel)}/mois</div></div>
+      <div className="kpi"><div className="kpi-label">Effectif actif</div><div className="kpi-val">{PayrollService.getEffectifActif()}</div><div className="kpi-chg neu">{PayrollDataFeb.filter(e=>e.status==='sdtc').length} SDTC fév</div></div>
+      <div className="kpi"><div className="kpi-label">Masse salariale {_staffIsSeason?'Saison':'('+pCtx.dates.days+'j)'}</div><div className="kpi-val">{eur(msDisplay)}</div><div className="kpi-chg neu">{_staffIsSeason?'Dec+Jan+Fév':pCtx.mode!=='mois'?`Prorata ${pCtx.dates.days}j / 30j`:''} • {eur(pCtx.msMensuel)}/mois</div></div>
       <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:caTotal>0?(staffCostPct>30?'var(--rouge)':staffCostPct>25?'var(--orange)':'var(--vert)'):'var(--gris-300)'}}>{caTotal>0?staffCostPct+'%':'—'}</div><div className="kpi-chg neu">{caTotal>0?`CA ${eur(caTotal)} (${caSource})`:'CA non disponible'}</div></div>
       <div className="kpi"><div className="kpi-label">Départs Février</div><div className="kpi-val" style={{color:'var(--orange)'}}>{upcoming.length}</div><div className="kpi-chg neg">{upcoming.map(u=>u.name.split(' ').pop()).join(', ')}</div></div>
     </div>
@@ -6694,7 +6723,7 @@ function ComparatifBP(){
   const staffPerMonth={
     'Décembre 2025':PayrollService.getMasseSalarialeDec(),
     'Janvier 2026':PayrollService.getMasseSalariale(),
-    'Février 2026':PayrollService.getMasseSalarialeEstFev()
+    'Février 2026':PayrollService.getMasseSalarialeFev()
   };
 
   // Month data with BP comparison
