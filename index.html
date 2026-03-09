@@ -1334,7 +1334,10 @@ const PennylaneService={
     // 2. localStorage cache (1h) — return instantly, refresh in background
     let lsData=this._getLsCache();
     if(lsData&&lsData.length>0){
-      // Dédupliquer le cache : par id puis par n° facture + fournisseur + date (garder première occurrence)
+      // Nettoyer le cache : mêmes règles que _fetchAllInvoices
+      lsData=lsData.filter(inv=>{const n=inv.invoice_number||'';return n&&!n.toUpperCase().includes('DUPLICATA');});
+      const realNums=new Set();lsData.forEach(inv=>{const n=inv.invoice_number||'';const m=n.match(/^[A-Za-z\s\-]+([\d]+)$/);if(m)realNums.add(m[1]+'_'+(inv.supplier?.id||''));});
+      lsData=lsData.filter(inv=>{const n=inv.invoice_number||'';if(/^\d+$/.test(n)&&realNums.has(n+'_'+(inv.supplier?.id||'')))return false;return true;});
       const si=new Set();lsData=lsData.filter(inv=>{if(!inv.id)return true;if(si.has(inv.id))return false;si.add(inv.id);return true;});
       const seenC=new Set();lsData=lsData.filter(inv=>{const n=inv.invoice_number||'';if(!n)return true;const k=`${n}_${inv.supplier?.id||''}`;if(seenC.has(k))return false;seenC.add(k);return true;});
       this._cache[cacheKey]={data:lsData,ts:Date.now()};
@@ -1374,49 +1377,103 @@ const PennylaneService={
         if(page<maxPages)await new Promise(r=>setTimeout(r,300));
       }
     }catch(e){console.error('Failed to fetch invoices:',e);}
-    // Dédupliquer en 3 passes :
-    // 1) Par API id (basique)
+    // ===== NETTOYAGE PENNYLANE (5 passes) =====
+    const beforeClean=allInvoices.length;
+
+    // Passe 1: Supprimer les DUPLICATA (Pennylane retourne des copies explicites)
+    allInvoices=allInvoices.filter(inv=>{
+      const num=inv.invoice_number||'';
+      if(num.toUpperCase().includes('DUPLICATA')){
+        console.log('[IMA] Clean1: DUPLICATA supprimé',num,inv.amount+'€');
+        return false;
+      }
+      return true;
+    });
+
+    // Passe 2: Supprimer les entrées SANS numéro de facture (souvent des récaps ou écritures bancaires)
+    allInvoices=allInvoices.filter(inv=>{
+      const num=inv.invoice_number||'';
+      if(!num||num==='?'||num.trim()===''){
+        console.log('[IMA] Clean2: sans n° facture supprimé, montant:',inv.amount+'€','date:',inv.date,'fournisseur:',inv.supplier?.name||'?');
+        return false;
+      }
+      return true;
+    });
+
+    // Passe 3: Supprimer les récapitulatifs mensuels Pennylane
+    // Pattern: certains fournisseurs (Tresallet, David, etc.) ont des entrées avec un n° facture
+    // SANS préfixe (ex: "03260013445") qui sont des récaps mensuels, EN PLUS de la vraie facture
+    // avec préfixe (ex: "VTE-03260013445"). On détecte et supprime les récaps.
+    const invoicesBySupplier={};
+    allInvoices.forEach(inv=>{
+      const sid=inv.supplier?.id||'';
+      if(!invoicesBySupplier[sid])invoicesBySupplier[sid]=[];
+      invoicesBySupplier[sid].push(inv);
+    });
+    // Pour chaque fournisseur, collecter les n° avec préfixes (VTE-, AVOIR, CF, etc.)
+    const realNumSuffixes=new Set();
+    allInvoices.forEach(inv=>{
+      const num=inv.invoice_number||'';
+      // Extraire la partie numérique (suffixe) si le n° a un préfixe lettres
+      const match=num.match(/^[A-Za-z\s\-]+([\d]+)$/);
+      if(match)realNumSuffixes.add(match[1]+'_'+(inv.supplier?.id||''));
+    });
+    allInvoices=allInvoices.filter(inv=>{
+      const num=inv.invoice_number||'';
+      // Si le n° est purement numérique (récap) ET qu'il existe une version préfixée → c'est un récap
+      if(/^\d+$/.test(num)){
+        const key=num+'_'+(inv.supplier?.id||'');
+        if(realNumSuffixes.has(key)){
+          console.log('[IMA] Clean3: récap mensuel supprimé',num,inv.amount+'€','date:',inv.date);
+          return false;
+        }
+      }
+      return true;
+    });
+
+    // Passe 4: Par API id (basique)
     const seenIds=new Set();
     allInvoices=allInvoices.filter(inv=>{
       if(!inv.id)return true;
       if(seenIds.has(inv.id))return false;
       seenIds.add(inv.id);return true;
     });
-    // 2) Par n° facture + fournisseur (SANS date ni montant)
-    //    Pennylane retourne parfois des entrées "fantômes" avec le même n° facture
-    //    mais un montant ET/OU une date différent(e). On garde la PREMIÈRE occurrence
-    //    retournée par l'API qui correspond à la vraie facture.
-    const beforeDedup=allInvoices.length;
+
+    // Passe 5: Par n° facture + fournisseur (sans date — attrape les fantômes restants)
     const seenKeys=new Set();
     allInvoices=allInvoices.filter(inv=>{
       const invNum=inv.invoice_number||'';
-      if(!invNum)return true; // pas de n° = on garde
+      if(!invNum)return true;
       const key=`${invNum}_${inv.supplier?.id||''}`;
-      if(seenKeys.has(key))return false; // déjà vu ce combo → doublon fantôme
+      if(seenKeys.has(key))return false;
       seenKeys.add(key);
       return true;
     });
-    if(allInvoices.length<beforeDedup){
-      console.log('[IMA] Dédup passe 2: '+(beforeDedup-allInvoices.length)+' factures fantômes supprimées');
-    }
-    // 3) Par montant + date + fournisseur (attrape les doublons avec des n° facture différents)
-    const beforeDedup3=allInvoices.length;
-    const seenAmts=new Set();
-    allInvoices=allInvoices.filter(inv=>{
-      const amt=parseFloat(inv.amount||0);
-      if(amt===0)return true;
-      const key3=`${inv.supplier?.id||''}_${inv.date||''}_${amt.toFixed(2)}`;
-      if(seenAmts.has(key3)){
-        console.log('[IMA] Dédup3: doublon détecté',inv.invoice_number,inv.date,amt,'€ — supprimé');
-        return false;
+
+    // Résumé par fournisseur
+    const removed=beforeClean-allInvoices.length;
+    console.log('[IMA] Nettoyage: '+removed+' entrées parasites supprimées, '+allInvoices.length+' factures réelles restantes');
+    if(removed>0){
+      // Comparer avant/après par fournisseur
+      const afterByS={};
+      allInvoices.forEach(inv=>{const n=inv.supplier?.name||'?';if(!afterByS[n])afterByS[n]={n:0,ttc:0};afterByS[n].n++;afterByS[n].ttc+=parseFloat(inv.amount||0);});
+      const beforeByS={};
+      // recalculer depuis invoicesBySupplier (qui contenait les données avant passe 3)
+      for(const[sid,invs]of Object.entries(invoicesBySupplier)){
+        const n=invs[0]?.supplier?.name||'?';
+        if(!beforeByS[n])beforeByS[n]={n:0,ttc:0};
+        beforeByS[n].n+=invs.length;
+        beforeByS[n].ttc+=invs.reduce((s,inv)=>s+parseFloat(inv.amount||0),0);
       }
-      seenAmts.add(key3);
-      return true;
-    });
-    if(allInvoices.length<beforeDedup3){
-      console.log('[IMA] Dédup passe 3: '+(beforeDedup3-allInvoices.length)+' doublons montant+date supprimés, '+allInvoices.length+' restantes');
+      console.log('[IMA] Impact nettoyage par fournisseur:');
+      for(const name of Object.keys(beforeByS).sort()){
+        const bef=beforeByS[name]||{n:0,ttc:0};
+        const aft=afterByS[name]||{n:0,ttc:0};
+        if(bef.n!==aft.n){
+          console.log(`  ${name}: ${bef.n}→${aft.n} factures, ${Math.round(bef.ttc)}→${Math.round(aft.ttc)}€ TTC (−${Math.round(bef.ttc-aft.ttc)}€)`);
+        }
+      }
     }
-    console.log('[IMA] Total factures après dédup: '+allInvoices.length+' (avant: '+beforeDedup+')');
     return allInvoices;
   },
 
