@@ -1451,30 +1451,34 @@ const PennylaneService={
         noNumBySup[sn].total+=Math.abs(parseFloat(inv.amount||0));
       }
     });
-    // Supprimer uniquement les entrées sans n° ET sans fournisseur identifié (écritures comptables pures)
+    // Supprimer : sans n° + sans fournisseur + montant nul = écriture comptable vide
+    // Garder : montant > 0 meme sans fournisseur (loyer, prélèvements récurrents)
+    var pass2Kept=0,pass2KeptTotal=0;
     allInvoices=allInvoices.filter(inv=>{
       const num=inv.invoice_number||'';
       if(!num||num==='?'||num.trim()===''){
         const sname=(inv.supplier?.name||'').trim();
+        const amt=Math.abs(parseFloat(inv.amount||0));
         if(!sname||sname==='?'){
-          // Pas de fournisseur = écriture comptable/bancaire → supprimer
-          const amt=Math.abs(parseFloat(inv.amount||0));
-          pass2Removed++;pass2RemovedTotal+=amt;
-          console.log('[IMA] Clean2: sans n° ni fournisseur, supprimé:',inv.amount+'€','date:',inv.date);
+          if(amt>0){
+            pass2Kept++;pass2KeptTotal+=amt;
+            console.log('[IMA] Clean2: sans n/fournisseur mais '+inv.amount+'E GARDEE (date:'+inv.date+')');
+            return true;
+          }
+          pass2Removed++;
           return false;
         }
-        // A un fournisseur → garder (loyer, prélèvement, etc.)
         return true;
       }
       return true;
     });
     if(pass2Count>0){
-      console.log('%c[IMA] Passe 2: '+pass2Count+' entrées sans n° facture ('+Math.round(pass2Total)+'€)','color:orange;font-weight:bold');
-      console.log('[IMA] → Gardées: '+(pass2Count-pass2Removed)+' avec fournisseur identifié ('+Math.round(pass2Total-pass2RemovedTotal)+'€)');
-      console.log('[IMA] → Supprimées: '+pass2Removed+' sans fournisseur ('+Math.round(pass2RemovedTotal)+'€)');
-      console.log('[IMA] Détail par fournisseur (sans n°):');
-      Object.entries(noNumBySup).sort((a,b)=>b[1].total-a[1].total).forEach(([name,d])=>{
-        console.log('  '+name+': '+d.count+' entrées, '+Math.round(d.total)+'€');
+      console.log('%c[IMA] Passe 2: '+pass2Count+' entrees sans n facture ('+Math.round(pass2Total)+'E)','color:orange;font-weight:bold');
+      console.log('[IMA] Gardees avec montant>0: '+pass2Kept+' ('+Math.round(pass2KeptTotal)+'E)');
+      console.log('[IMA] Supprimees (0E sans fournisseur): '+pass2Removed);
+      console.log('[IMA] Detail par fournisseur (sans n):');
+      Object.entries(noNumBySup).sort((a,b)=>b[1].total-a[1].total).forEach(function(e){
+        console.log('  '+e[0]+': '+e[1].count+' entrees, '+Math.round(e[1].total)+'E');
       });
     }
 
