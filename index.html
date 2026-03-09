@@ -5583,6 +5583,14 @@ function TipsPage(){
 
 // ===== SETTINGS =====
 function Settings(){
+  const invCtx=useInvoices();
+  const _settingsInvoices=invCtx.invoices||[];
+  // Calculer supplierTotals pour la section Objectifs
+  const _sS=typeof TRIVEC_SEASON!=='undefined'?TRIVEC_SEASON:null;
+  const _sfFrom=_sS?_sS.periode.from.split('/').reverse().join('-'):'2025-12-01';
+  const _sfTo=_sS?_sS.periode.to.split('/').reverse().join('-'):'2026-02-28';
+  const settingsSeasonInv=useMemo(()=>_settingsInvoices.filter(function(inv){return inv.date&&inv.date>=_sfFrom&&inv.date<=_sfTo;}),[_settingsInvoices,_sfFrom,_sfTo]);
+  const supplierTotals=useMemo(()=>SupplierMap.getTotals(settingsSeasonInv),[settingsSeasonInv]);
   const[token,setToken]=useState(PennylaneService.getToken()||'');
   const[showToken,setShowToken]=useState(false);
   const[testStatus,setTestStatus]=useState(null);
@@ -5965,35 +5973,36 @@ function Settings(){
         <div className="card-h"><div><div className="card-t">Objectifs & Seuils</div></div></div>
         <div className="card-b">
           {(()=>{
-            const tm=TrivecService.getMonthData();
-            const rawCa=tm.totalCA||0;
-            const tmDays=tm.days||0;
-            const ca=tmDays>0&&tmDays<26?Math.round(rawCa/tmDays*26):rawCa;
+            // Utiliser les données SAISON (même méthodologie que le dashboard)
             const _sSeason=typeof TRIVEC_SEASON!=='undefined'?TRIVEC_SEASON:null;
-            const caTotal=ca>0?ca:(_sSeason?_sSeason.ventesNet:0);
+            const caTotal=_sSeason?_sSeason.ventesNet:0;
             const hasCa=caTotal>0;
-            const tmVal=tm.ticketMoyen||0;
-            // Aggregate Trivec products for COGS
-            const data=TrivecService._getData();
-            const assorts=data.assortiments||{};
-            const pMap={};
-            for(const[ds,assort]of Object.entries(assorts)){
-              (assort.products||[]).forEach(p=>{
-                const k=p.nom;
-                if(!pMap[k])pMap[k]={nom:p.nom,categorie1:p.categorie1,categorie2:p.categorie2,categorie3:p.categorie3,totalQty:0,totalPrix:0,jours:[]};
-                pMap[k].totalQty+=p.quantite;pMap[k].totalPrix+=p.prix;
-              });
-            }
-            const trivecProds=Object.values(pMap);
-            const cogs=InventoryService.calculateCOGS(trivecProds);
-            const hasFood=cogs.foodCostPct!==null;
-            const hasBar=cogs.barCostPct!==null;
+            // Food/Bar Cost = Pennylane (via supplierTotals contexte parent) avec déduction stock
+            const caNourritureHT=_sSeason?(_sSeason.categories.find(function(c){return c.nom==='Nourriture';})||{}).montant/1.10:0;
+            const caBoissonsTTC=_sSeason?((_sSeason.categories.find(function(c){return c.nom==='Boissons Alcoolisées';})||{}).montant||0):0;
+            const caBoissonsHT=caBoissonsTTC/1.20;
+            // Food/Bar achats depuis les KPIs saison du dashboard (valeurs globales)
+            const foodAchatsHT=typeof supplierTotals!=='undefined'?(supplierTotals['Food']||0):0;
+            const barAchatsHT=typeof supplierTotals!=='undefined'?(supplierTotals['Bar']||0):0;
+            const foodConsoHT=Math.max(0,foodAchatsHT-STOCK_VALUE_0103.food);
+            const barConsoHT=Math.max(0,barAchatsHT-STOCK_VALUE_0103.bar);
+            const foodCostPct=caNourritureHT>0?Math.round(foodConsoHT/caNourritureHT*1000)/10:null;
+            const barCostPct=caBoissonsHT>0?Math.round(barConsoHT/caBoissonsHT*1000)/10:null;
+            // Staff Cost = MS saison / CA saison
+            const msCost=PayrollService.getMasseSalarialeActive();
+            const staffPct=caTotal>0?Math.round(msCost/caTotal*1000)/10:null;
+            // Prime Cost
+            const primePct=(foodCostPct!==null&&barCostPct!==null&&staffPct!==null)?Math.round(((foodConsoHT+barConsoHT+msCost)/caTotal)*1000)/10:null;
+            // Ticket Moyen = CA Nourriture TTC / couverts (corrigé)
+            const caNourritureTTC=_sSeason?(_sSeason.categories.find(function(c){return c.nom==='Nourriture';})||{}).montant||0:0;
+            const couverts=_sSeason?_sSeason.couverts:0;
+            const tmVal=couverts>0?Math.round(caNourritureTTC/couverts):0;
             return[
-              {l:'Food Cost max',o:'28%',a:hasFood?cogs.foodCostPct+'%':'—',ok:hasFood?(cogs.foodCostPct<=28?true:false):null},
-              {l:'Bar Cost max',o:'20%',a:hasBar?cogs.barCostPct+'%':'—',ok:hasBar?(cogs.barCostPct<=20?true:false):null},
-              {l:'Staff Cost max',o:'30%',a:hasCa?PayrollService.getStaffCostPct(caTotal)+'%':'—',ok:hasCa?(PayrollService.getStaffCostPct(caTotal)<=30?true:false):null},
-              {l:'Prime Cost max',o:'65%',a:cogs.primeCostPct!==null&&hasCa?Math.round((cogs.foodCostPct+cogs.barCostPct+PayrollService.getStaffCostPct(caTotal))*10)/10+'%':'—',ok:cogs.primeCostPct!==null&&hasCa?((cogs.foodCostPct+cogs.barCostPct+PayrollService.getStaffCostPct(caTotal))<=65?true:false):null},
-              {l:'Ticket moyen min',o:'180€',a:hasCa?Math.round(tmVal)+'€':'—',ok:hasCa?(tmVal>=180?true:false):null}
+              {l:'Food Cost max',o:'28%',a:foodCostPct!==null?foodCostPct+'%':'—',ok:foodCostPct!==null?(foodCostPct<=28):null},
+              {l:'Bar Cost max',o:'20%',a:barCostPct!==null?barCostPct+'%':'—',ok:barCostPct!==null?(barCostPct<=20):null},
+              {l:'Staff Cost max',o:'30%',a:staffPct!==null?staffPct+'%':'—',ok:staffPct!==null?(staffPct<=30):null},
+              {l:'Prime Cost max',o:'65%',a:primePct!==null?primePct+'%':'—',ok:primePct!==null?(primePct<=65):null},
+              {l:'Ticket moyen min',o:'60€',a:tmVal>0?tmVal+'€':'—',ok:tmVal>0?(tmVal>=60):null}
             ];
           })().map((o,i)=>(
             <div key={i} style={{padding:'8px 0',borderBottom:'1px solid var(--gris-100)',display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:13}}>
