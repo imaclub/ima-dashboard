@@ -365,7 +365,7 @@ const SupplierMap={
   _saveMap(map){localStorage.setItem('ima_supplier_map_v2',JSON.stringify(map));},
 
   // Aliases: catégories Pennylane → catégories dashboard
-  _aliases:{'Restaurants':'Food','Restaurant':'Food','Alimentation':'Food','Boissons':'Bar'},
+  _aliases:{'Alimentation':'Food','Boissons':'Bar'},
 
   getCategory(supplierId){
     const map=this._getMap();
@@ -1397,8 +1397,26 @@ const PennylaneService={
       return true;
     });
     if(allInvoices.length<beforeDedup){
-      console.log('[IMA] Dédup: '+(beforeDedup-allInvoices.length)+' factures fantômes supprimées, '+allInvoices.length+' restantes');
+      console.log('[IMA] Dédup passe 2: '+(beforeDedup-allInvoices.length)+' factures fantômes supprimées');
     }
+    // 3) Par montant + date + fournisseur (attrape les doublons avec des n° facture différents)
+    const beforeDedup3=allInvoices.length;
+    const seenAmts=new Set();
+    allInvoices=allInvoices.filter(inv=>{
+      const amt=parseFloat(inv.amount||0);
+      if(amt===0)return true;
+      const key3=`${inv.supplier?.id||''}_${inv.date||''}_${amt.toFixed(2)}`;
+      if(seenAmts.has(key3)){
+        console.log('[IMA] Dédup3: doublon détecté',inv.invoice_number,inv.date,amt,'€ — supprimé');
+        return false;
+      }
+      seenAmts.add(key3);
+      return true;
+    });
+    if(allInvoices.length<beforeDedup3){
+      console.log('[IMA] Dédup passe 3: '+(beforeDedup3-allInvoices.length)+' doublons montant+date supprimés, '+allInvoices.length+' restantes');
+    }
+    console.log('[IMA] Total factures après dédup: '+allInvoices.length+' (avant: '+beforeDedup+')');
     return allInvoices;
   },
 
@@ -2344,6 +2362,39 @@ function Costs(){
   // Tous les calculs basés sur seasonInvoices (même période que CA)
   const categorized=useMemo(()=>SupplierMap.categorize(seasonInvoices),[seasonInvoices,mapVersion]);
   const totals=useMemo(()=>SupplierMap.getTotals(seasonInvoices),[seasonInvoices,mapVersion]);
+  // === DIAGNOSTIC : détail de chaque fournisseur + champs bruts API ===
+  useEffect(()=>{
+    if(!seasonInvoices.length)return;
+    // Log RAW invoice fields for top suppliers (debug API data quality)
+    const tresalletInvs=seasonInvoices.filter(inv=>SupplierMap.extractName(inv).toLowerCase().includes('tresallet'));
+    if(tresalletInvs.length>0){
+      console.log('[IMA DIAG] === TRESALLET RAW API DATA ('+tresalletInvs.length+' factures) ===');
+      tresalletInvs.forEach(inv=>{
+        console.log(`  #${inv.invoice_number||'?'} | date:${inv.date} | HT:${inv.currency_amount_before_tax} | TTC:${inv.amount} | status:${inv.status} | type:${inv.type||inv.document_type||'?'} | paid:${inv.paid} | id:${inv.id}`);
+      });
+      const ttcTotal=tresalletInvs.reduce((s,inv)=>s+parseFloat(inv.amount||0),0);
+      console.log(`  TOTAL: ${Math.round(ttcTotal)}€ TTC (réel Grand Livre: 36,397€ TTC → écart ${Math.round(ttcTotal-36397)}€)`);
+    }
+    ['Food','Bar'].forEach(cat=>{
+      const catInvs=seasonInvoices.filter(inv=>SupplierMap.getCategory(String(inv.supplier?.id||''))===cat);
+      const byS={};
+      catInvs.forEach(inv=>{
+        const sid=String(inv.supplier?.id||'?');
+        const name=SupplierMap.extractName(inv);
+        if(!byS[sid])byS[sid]={name,ht:0,ttc:0,n:0,htField:0,noHT:0};
+        const ht=parseFloat(inv.currency_amount_before_tax||0);
+        const ttc=parseFloat(inv.amount||0);
+        byS[sid].ht+=ht||ttc;
+        byS[sid].ttc+=ttc;
+        byS[sid].n++;
+        if(ht)byS[sid].htField++;else byS[sid].noHT++;
+      });
+      const rows=Object.entries(byS).sort((a,b)=>b[1].ht-a[1].ht).map(([sid,d])=>
+        `  ${d.name} (id:${sid}): ${Math.round(d.ht)}€ HT / ${Math.round(d.ttc)}€ TTC — ${d.n} fact. (${d.htField} avec HT, ${d.noHT} sans)`
+      );
+      console.log(`[IMA DIAG] === ${cat} === ${catInvs.length} factures, Total: ${Math.round(totals[cat]||0)}€ HT\n`+rows.join('\n'));
+    });
+  },[seasonInvoices,totals]);
   const groupTotals=useMemo(()=>SupplierMap.getGroupTotals(totals),[totals]);
   const totalAll=Object.values(totals).reduce((s,v)=>s+v,0);
   const foodTotal=totals['Food']||0;
