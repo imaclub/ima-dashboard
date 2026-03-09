@@ -1630,7 +1630,7 @@ const PennylaneService={
   // Auto-classification par mots-clés dans le nom fournisseur
   _autoClassifyRules:[
     // Food — fournisseurs alimentaires
-    {re:/cot[eé]\s*frais|cote\s*frais|boucherie|viande|poissonn|mar[eé]e|primeur|l[eé]gume|fruit|boulang|p[aâ]tiss|traiteur|mamafiore|fromag|lait|cr[eè]me|epicerie|[eé]picerie|volaille|caf[eé]|torr[eé]f|chocolat|glace|huile|olive|pasta|riz|farine|levure|condiment|aromat|herbes|thé|tisane|jus\s*de|nectar|sirop\s*(?:grenadine|menthe|orgeat)|eau\s*min[eé]ral/i,cat:'Food'},
+    {re:/cot[eé]\s*frais|cote\s*frais|boucherie|viande|poissonn|mar[eé]e|primeur|l[eé]gume|fruit|boulang|p[aâ]tiss|traiteur|mam+afiore|fromag|lait|cr[eè]me|epicerie|[eé]picerie|volaille|caf[eé]|torr[eé]f|chocolat|glace|huile|olive|pasta|riz|farine|levure|condiment|aromat|herbes|thé|tisane|jus\s*de|nectar|sirop\s*(?:grenadine|menthe|orgeat)|eau\s*min[eé]ral|metzger|huguenin|armara|davigel|brake|metro\s|promocash|transgourmet/i,cat:'Food'},
     // Bar — boissons alcoolisées & fournisseurs bar
     {re:/tresallet|pernod|ricard|diageo|bacardi|martini|campari|r[eé]my\s*cointreau|mo[eë]t|hennessy|roederer|krug|veuve\s*clicquot|laurent[\s-]*perrier|bollinger|taittinger|dom\s*p[eé]rignon|champagne|spiritueux|alcool|bi[eè]re|brasserie|distill|vigneron|viticult|domaine|ch[aâ]teau|cave|n[eé]gociant|vin\s|vins\s|wine|cocktail|aperitif|liqueur|cognac|armagnac|whisky|whiskey|vodka|gin\s|rhum|tequila|mezcal|absinthe|vermouth|porto|sherry|prosecco|cava|barman|sommel/i,cat:'Bar'},
     // Hygiène & Entretien
@@ -2671,6 +2671,22 @@ function Costs(){
       if(numericOnly.length>0)console.log(`  ⚠️ ${numericOnly.length} n° purement numériques: ${numericOnly.slice(0,5).join(', ')}`);
       if(dupeAmounts.length>0)console.log(`  ⚠️ ${dupeAmounts.length} montants en double: ${dupeAmounts.slice(0,5).map(([a,c])=>`${a}€ ×${c}`).join(', ')}`);
     });
+    // === CONTRÔLE CROISÉ : Grands Livres fournisseurs vs API ===
+    const glReference={
+      'metzger':{ttcExpected:17323,source:'GL Metzger Frères (oct25→mar26)'},
+      'huguenin':{ttcExpected:6339,source:'GL Huguenin (nov25→mar26)'},
+      'mammafiore':{ttcExpected:19954,source:'GL Mammafiore France (nov25→mar26)'},
+    };
+    console.log('%c[IMA] CONTRÔLE CROISÉ : Grands Livres vs API','color:red;font-weight:bold');
+    Object.entries(glReference).forEach(([searchName,ref])=>{
+      const invs=seasonInvoices.filter(inv=>SupplierMap.extractName(inv).toLowerCase().includes(searchName));
+      const apiTTC=Math.round(invs.reduce((s,inv)=>s+Math.abs(parseFloat(inv.amount||0)),0));
+      const ecart=apiTTC-ref.ttcExpected;
+      const ecartPct=ref.ttcExpected>0?Math.round(ecart/ref.ttcExpected*100):0;
+      const status=Math.abs(ecartPct)<=5?'✅':'⚠️';
+      console.log(`${status} ${searchName.toUpperCase()}: API=${apiTTC}€ vs GL=${ref.ttcExpected}€ (écart: ${ecart>0?'+':''}${ecart}€ = ${ecartPct}%) [${ref.source}]`);
+    });
+
     ['Food','Bar'].forEach(cat=>{
       const catInvs=seasonInvoices.filter(inv=>SupplierMap.getCategory(String(inv.supplier?.id||''))===cat);
       const byS={};
