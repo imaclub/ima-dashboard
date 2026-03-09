@@ -1311,7 +1311,7 @@ const PennylaneService={
   _companyInfo:null,
   _cache:{},
   _lsCacheKey:'ima_pennylane_invoices_cache',
-  _lsCacheVersion:3, // Incrémenter pour forcer invalidation après changement de nettoyage
+  _lsCacheVersion:4, // Incrémenter pour forcer invalidation après changement de nettoyage
   _lsCacheTTL:3600000, // 1 heure
   _getLsCache(){try{const c=JSON.parse(localStorage.getItem(this._lsCacheKey));if(!c||c.v!==this._lsCacheVersion){console.log('[IMA] Cache invalidé (version',c?.v,'→',this._lsCacheVersion,')');localStorage.removeItem(this._lsCacheKey);return null;}if(Date.now()-c.ts<this._lsCacheTTL)return c.data;return null;}catch(e){return null;}},
   _setLsCache(data){try{localStorage.setItem(this._lsCacheKey,JSON.stringify({data,ts:Date.now(),v:this._lsCacheVersion}));}catch(e){console.warn('Cache write failed',e);}},
@@ -1478,6 +1478,61 @@ const PennylaneService={
       seenKeys.add(key);
       return true;
     });
+
+    // Passe 6: Filtrer les entrées draft/non finalisées Pennylane
+    allInvoices=allInvoices.filter(inv=>{
+      const st=(inv.status||'').toLowerCase();
+      if(st==='draft'||st==='cancelled'||st==='voided'){
+        console.log('[IMA] Clean6: status='+st+' supprimé',inv.invoice_number,inv.amount+'€',inv.supplier?.name);
+        return false;
+      }
+      return true;
+    });
+
+    // Passe 7: Détecter et supprimer les récaps mensuels génériques
+    // Pattern: même fournisseur, même mois, un gros montant = somme d'autres factures du mois
+    const bySupplierMonth={};
+    allInvoices.forEach(inv=>{
+      const sid=inv.supplier?.id||'';
+      const m=(inv.date||'').substring(0,7); // YYYY-MM
+      const key=sid+'_'+m;
+      if(!bySupplierMonth[key])bySupplierMonth[key]=[];
+      bySupplierMonth[key].push(inv);
+    });
+    const recapIds=new Set();
+    for(const[key,invs]of Object.entries(bySupplierMonth)){
+      if(invs.length<3)continue;
+      const amounts=invs.map(inv=>parseFloat(inv.amount||0));
+      // Chercher si un montant est ~égal à la somme des autres (tolérance 1%)
+      for(let i=0;i<amounts.length;i++){
+        const others=amounts.filter((_,j)=>j!==i);
+        const sumOthers=others.reduce((s,v)=>s+v,0);
+        if(Math.abs(amounts[i]-sumOthers)<sumOthers*0.01&&amounts[i]>0){
+          console.log('[IMA] Clean7: récap-somme détecté',invs[i].invoice_number,invs[i].amount+'€','=somme des',others.length,'autres factures du mois pour',invs[i].supplier?.name);
+          recapIds.add(invs[i].id);
+        }
+      }
+    }
+    if(recapIds.size>0){
+      allInvoices=allInvoices.filter(inv=>!recapIds.has(inv.id));
+    }
+
+    // === DIAGNOSTIC : statuts et types uniques dans les données API ===
+    const statusDist={};
+    const typeDist={};
+    allInvoices.forEach(inv=>{
+      const st=inv.status||'(none)';
+      const tp=inv.type||inv.document_type||inv.invoice_type||'(none)';
+      statusDist[st]=(statusDist[st]||0)+1;
+      typeDist[tp]=(typeDist[tp]||0)+1;
+    });
+    console.log('[IMA DIAG] Statuts:',JSON.stringify(statusDist),'Types:',JSON.stringify(typeDist));
+    // Dump un sample d'objet brut pour debug
+    if(allInvoices.length>0){
+      const sample=allInvoices[0];
+      console.log('[IMA DIAG] Sample invoice keys:',Object.keys(sample).join(', '));
+      console.log('[IMA DIAG] Sample invoice:',JSON.stringify(sample).substring(0,500));
+    }
 
     // Résumé par fournisseur
     const removed=beforeClean-allInvoices.length;
@@ -1888,11 +1943,12 @@ function Dashboard(){
       .catch(e=>{console.error('Google Places error:',e);setGoogleLoading(false);});
   },[]);
 
-  // Filtrer les factures à la même période que le CA Trivec (déc→fév)
+  // Filtrer les factures à la même période que le CA Trivec
   const seasonInvoices=useMemo(()=>{
     if(!hasSeason)return[];
-    const from='2025-12-01';
-    const to='2026-02-28';
+    const _sp=TRIVEC_SEASON.periode;
+    const from=_sp.from.split('/').reverse().join('-');
+    const to=_sp.to.split('/').reverse().join('-');
     return allInvoices.filter(inv=>inv.date&&inv.date>=from&&inv.date<=to);
   },[allInvoices,hasSeason]);
 
@@ -4044,19 +4100,19 @@ function CRMPage(){
 // ===== DONNÉES SAISON TRIVEC (01/12/2025 → 28/02/2026) =====
 // Source : Rapports CA mensuels Trivec imprimés le 02/03/2026
 const TRIVEC_SEASON={
-  periode:{from:'01/12/2025',to:'28/02/2026',label:'Saison 2025-2026'},
-  tickets:15897,couverts:4042,
-  ventesBrut:1506166.35,ventesNet:1345479.84,
-  cashIn:27443.00,cashOut:0,horsVentes:0,interne:133243.51,
+  periode:{from:'01/12/2025',to:'09/03/2026',label:'Saison 2025-2026'},
+  tickets:17311,couverts:4490,
+  ventesBrut:1652216.69,ventesNet:1482573.18,
+  cashIn:27443.00,cashOut:0,horsVentes:0,interne:142200.51,
   categories:[
-    {nom:'Boissons Alcoolisées',montant:965329.45,pct:63.5},
-    {nom:'Boissons Sans Alcool',montant:280112.38,pct:18.4},
-    {nom:'Nourriture',montant:248868.52,pct:16.4},
-    {nom:'Divers',montant:27443.00,pct:1.8}
+    {nom:'Boissons Alcoolisées',montant:1058211.50,pct:63.4},
+    {nom:'Boissons Sans Alcool',montant:303679.33,pct:18.2},
+    {nom:'Nourriture',montant:278469.86,pct:16.7},
+    {nom:'Divers',montant:27443.00,pct:1.6}
   ],
   tva:{
-    taux10:{ttc:467709.09,ht:425190.08,tva:42519.01},
-    taux20:{ttc:877770.75,ht:731475.63,tva:146295.12}
+    taux10:{ttc:516635.04,ht:469668.22,tva:46966.82},
+    taux20:{ttc:965938.14,ht:804948.46,tva:160989.68}
   },
   paiements:{
     total:1397342.81,
@@ -4103,6 +4159,23 @@ const TRIVEC_SEASON={
       tva:{
         taux10:{ttc:244730.31,ht:222482.10,tva:22248.21},
         taux20:{ttc:385511.43,ht:321259.53,tva:64251.90}
+      }
+    },
+    {
+      mois:'Mars 2026',from:'01/03/2026',to:'09/03/2026',
+      tickets:1414,couverts:448,
+      totCommandes:146050.34,remise:4602.00,
+      ventesBrut:146050.34,ventesNet:137093.34,
+      cashIn:0,interne:8957.00,
+      ventesDirectes:33123.00,
+      categories:[
+        {nom:'Boissons Alcoolisées',montant:92882.05},
+        {nom:'Boissons Sans Alcool',montant:23566.95},
+        {nom:'Nourriture',montant:29601.34}
+      ],
+      tva:{
+        taux10:{ttc:48925.95,ht:44478.14,tva:4447.81},
+        taux20:{ttc:88167.39,ht:73472.83,tva:14694.56}
       }
     }
   ]
