@@ -2101,10 +2101,13 @@ function Dashboard(){
   const primeCostPct=caSaison>0?Math.round((foodCostHT+barCostHT+msCost)/caSaison*1000)/10:0;
 
   const cogsTotal=foodCostHT+barCostHT;
-  // OPEX = Charges d'Exploitation + Charges Générales (G&A) — tout sauf Prime Cost, Hors Exploitation et Non classé
-  const opexCats=['Hygiène & Entretien','Énergie & Fluides','Matériel & Équipement','Travaux & Maintenance','Blanchisserie',
-    'Loyer & Charges','Communication & Marketing','Administratif & Juridique','Transport & Véhicules','Assurances','IT & Logiciels','Divers'];
-  const opexTotal=opexCats.reduce((s,cat)=>s+(supplierTotals[cat]||0),0);
+  // OPEX = TOUTES les charges fournisseurs sauf Food, Bar, Staff et Hors Exploitation
+  // On inclut "Non classé" car c'est très probablement de l'opex non encore catégorisé
+  const excludeFromOpex=['Food','Bar','Staff','Compte courant associé','Investissements'];
+  const opexTotal=Object.entries(supplierTotals).reduce((s,[cat,val])=>{
+    if(excludeFromOpex.includes(cat))return s;
+    return s+(val||0);
+  },0);
   const ebitdaEst=caSaison-cogsTotal-msCost-opexTotal;
 
   // Row 2: Ticket Moyen (CA Nourriture / couverts), Couverts, Staff Cost %, Google Rating
