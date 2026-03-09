@@ -404,7 +404,7 @@ const SupplierMap={
       '157926754':'Transport & Véhicules',
       '148604506':'Matériel & Équipement',
       '135731681':'Communication & Marketing',
-      '138599892':'Food',
+      '138599892':'Non classé',
       '135731679':'Compte courant associé',
     };
     let changed=false;
@@ -2509,14 +2509,31 @@ function Costs(){
     if(!seasonInvoices.length)return;
     // Log RAW invoice fields for top suppliers (debug API data quality)
     const tresalletInvs=seasonInvoices.filter(inv=>SupplierMap.extractName(inv).toLowerCase().includes('tresallet'));
-    if(tresalletInvs.length>0){
-      console.log('[IMA DIAG] === TRESALLET RAW API DATA ('+tresalletInvs.length+' factures) ===');
-      tresalletInvs.forEach(inv=>{
-        console.log(`  #${inv.invoice_number||'?'} | date:${inv.date} | HT:${inv.currency_amount_before_tax} | TTC:${inv.amount} | status:${inv.status} | type:${inv.type||inv.document_type||'?'} | paid:${inv.paid} | id:${inv.id}`);
-      });
-      const ttcTotal=tresalletInvs.reduce((s,inv)=>s+parseFloat(inv.amount||0),0);
-      console.log(`  TOTAL: ${Math.round(ttcTotal)}€ TTC (réel Grand Livre: 36,397€ TTC → écart ${Math.round(ttcTotal-36397)}€)`);
-    }
+    // Diagnostic détaillé pour les top fournisseurs Bar
+    ['tresallet','david'].forEach(searchName=>{
+      const invs=seasonInvoices.filter(inv=>SupplierMap.extractName(inv).toLowerCase().includes(searchName));
+      if(invs.length>0){
+        console.log(`[IMA DIAG] === ${searchName.toUpperCase()} RAW API DATA (${invs.length} factures) ===`);
+        invs.sort((a,b)=>(b.date||'').localeCompare(a.date||'')).forEach(inv=>{
+          console.log(`  #${inv.invoice_number||'?'} | date:${inv.date} | HT:${inv.currency_amount_before_tax} | TTC:${inv.amount} | id:${inv.id}`);
+        });
+        const ttcTotal=invs.reduce((s,inv)=>s+parseFloat(inv.amount||0),0);
+        const htTotal=invs.reduce((s,inv)=>s+parseFloat(inv.currency_amount_before_tax||0),0);
+        console.log(`  TOTAL: ${Math.round(htTotal)}€ HT / ${Math.round(ttcTotal)}€ TTC — ${invs.length} factures`);
+      }
+    });
+    // Diagnostic Food suppliers top
+    ['cote frais','mammafiore','metzger'].forEach(searchName=>{
+      const invs=seasonInvoices.filter(inv=>SupplierMap.extractName(inv).toLowerCase().includes(searchName));
+      if(invs.length>0){
+        console.log(`[IMA DIAG] === ${searchName.toUpperCase()} (${invs.length} factures) ===`);
+        invs.sort((a,b)=>(b.date||'').localeCompare(a.date||'')).forEach(inv=>{
+          console.log(`  #${inv.invoice_number||'?'} | date:${inv.date} | HT:${inv.currency_amount_before_tax} | TTC:${inv.amount} | id:${inv.id}`);
+        });
+        const htTotal=invs.reduce((s,inv)=>s+parseFloat(inv.currency_amount_before_tax||0),0);
+        console.log(`  TOTAL HT: ${Math.round(htTotal)}€`);
+      }
+    });
     ['Food','Bar'].forEach(cat=>{
       const catInvs=seasonInvoices.filter(inv=>SupplierMap.getCategory(String(inv.supplier?.id||''))===cat);
       const byS={};
@@ -4097,22 +4114,24 @@ function CRMPage(){
   </div>);
 }
 
-// ===== DONNÉES SAISON TRIVEC (01/12/2025 → 28/02/2026) =====
-// Source : Rapports CA mensuels Trivec imprimés le 02/03/2026
+// ===== DONNÉES SAISON TRIVEC (04/12/2025 → 08/03/2026) =====
+// Source : Rapport Résultats Trivec imprimé le 09/03/2026 par Karim
 const TRIVEC_SEASON={
-  periode:{from:'01/12/2025',to:'09/03/2026',label:'Saison 2025-2026'},
-  tickets:17311,couverts:4490,
-  ventesBrut:1652216.69,ventesNet:1482573.18,
+  periode:{from:'04/12/2025',to:'08/03/2026',label:'Saison 2025-2026'},
+  tickets:17291,couverts:4490,
+  ventesBrut:1652008.69,ventesNet:1482365.18,
   cashIn:27443.00,cashOut:0,horsVentes:0,interne:142200.51,
+  remise:64279.73,ventesDirectes:429987.50,
+  ticketMoyen:92.90,moyenneCouvert:103.07,
   categories:[
-    {nom:'Boissons Alcoolisées',montant:1058211.50,pct:63.4},
-    {nom:'Boissons Sans Alcool',montant:303679.33,pct:18.2},
-    {nom:'Nourriture',montant:278469.86,pct:16.7},
-    {nom:'Divers',montant:27443.00,pct:1.6}
+    {nom:'Boissons Alcoolisées',montant:1047141.74,pct:63.4},
+    {nom:'Boissons Sans Alcool',montant:301078.09,pct:18.2},
+    {nom:'Nourriture',montant:276345.86,pct:16.7},
+    {nom:'Divers',montant:27443.00,pct:1.7}
   ],
   tva:{
-    taux10:{ttc:516635.04,ht:469668.22,tva:46966.82},
-    taux20:{ttc:965938.14,ht:804948.46,tva:160989.68}
+    taux10:{ttc:516427.04,ht:469479.13,tva:46947.91},
+    taux20:{ttc:965938.14,ht:804948.45,tva:160989.69}
   },
   paiements:{
     total:1397342.81,
@@ -7209,11 +7228,18 @@ function PeriodProvider({children}){
     var empty={total:0,days:0,caResto:0,caClub:0,caBar:0,couverts:0,especes:0,cb:0,amex:0,ticketMoyen:0,_fromSeason:false};
 
     // Helper: build from TRIVEC_SEASON
+    // On utilise ventesBrut (inclut offerts/interne) pour les ratios — le coût matière
+    // inclut ce qui est offert, donc le CA de référence doit aussi les inclure.
     function fromSeason(ss){
-      var caFood=ss.tva.taux10.ht; // TVA 10% = Nourriture (resto)
-      var caDrinks=ss.tva.taux20.ht; // TVA 20% = Boissons (bar+club)
+      // Catégories = Tot. Commandes (inclut offerts), on convertit en HT
+      var cats=ss.categories||[];
+      var nourTTC=(cats.find(function(c){return c.nom==='Nourriture';})||{}).montant||0;
+      var alcTTC=(cats.find(function(c){return c.nom==='Boissons Alcoolisées';})||{}).montant||0;
+      var saTTC=(cats.find(function(c){return c.nom==='Boissons Sans Alcool';})||{}).montant||0;
+      var caFood=Math.round(nourTTC/1.10);
+      var caDrinks=Math.round(alcTTC/1.20)+Math.round(saTTC/1.10);
       return{
-        total:ss.ventesNet,days:ss.tickets>0?90:0,
+        total:ss.ventesBrut,ventesNet:ss.ventesNet,days:ss.tickets>0?90:0,
         caResto:caFood,caClub:0,caBar:caDrinks,
         couverts:ss.couverts,especes:0,cb:0,amex:0,
         ticketMoyen:ss.couverts>0?Math.round(caFood/ss.couverts):0,
@@ -7224,7 +7250,21 @@ function PeriodProvider({children}){
     // Helper: build from monthly array
     function fromMonthly(months){
       var t=0,cR=0,cB=0,cov=0;
-      months.forEach(function(m){t+=m.ventesNet;cR+=m.tva.taux10.ht;cB+=m.tva.taux20.ht;cov+=m.couverts;});
+      months.forEach(function(m){
+        t+=m.ventesBrut||m.ventesNet;
+        // Si le mois a des catégories, utiliser celles-ci (inclut offerts)
+        if(m.categories){
+          var nour=(m.categories.find(function(c){return c.nom==='Nourriture';})||{}).montant||0;
+          var alc=(m.categories.find(function(c){return c.nom==='Boissons Alcoolisées';})||{}).montant||0;
+          var sa=(m.categories.find(function(c){return c.nom==='Boissons Sans Alcool';})||{}).montant||0;
+          cR+=Math.round(nour/1.10);
+          cB+=Math.round(alc/1.20)+Math.round(sa/1.10);
+        }else{
+          // Fallback sur TVA (= Ventes Net, sans offerts)
+          cR+=m.tva.taux10.ht;cB+=m.tva.taux20.ht;
+        }
+        cov+=m.couverts;
+      });
       var nDays=months.reduce(function(s,m){
         var fd=m.from.split('/');var td=m.to.split('/');
         var d1=new Date(fd[2],fd[1]-1,fd[0]);var d2=new Date(td[2],td[1]-1,td[0]);
