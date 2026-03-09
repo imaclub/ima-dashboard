@@ -1326,7 +1326,7 @@ const PennylaneService={
     if(lsData&&lsData.length>0){
       // Dédupliquer le cache : par id puis par n° facture + fournisseur + date (garder première occurrence)
       const si=new Set();lsData=lsData.filter(inv=>{if(!inv.id)return true;if(si.has(inv.id))return false;si.add(inv.id);return true;});
-      const seenC=new Set();lsData=lsData.filter(inv=>{const n=inv.invoice_number||'';if(!n)return true;const k=`${n}_${inv.supplier?.id||''}_${inv.date||''}`;if(seenC.has(k))return false;seenC.add(k);return true;});
+      const seenC=new Set();lsData=lsData.filter(inv=>{const n=inv.invoice_number||'';if(!n)return true;const k=`${n}_${inv.supplier?.id||''}`;if(seenC.has(k))return false;seenC.add(k);return true;});
       this._cache[cacheKey]={data:lsData,ts:Date.now()};
       // Background refresh
       this._fetchAllInvoices({dateFrom,maxPages}).then(fresh=>{
@@ -1372,16 +1372,16 @@ const PennylaneService={
       if(seenIds.has(inv.id))return false;
       seenIds.add(inv.id);return true;
     });
-    // 2) Par n° facture + fournisseur + date (SANS montant)
+    // 2) Par n° facture + fournisseur (SANS date ni montant)
     //    Pennylane retourne parfois des entrées "fantômes" avec le même n° facture
-    //    mais un montant différent (plus élevé). On garde la PREMIÈRE occurrence
+    //    mais un montant ET/OU une date différent(e). On garde la PREMIÈRE occurrence
     //    retournée par l'API qui correspond à la vraie facture.
     const beforeDedup=allInvoices.length;
     const seenKeys=new Set();
     allInvoices=allInvoices.filter(inv=>{
       const invNum=inv.invoice_number||'';
       if(!invNum)return true; // pas de n° = on garde
-      const key=`${invNum}_${inv.supplier?.id||''}_${inv.date||''}`;
+      const key=`${invNum}_${inv.supplier?.id||''}`;
       if(seenKeys.has(key))return false; // déjà vu ce combo → doublon fantôme
       seenKeys.add(key);
       return true;
