@@ -2001,8 +2001,9 @@ function Dashboard(){
   const cogsTotal=foodCostHT+barCostHT;
   const ebitdaEst=caSaison-cogsTotal-msCost;
 
-  // Row 2: Ticket Moyen, Couverts, Staff Cost %, Google Rating
-  const tmoyenne=s&&s.couverts>0?Math.round(caSaison/s.couverts):0;
+  // Row 2: Ticket Moyen (CA Nourriture / couverts), Couverts, Staff Cost %, Google Rating
+  const caNourritureTTC_dash=s?s.categories.find(c=>c.nom==='Nourriture').montant:0;
+  const tmoyenne=s&&s.couverts>0?Math.round(caNourritureTTC_dash/s.couverts):0;
   const couverts=s?s.couverts:0;
   const staffCostPct=caSaison>0?Math.round(msCost/caSaison*1000)/10:0;
   const gRating=googleRating?.rating||null;
@@ -2040,9 +2041,10 @@ function Dashboard(){
     {/* Row 2: Ticket Moyen, Couverts, Staff Cost %, Google Rating */}
     <div className="kpi-g">
       <div className="kpi">
-        <div className="kpi-label">Ticket Moyen</div>
+        <div className="kpi-label">Ticket Moyen Resto</div>
         <div className="kpi-val">{tmoyenne}€</div>
-        <div className="text-muted" style={{marginTop:6}}>{eur(caSaison)} / {couverts} couverts</div>
+        <div className="text-muted" style={{marginTop:6}}>{eur(caNourritureTTC_dash)} / {couverts} couverts</div>
+        <div style={{fontSize:9,color:'var(--gris-400)',marginTop:2}}>Food uniquement (hors boissons à table)</div>
       </div>
       <div className="kpi">
         <div className="kpi-label">Couverts Saison</div>
