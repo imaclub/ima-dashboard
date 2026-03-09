@@ -1435,19 +1435,47 @@ const PennylaneService={
       return true;
     });
 
-    // Passe 2: Supprimer les entrées SANS numéro de facture (souvent des récaps ou écritures bancaires)
-    var pass2Count=0,pass2Total=0;
+    // Passe 2: Entrées SANS numéro de facture — on les GARDE mais on détecte les doublons potentiels
+    // (loyers, prélèvements, charges récurrentes n'ont souvent pas de n° de facture dans Pennylane)
+    var pass2Count=0,pass2Total=0,pass2Removed=0,pass2RemovedTotal=0;
+    const noNumBySup={};
+    allInvoices.forEach(inv=>{
+      const num=inv.invoice_number||'';
+      if(!num||num==='?'||num.trim()===''){
+        pass2Count++;
+        pass2Total+=Math.abs(parseFloat(inv.amount||0));
+        const sn=inv.supplier?.name||'?';
+        if(!noNumBySup[sn])noNumBySup[sn]={count:0,total:0};
+        noNumBySup[sn].count++;
+        noNumBySup[sn].total+=Math.abs(parseFloat(inv.amount||0));
+      }
+    });
+    // Supprimer uniquement les entrées sans n° ET sans fournisseur identifié (écritures comptables pures)
     allInvoices=allInvoices.filter(inv=>{
       const num=inv.invoice_number||'';
       if(!num||num==='?'||num.trim()===''){
-        const amt=Math.abs(parseFloat(inv.amount||0));
-        pass2Count++;pass2Total+=amt;
-        console.log('[IMA] Clean2: sans n° facture supprimé, montant:',inv.amount+'€','date:',inv.date,'fournisseur:',inv.supplier?.name||'?');
-        return false;
+        const sname=(inv.supplier?.name||'').trim();
+        if(!sname||sname==='?'){
+          // Pas de fournisseur = écriture comptable/bancaire → supprimer
+          const amt=Math.abs(parseFloat(inv.amount||0));
+          pass2Removed++;pass2RemovedTotal+=amt;
+          console.log('[IMA] Clean2: sans n° ni fournisseur, supprimé:',inv.amount+'€','date:',inv.date);
+          return false;
+        }
+        // A un fournisseur → garder (loyer, prélèvement, etc.)
+        return true;
       }
       return true;
     });
-    if(pass2Count>0)console.log('%c[IMA] Passe 2: '+pass2Count+' entrées sans n° facture supprimées, total: '+Math.round(pass2Total)+'€','color:orange;font-weight:bold');
+    if(pass2Count>0){
+      console.log('%c[IMA] Passe 2: '+pass2Count+' entrées sans n° facture ('+Math.round(pass2Total)+'€)','color:orange;font-weight:bold');
+      console.log('[IMA] → Gardées: '+(pass2Count-pass2Removed)+' avec fournisseur identifié ('+Math.round(pass2Total-pass2RemovedTotal)+'€)');
+      console.log('[IMA] → Supprimées: '+pass2Removed+' sans fournisseur ('+Math.round(pass2RemovedTotal)+'€)');
+      console.log('[IMA] Détail par fournisseur (sans n°):');
+      Object.entries(noNumBySup).sort((a,b)=>b[1].total-a[1].total).forEach(([name,d])=>{
+        console.log('  '+name+': '+d.count+' entrées, '+Math.round(d.total)+'€');
+      });
+    }
 
     // Passe 3: Supprimer les récapitulatifs mensuels Pennylane
     // Pattern: certains fournisseurs (Tresallet, David, etc.) ont des entrées avec un n° facture
