@@ -1406,6 +1406,22 @@ const PennylaneService={
         if(page<maxPages)await new Promise(r=>setTimeout(r,300));
       }
     }catch(e){console.error('Failed to fetch invoices:',e);}
+
+    // ===== DIAGNOSTIC PRÉ-NETTOYAGE =====
+    const preCleanStats={};const preCleanByStatus={};
+    allInvoices.forEach(inv=>{
+      const st=inv.status||'(vide)';
+      if(!preCleanByStatus[st])preCleanByStatus[st]={count:0,totalTTC:0};
+      preCleanByStatus[st].count++;
+      preCleanByStatus[st].totalTTC+=Math.abs(parseFloat(inv.amount||0));
+    });
+    console.log('%c[IMA] FACTURES API BRUTES: '+allInvoices.length+' factures AVANT nettoyage','color:blue;font-weight:bold');
+    console.log('[IMA] Répartition par statut:');
+    Object.entries(preCleanByStatus).sort((a,b)=>b[1].totalTTC-a[1].totalTTC).forEach(([st,d])=>{
+      console.log('  '+st+': '+d.count+' factures, '+Math.round(d.totalTTC)+'€ TTC');
+    });
+    console.log('[IMA] Total TTC brut: '+Math.round(allInvoices.reduce((s,inv)=>s+Math.abs(parseFloat(inv.amount||0)),0))+'€');
+
     // ===== NETTOYAGE PENNYLANE (5 passes) =====
     const beforeClean=allInvoices.length;
 
