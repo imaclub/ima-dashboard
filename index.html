@@ -39,8 +39,13 @@
     .sidebar-logo h1{font-size:32px;font-weight:300;letter-spacing:6px}
     .sidebar-logo span{font-size:10px;opacity:.5;letter-spacing:2px;text-transform:uppercase}
     .sidebar-nav{flex:1;padding:16px 10px;overflow-y:auto}
-    .nav-sec{margin-bottom:20px}
-    .nav-sec-title{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.35);padding:0 12px;margin-bottom:6px;font-weight:600}
+    .nav-sec{margin-bottom:4px}
+    .nav-sec-title{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.35);padding:8px 12px;margin-bottom:0;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:space-between;border-radius:6px;transition:background .15s;user-select:none}
+    .nav-sec-title:hover{background:rgba(255,255,255,.05)}
+    .nav-sec-title .chevron{transition:transform .2s;font-size:10px;opacity:.4}
+    .nav-sec-title .chevron.open{transform:rotate(90deg)}
+    .nav-sec-items{overflow:hidden;transition:max-height .25s ease;max-height:0}
+    .nav-sec-items.open{max-height:600px}
     .nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;cursor:pointer;transition:all .15s;font-size:13px;color:rgba(255,255,255,.65);font-weight:400;margin-bottom:1px}
     .nav-item:hover{background:rgba(255,255,255,.08);color:var(--blanc)}
     .nav-item.active{background:rgba(255,255,255,.14);color:var(--blanc);font-weight:500}
@@ -64,21 +69,21 @@
     .per{display:flex;background:var(--gris-100);border-radius:7px;padding:2px;border:1px solid var(--gris-200)}
     .per-btn{padding:5px 12px;border-radius:5px;font-size:11px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--gris-500);font-family:inherit}
     .per-btn.active{background:var(--blanc);color:var(--bordeaux);box-shadow:0 1px 3px rgba(0,0,0,.08)}
-    .page{padding:22px 28px}
+    .page{padding:24px 32px}
 
     /* Cards */
     .card{background:var(--blanc);border-radius:12px;border:1px solid var(--gris-200);margin-bottom:16px;overflow:hidden}
     .card-h{padding:18px 22px 0;display:flex;justify-content:space-between;align-items:flex-start}
-    .card-t{font-size:14px;font-weight:600;color:var(--gris-800)}
+    .card-t{font-size:15px;font-weight:600;color:var(--gris-800);padding-bottom:4px}
     .card-st{font-size:11px;color:var(--gris-400);margin-top:2px}
-    .card-b{padding:14px 22px 18px}
+    .card-b{padding:16px 24px 20px}
 
     /* KPI */
     .kpi-g{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
-    .kpi{background:var(--blanc);border:1px solid var(--gris-200);border-radius:12px;padding:18px;transition:all .2s}
+    .kpi{background:var(--blanc);border:1px solid var(--gris-200);border-left:4px solid var(--bordeaux-10);border-radius:12px;padding:18px;transition:all .2s}
     .kpi:hover{border-color:var(--bordeaux-20);box-shadow:0 4px 12px rgba(88,21,39,.06)}
     .kpi-label{font-size:11px;font-weight:500;color:var(--gris-500);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
-    .kpi-val{font-size:26px;font-weight:700;line-height:1.2}
+    .kpi-val{font-size:24px;font-weight:700;line-height:1.2}
     .kpi-chg{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:500;margin-top:6px;padding:2px 8px;border-radius:20px}
     .kpi-chg.pos{color:var(--vert);background:var(--vert-light)}
     .kpi-chg.neg{color:var(--rouge);background:var(--rouge-light)}
@@ -126,15 +131,22 @@
     table{width:100%;border-collapse:collapse}
     th{text-align:left;padding:10px 14px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--gris-500);border-bottom:1px solid var(--gris-200);background:var(--gris-50)}
     td{padding:10px 14px;font-size:13px;border-bottom:1px solid var(--gris-100);color:var(--gris-700)}
-    tr:hover td{background:var(--gris-50)}
+    tr:nth-child(even) td{background:var(--gris-50)}
 
     /* Badges */
-    .badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:500}
+    .badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500}
     .b-ok{background:var(--vert-light);color:var(--vert)}
     .b-err{background:var(--rouge-light);color:var(--rouge)}
     .b-warn{background:var(--orange-light);color:var(--orange)}
     .b-info{background:var(--bleu-light);color:var(--bleu)}
     .b-ima{background:var(--bordeaux-10);color:var(--bordeaux)}
+
+    /* Utility classes */
+    .card-kpi-row{display:flex;gap:20px;flex-wrap:wrap}
+    .text-green{color:var(--vert)}
+    .text-red{color:var(--rouge)}
+    .text-muted{color:var(--gris-400);font-size:12px}
+    .fw{font-weight:600}
 
     /* Tabs */
     .tabs{display:flex;border-bottom:1px solid var(--gris-200);margin-bottom:20px}
@@ -1747,95 +1759,222 @@ function Login({onLogin}){
 
 // ===== DASHBOARD =====
 function Dashboard(){
-  const team=StaffRegistry.getActive();
-  const tipsEligible=StaffRegistry.getTipsEligible();
-  const hasTrivec=TrivecService.isConnected();
-  const pCtx=usePeriod();
-  const tp=pCtx.trivecPeriod;
-  const isSeason=tp._fromSeason||false;
-  const caDisplay=tp.total;
-  const couvertsDisplay=tp.couverts;
-  const tmDisplay=tp.ticketMoyen;
-  const caLabel=isSeason?'Saison':'';
-  const msDisplay=isSeason?pCtx.msActive:pCtx.msProrata;
-  const staffPct=caDisplay>0?Math.round(msDisplay/caDisplay*1000)/10:0;
+  const invCtx=useInvoices();
+  const allInvoices=invCtx.invoices||[];
+  const hasSeason=typeof TRIVEC_SEASON!=='undefined'&&TRIVEC_SEASON;
+  const[googleRating,setGoogleRating]=useState(null);
+  const[googleLoading,setGoogleLoading]=useState(false);
+
+  // Fetch Google rating async
+  useEffect(()=>{
+    if(!GooglePlacesService.isConfigured())return;
+    setGoogleLoading(true);
+    GooglePlacesService.fetchPlaceDetails()
+      .then(d=>{setGoogleRating(d);setGoogleLoading(false);})
+      .catch(e=>{console.error('Google Places error:',e);setGoogleLoading(false);});
+  },[]);
+
+  // Filter invoices to season period (Dec 2025 - Feb 2026)
+  const seasonInvoices=useMemo(()=>{
+    if(!hasSeason)return[];
+    const from='2025-12-01';
+    const to='2026-02-28';
+    return allInvoices.filter(inv=>{
+      const invDate=inv.date||'';
+      return invDate>=from&&invDate<=to;
+    });
+  },[allInvoices,hasSeason]);
+
+  // Calculate KPIs
+  const s=hasSeason?TRIVEC_SEASON:null;
+  const bp=BP_DATA;
+
+  // Row 1: CA, Food Cost %, Prime Cost %, EBITDA
+  const caSaison=s?s.ventesNet:0;
+  const caEcart=bp.annual.caTotal>0?Math.round((caSaison-bp.annual.caTotal)/bp.annual.caTotal*1000)/10:0;
+
+  const supplierTotals=useMemo(()=>SupplierMap.getTotals(seasonInvoices),[seasonInvoices]);
+  const foodCostHT=supplierTotals['Food']||0;
+  const caNourritureHT=s?s.categories.find(c=>c.nom==='Nourriture').montant/1.10:0;
+  const foodCostPct=caNourritureHT>0?Math.round(foodCostHT/caNourritureHT*1000)/10:0;
+
+  const barCostHT=supplierTotals['Bar']||0;
+  const caBoissonsTTC=s?s.categories.find(c=>c.nom==='Boissons Alcoolisées').montant:0;
+  const caBoissonAlcHT=caBoissonsTTC/1.20;
+  const msCost=PayrollService.getMasseSalarialeActive();
+  const primeCostPct=caSaison>0?Math.round((foodCostHT+barCostHT+msCost)/caSaison*1000)/10:0;
+
+  const cogsTotal=foodCostHT+barCostHT;
+  const ebitdaEst=caSaison-cogsTotal-msCost;
+
+  // Row 2: Ticket Moyen, Couverts, Staff Cost %, Google Rating
+  const tmoyenne=s&&s.couverts>0?Math.round(caSaison/s.couverts):0;
+  const couverts=s?s.couverts:0;
+  const staffCostPct=caSaison>0?Math.round(msCost/caSaison*1000)/10:0;
+  const gRating=googleRating?.rating||null;
+
   return(<div className="fin">
-    {!hasTrivec&&!isSeason&&<div style={{background:'var(--bleu-light)',border:'1px solid var(--bleu)',borderRadius:10,padding:16,marginBottom:20,fontSize:13,color:'var(--bleu)'}}>
-      <strong>Bienvenue sur le tableau de bord IMA.</strong> Les données s'afficheront automatiquement lorsque vos services seront connectés. Rendez-vous dans <strong>Administration</strong> pour configurer Pennylane, Trivec et SevenRooms.
+    {!hasSeason&&<div style={{background:'var(--bleu-light)',border:'1px solid var(--bleu)',borderRadius:10,padding:16,marginBottom:20,fontSize:13,color:'var(--bleu)'}}>
+      <strong>Tableau de bord saison 2025-2026.</strong> Les données Trivec, Pennylane et Google Places apparaissent ici lorsque configurées dans <strong>Administration</strong>.
     </div>}
+
+    {/* Row 1: CA, Food Cost %, Prime Cost %, EBITDA */}
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">CA {isSeason?'Saison':'('+pCtx.dates.label+')'}</div><div className="kpi-val" style={{color:caDisplay>0?'var(--gris-900)':'var(--gris-300)'}}>{caDisplay>0?caDisplay.toLocaleString('fr-FR',{maximumFractionDigits:0})+'€':'—'}</div><div className={`kpi-chg ${caDisplay>0?'pos':'neu'}`}>{isSeason?'Rapport Trivec':tp.days>0?`${tp.days} jour(s)`:'Pas de données Trivec'}</div></div>
-      <div className="kpi"><div className="kpi-label">Couverts</div><div className="kpi-val" style={{color:couvertsDisplay>0?'var(--gris-900)':'var(--gris-300)'}}>{couvertsDisplay>0?couvertsDisplay.toLocaleString('fr-FR'):'—'}</div><div className={`kpi-chg ${couvertsDisplay>0?'pos':'neu'}`}>{couvertsDisplay>0?`TM: ${tmDisplay}€`:'En attente Trivec'}</div></div>
-      <div className="kpi"><div className="kpi-label">Effectif actif</div><div className="kpi-val">{PayrollService.getEffectifActif()}</div><div className="kpi-chg neu">{tipsEligible.length} bénéf. tips</div></div>
-      <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:caDisplay>0?(staffPct>30?'var(--rouge)':staffPct>25?'var(--orange)':'var(--vert)'):'var(--gris-300)'}}>{caDisplay>0?staffPct+'%':'—'}</div><div className="kpi-chg neu">{caDisplay>0?`MS: ${eur(msDisplay)} / CA: ${eur(caDisplay)}`:'CA non disponible'}</div></div>
+      <div className="kpi">
+        <div className="kpi-label">CA Saison</div>
+        <div className="kpi-val">{eur(caSaison)}</div>
+        <div className={`kpi-chg ${caEcart>=0?'pos':'neg'}`}>{caEcart>=0?'+':''}{caEcart}% vs BP</div>
+      </div>
+      <div className="kpi">
+        <div className="kpi-label">Food Cost %</div>
+        <div className="kpi-val" style={{color:foodCostPct>35?'var(--rouge)':foodCostPct>30?'var(--orange)':'var(--vert)'}}>{foodCostPct}%</div>
+        <div className="text-muted" style={{marginTop:6}}>{eur(foodCostHT)} / {eur(caNourritureHT)}</div>
+      </div>
+      <div className="kpi">
+        <div className="kpi-label">Prime Cost %</div>
+        <div className="kpi-val" style={{color:primeCostPct>60?'var(--rouge)':primeCostPct>55?'var(--orange)':'var(--vert)'}}>{primeCostPct}%</div>
+        <div className="text-muted" style={{marginTop:6}}>Food+Bar+Staff</div>
+      </div>
+      <div className="kpi">
+        <div className="kpi-label">EBITDA Estimé</div>
+        <div className="kpi-val" style={{color:ebitdaEst>0?'var(--vert)':'var(--rouge)'}}>{eur(ebitdaEst)}</div>
+        <div className={`kpi-chg ${ebitdaEst>0?'pos':'neg'}`}>{(ebitdaEst/caSaison*100).toFixed(1)}% de marge</div>
+      </div>
     </div>
+
+    {/* Row 2: Ticket Moyen, Couverts, Staff Cost %, Google Rating */}
+    <div className="kpi-g">
+      <div className="kpi">
+        <div className="kpi-label">Ticket Moyen</div>
+        <div className="kpi-val">{tmoyenne}€</div>
+        <div className="text-muted" style={{marginTop:6}}>{eur(caSaison)} / {couverts} couverts</div>
+      </div>
+      <div className="kpi">
+        <div className="kpi-label">Couverts Saison</div>
+        <div className="kpi-val">{fmt(couverts)}</div>
+        <div className="text-muted" style={{marginTop:6}}>Dec/Jan/Fév</div>
+      </div>
+      <div className="kpi">
+        <div className="kpi-label">Staff Cost %</div>
+        <div className="kpi-val" style={{color:staffCostPct>30?'var(--rouge)':staffCostPct>25?'var(--orange)':'var(--vert)'}}>{staffCostPct}%</div>
+        <div className="text-muted" style={{marginTop:6}}>{eur(msCost)} / {eur(caSaison)}</div>
+      </div>
+      <div className="kpi">
+        <div className="kpi-label">Note Google</div>
+        <div className="kpi-val">{googleLoading?<span className="spinner" style={{display:'inline-block',marginRight:6}}/>:gRating?gRating.toFixed(1):GooglePlacesService.isConfigured()?'—':'—'}</div>
+        <div className="text-muted" style={{marginTop:6}}>{gRating?`(${googleRating.totalReviews||0} avis)`:'Non configuré'}</div>
+      </div>
+    </div>
+
+    {/* Row 3: CA mensuel vs BP + Répartition des coûts */}
     <div className="cg">
       <div className="card">
-        <div className="card-h"><div><div className="card-t">Évolution du CA</div><div className="card-st">Données Trivec</div></div>{hasTrivec?<span className="badge b-ok">Connecté</span>:<span className="badge b-warn">Non connecté</span>}</div>
+        <div className="card-h"><div><div className="card-t">CA mensuel vs BP</div><div className="card-st">Comparaison par mois</div></div></div>
         <div className="card-b">
-          {hasTrivec?(()=>{
-            const days=TrivecService.getAllDays();
-            const sorted=Object.entries(days).sort((a,b)=>{const pa=a[0].split('/').reverse().join('');const pb=b[0].split('/').reverse().join('');return pa.localeCompare(pb);});
-            const maxCA=Math.max(...sorted.map(([,d])=>d.caTotal||0),1);
-            return<div>
-              <div style={{display:'flex',gap:2,alignItems:'flex-end',height:120,marginBottom:12}}>
-                {sorted.map(([date,d])=>{
-                  const h=Math.max(4,((d.caTotal||0)/maxCA)*100);
-                  return<div key={date} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2}} title={`${date}: ${(d.caTotal||0).toLocaleString('fr-FR')}€`}>
-                    <div style={{width:'100%',maxWidth:32,height:h+'%',background:'var(--bordeaux)',borderRadius:'4px 4px 0 0',minHeight:4,transition:'height .3s'}}/>
-                    <div style={{fontSize:8,color:'var(--gris-400)',transform:'rotate(-45deg)',transformOrigin:'center',whiteSpace:'nowrap'}}>{date.substring(0,5)}</div>
-                  </div>;
-                })}
-              </div>
-              <div style={{display:'grid',gridTemplateColumns:isSeason?'repeat(4,1fr)':'repeat(3,1fr)',gap:10,fontSize:11,textAlign:'center',borderTop:'1px solid var(--gris-100)',paddingTop:10}}>
-                {isSeason?TRIVEC_SEASON.categories.map(function(c){return(
-                  <div key={c.nom}><div style={{color:'var(--gris-500)'}}>{c.nom}</div><div style={{fontWeight:700}}>{c.montant.toLocaleString('fr-FR')}€</div><div style={{color:'var(--gris-400)',fontSize:10}}>{c.pct}%</div></div>
-                );}):<>
-                <div><div style={{color:'var(--gris-500)'}}>Restaurant</div><div style={{fontWeight:700}}>{(tp.caResto||0).toLocaleString('fr-FR')}€</div></div>
-                <div><div style={{color:'var(--gris-500)'}}>Club</div><div style={{fontWeight:700}}>{(tp.caClub||0).toLocaleString('fr-FR')}€</div></div>
-                <div><div style={{color:'var(--gris-500)'}}>Bar</div><div style={{fontWeight:700}}>{(tp.caBar||0).toLocaleString('fr-FR')}€</div></div>
-                </>}
-              </div>
-            </div>;
-          })():<div style={{padding:40,textAlign:'center',color:'var(--gris-400)'}}>
-            <div style={{fontSize:32,marginBottom:8}}>📊</div>
-            <div style={{fontWeight:500}}>Importez les fichiers Trivec dans Administration</div>
-            <div style={{fontSize:11,marginTop:4}}>Le graphique d'évolution du CA s'affichera automatiquement</div>
-          </div>}
+          <div style={{display:'flex',alignItems:'flex-end',height:160,gap:12,justifyContent:'space-around'}}>
+            {s&&s.monthly.map((m,i)=>{
+              const monthName=['Dec','Jan','Fév'][i];
+              const realCA=m.ventesNet;
+              const bpMonth=bp.monthly[i];
+              const bpCA=bpMonth?bpMonth.caTotal:0;
+              const maxCA=Math.max(realCA,bpCA,1);
+              const realH=(realCA/maxCA)*140;
+              const bpH=(bpCA/maxCA)*140;
+              return<div key={monthName} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+                <div style={{display:'flex',alignItems:'flex-end',gap:2,height:140}}>
+                  <div style={{width:16,height:bpH+'px',background:'var(--gris-200)',borderRadius:'2px 2px 0 0'}} title={`BP: ${eur(bpCA)}`}/>
+                  <div style={{width:16,height:realH+'px',background:'var(--bordeaux)',borderRadius:'2px 2px 0 0'}} title={`Réel: ${eur(realCA)}`}/>
+                </div>
+                <div style={{fontSize:11,fontWeight:500,color:'var(--gris-700)'}}>{monthName}</div>
+              </div>;
+            })}
+          </div>
+          <div style={{display:'flex',gap:16,fontSize:11,marginTop:12,paddingTop:12,borderTop:'1px solid var(--gris-100)'}}>
+            <div><div style={{width:10,height:10,background:'var(--gris-200)',borderRadius:2,display:'inline-block',marginRight:4}}/>BP</div>
+            <div><div style={{width:10,height:10,background:'var(--bordeaux)',borderRadius:2,display:'inline-block',marginRight:4}}/>Réel</div>
+          </div>
         </div>
       </div>
+
       <div className="card">
-        <div className="card-h"><div><div className="card-t">Réservations du jour</div><div className="card-st">Données SevenRooms</div></div><span className="badge b-warn">Non connecté</span></div>
-        <div className="card-b" style={{padding:40,textAlign:'center',color:'var(--gris-400)'}}>
-          <div style={{fontSize:32,marginBottom:8}}>📋</div>
-          <div style={{fontWeight:500}}>Connectez SevenRooms pour voir les réservations</div>
-          <div style={{fontSize:11,marginTop:4}}>Les réservations du jour apparaîtront ici</div>
-        </div>
-      </div>
-      <div className="card">
-        <div className="card-h"><div><div className="card-t">Coûts Pennylane</div><div className="card-st">Factures fournisseurs</div></div>{PennylaneService.getToken()?<span className="badge b-ok">Connecté</span>:<span className="badge b-warn">Non connecté</span>}</div>
-        <div className="card-b" style={{padding:40,textAlign:'center',color:'var(--gris-400)'}}>
-          {PennylaneService.getToken()?
-            <div><div style={{fontWeight:500,color:'var(--vert)'}}>Pennylane connecté</div><div style={{fontSize:11,marginTop:4}}>Consultez Finance & P&L et Food & Bar Cost pour les détails</div></div>:
-            <div><div style={{fontSize:32,marginBottom:8}}>💰</div><div style={{fontWeight:500}}>Configurez Pennylane dans Administration</div></div>
-          }
-        </div>
-      </div>
-      <div className="card">
-        <div className="card-h"><div><div className="card-t">Équipe</div></div></div>
+        <div className="card-h"><div><div className="card-t">Répartition des coûts</div><div className="card-st">% du CA total</div></div></div>
         <div className="card-b">
-          {team.length>0?<div>
-            <div style={{display:'flex',justifyContent:'space-between',marginBottom:8,fontSize:12,color:'var(--gris-500)'}}>
-              <span>Salle: {team.filter(e=>e.section==='salle').length}</span>
-              <span>Cuisine: {team.filter(e=>e.section==='cuisine').length}</span>
-              <span>Tips: {tipsEligible.length}</span>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:24}}>
+            <div style={{flex:1,textAlign:'center'}}>
+              <div style={{width:120,height:120,background:`linear-gradient(90deg, var(--rouge) ${foodCostPct}%, var(--gris-200) ${foodCostPct}%)`,borderRadius:60,margin:'0 auto',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--blanc)',fontSize:14,fontWeight:700}}>
+                {foodCostPct}%
+              </div>
+              <div style={{fontSize:11,color:'var(--gris-500)',marginTop:8,fontWeight:500}}>Food</div>
             </div>
-            {team.slice(0,5).map(e=>(<div key={e.id} style={{padding:'6px 0',borderBottom:'1px solid var(--gris-100)',display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:12}}>
-              <span style={{fontWeight:500}}>{e.nom}</span>
-              <span className="badge b-ima" style={{fontSize:9}}>{e.poste}</span>
-            </div>))}
-            {team.length>5&&<div style={{textAlign:'center',fontSize:11,color:'var(--gris-400)',marginTop:8}}>+{team.length-5} autres</div>}
-          </div>:<div style={{textAlign:'center',padding:20,color:'var(--gris-400)',fontSize:12}}>Ajoutez votre équipe dans Staff & RH</div>}
+            <div style={{flex:1,textAlign:'center'}}>
+              <div style={{width:120,height:120,background:`linear-gradient(90deg, var(--orange) ${(barCostHT/caSaison*100).toFixed(1)}%, var(--gris-200) ${(barCostHT/caSaison*100).toFixed(1)}%)`,borderRadius:60,margin:'0 auto',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--blanc)',fontSize:14,fontWeight:700}}>
+                {(barCostHT/caSaison*100).toFixed(1)}%
+              </div>
+              <div style={{fontSize:11,color:'var(--gris-500)',marginTop:8,fontWeight:500}}>Bar</div>
+            </div>
+            <div style={{flex:1,textAlign:'center'}}>
+              <div style={{width:120,height:120,background:`linear-gradient(90deg, var(--bordeaux) ${staffCostPct}%, var(--gris-200) ${staffCostPct}%)`,borderRadius:60,margin:'0 auto',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--blanc)',fontSize:14,fontWeight:700}}>
+                {staffCostPct}%
+              </div>
+              <div style={{fontSize:11,color:'var(--gris-500)',marginTop:8,fontWeight:500}}>Staff</div>
+            </div>
+            <div style={{flex:1,textAlign:'center'}}>
+              <div style={{width:120,height:120,background:`linear-gradient(90deg, var(--vert) ${(ebitdaEst/caSaison*100).toFixed(1)}%, var(--gris-200) ${(ebitdaEst/caSaison*100).toFixed(1)}%)`,borderRadius:60,margin:'0 auto',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--blanc)',fontSize:14,fontWeight:700}}>
+                {(ebitdaEst/caSaison*100).toFixed(1)}%
+              </div>
+              <div style={{fontSize:11,color:'var(--gris-500)',marginTop:8,fontWeight:500}}>Marge</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Row 4: Synthèse financière */}
+    <div className="card fw">
+      <div className="card-h"><div><div className="card-t">Synthèse financière</div><div className="card-st">Saison vs Business Plan</div></div></div>
+      <div className="card-b">
+        <div className="tbl">
+          <table>
+            <thead>
+              <tr>
+                <th>Indicateur</th>
+                <th style={{textAlign:'right'}}>BP</th>
+                <th style={{textAlign:'right'}}>Réel</th>
+                <th style={{textAlign:'right'}}>Écart</th>
+                <th style={{textAlign:'center'}}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>CA Total</td>
+                <td style={{textAlign:'right'}}>{eur(bp.annual.caTotal)}</td>
+                <td style={{textAlign:'right'}}>{eur(caSaison)}</td>
+                <td style={{textAlign:'right',fontWeight:600}}>{caEcart>=0?'+':''}{caEcart}%</td>
+                <td style={{textAlign:'center'}}><span className={`badge ${caSaison>=bp.annual.caTotal*0.95?'b-ok':'b-warn'}`}>{caSaison>=bp.annual.caTotal?'OK':'Dessous'}</span></td>
+              </tr>
+              <tr>
+                <td>COGS Total</td>
+                <td style={{textAlign:'right'}}>{eur(Math.abs(bp.annual.cogsTotal))}</td>
+                <td style={{textAlign:'right'}}>{eur(cogsTotal)}</td>
+                <td style={{textAlign:'right',fontWeight:600}}>{cogsTotal<=Math.abs(bp.annual.cogsTotal)?'✓':'+'}X</td>
+                <td style={{textAlign:'center'}}><span className={`badge ${cogsTotal<=Math.abs(bp.annual.cogsTotal)?'b-ok':'b-warn'}`}>{cogsTotal<=Math.abs(bp.annual.cogsTotal)?'OK':'Dépasse'}</span></td>
+              </tr>
+              <tr>
+                <td>Staff</td>
+                <td style={{textAlign:'right'}}>{eur(Math.abs(bp.annual.staffCosts))}</td>
+                <td style={{textAlign:'right'}}>{eur(msCost)}</td>
+                <td style={{textAlign:'right',fontWeight:600}}>{msCost<=Math.abs(bp.annual.staffCosts)?'✓':'+'}X</td>
+                <td style={{textAlign:'center'}}><span className={`badge ${msCost<=Math.abs(bp.annual.staffCosts)?'b-ok':'b-warn'}`}>{msCost<=Math.abs(bp.annual.staffCosts)?'OK':'Dépasse'}</span></td>
+              </tr>
+              <tr>
+                <td style={{fontWeight:600}}>EBITDA</td>
+                <td style={{textAlign:'right',fontWeight:600}}>{eur(bp.annual.ebitda)}</td>
+                <td style={{textAlign:'right',fontWeight:600,color:ebitdaEst>=bp.annual.ebitda*0.85?'var(--vert)':'var(--rouge)'}}>{eur(ebitdaEst)}</td>
+                <td style={{textAlign:'right',fontWeight:600}}>{Math.round((ebitdaEst-bp.annual.ebitda)/bp.annual.ebitda*1000)/10}%</td>
+                <td style={{textAlign:'center'}}><span className={`badge ${ebitdaEst>=bp.annual.ebitda*0.85?'b-ok':'b-warn'}`}>{ebitdaEst>=bp.annual.ebitda*0.85?'OK':'Attention'}</span></td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -6938,33 +7077,44 @@ function AppInner(){
   const handleLogout=()=>{UserManager.logout();setCurrentUser(null);};
 
   const nav=[
-    {sec:'Pilotage',items:[
+    {sec:'Vue d\'ensemble',items:[
       {id:'dashboard',l:'Dashboard',ic:<I.Dash/>},
+      {id:'alertes',l:'Alertes & Health',ic:<I.Alert/>},
+      {id:'reputation',l:'Réputation',ic:<I.Reput/>},
+    ]},
+    {sec:'Finance',items:[
       {id:'finance',l:'Finance & P&L',ic:<I.Fin/>},
-      {id:'costs',l:'Food & Bar Cost',ic:<I.Cost/>},
-      {id:'staff',l:'Staff & RH',ic:<I.Staff/>},
       {id:'tresorerie',l:'Trésorerie',ic:<I.Treso/>},
-      {id:'productivite',l:'Productivité Staff',ic:<I.Prod/>},
-      {id:'menueng',l:'Menu Engineering',ic:<I.Menu/>},
-      {id:'alertes',l:'Alertes',ic:<I.Alert/>},
-      {id:'comparatif',l:'Comparatif',ic:<I.Compare/>},
       {id:'comparatif-bp',l:'BP vs Réel',ic:<I.Compare/>},
       {id:'forecast',l:'Prévisionnel',ic:<I.Forecast/>},
+      {id:'comparatif',l:'Comparatif',ic:<I.Compare/>},
     ]},
-    {sec:'Opérations',items:[
+    {sec:'Coûts & Achats',items:[
+      {id:'costs',l:'Food & Bar Cost',ic:<I.Cost/>},
+      {id:'menueng',l:'Menu Engineering',ic:<I.Menu/>},
       {id:'stocks',l:'Stocks',ic:<I.Stock/>},
       {id:'inventaire',l:'Inventaire & Écarts',ic:<I.Stock/>},
-      {id:'crm',l:'CRM & Réservations',ic:<I.CRM/>},
+    ]},
+    {sec:'Équipe & Opérations',items:[
+      {id:'staff',l:'Staff & RH',ic:<I.Staff/>},
+      {id:'productivite',l:'Productivité',ic:<I.Prod/>},
+      {id:'tips',l:'Tips & Pourboires',ic:<I.Tips/>},
       {id:'pos',l:'Caisses (Trivec)',ic:<I.POS/>},
       {id:'caisse',l:'Clôture Caisse',ic:<I.Cash/>},
-      {id:'tips',l:'Tips & Pourboires',ic:<I.Tips/>},
+      {id:'crm',l:'CRM & Réservations',ic:<I.CRM/>},
       {id:'evenements',l:'Événements',ic:<I.Event/>},
-      {id:'reputation',l:'Réputation',ic:<I.Reput/>},
     ]},
     {sec:'Système',items:[
       {id:'settings',l:'Administration',ic:<I.Gear/>},
     ]},
   ];
+
+  // Accordion state — find which section contains the active page and open it
+  const getActiveSec=()=>{const s=nav.find(n=>n.items.some(it=>it.id===page));return s?s.sec:'Vue d\'ensemble';};
+  const[openSecs,setOpenSecs]=useState(()=>{const a=getActiveSec();return{[a]:true};});
+  const toggleSec=(sec)=>setOpenSecs(prev=>({...prev,[sec]:!prev[sec]}));
+  // Auto-open section when page changes
+  useEffect(()=>{const a=getActiveSec();if(!openSecs[a])setOpenSecs(prev=>({...prev,[a]:true}));},[page]);
 
   const titles={dashboard:'Dashboard',finance:'Finance & P&L',costs:'Food & Bar Cost',staff:'Staff & RH',tresorerie:'Trésorerie',productivite:'Productivité Staff',menueng:'Menu Engineering',alertes:'Alertes',comparatif:'Comparatif','comparatif-bp':'BP vs Réel',forecast:'Prévisionnel',stocks:'Stocks & Inventaire',inventaire:'Inventaire & Écarts',crm:'CRM & Réservations',reputation:'Réputation',pos:'Caisses (Trivec)',caisse:'Clôture de Caisse',tips:'Tips & Pourboires',evenements:'Événements & Privatisations',settings:'Administration'};
 
@@ -6983,16 +7133,25 @@ function AppInner(){
     <div className="app">
       {sidebarOpen&&<div className="sidebar-overlay" onClick={()=>setSidebarOpen(false)}/>}
       <aside className={`sidebar${sidebarOpen?' open':''}`}>
-        <div className="sidebar-logo"><h1>IMa</h1><span>Tour de contrôle</span></div>
+        <div className="sidebar-logo">
+          <svg width="120" height="48" viewBox="95 185 415 175" xmlns="http://www.w3.org/2000/svg">
+            <path fill="#FFFFFF" d="M482.47,342.79c-10.17,5.61-19.64-0.35-19.64-11.93V250.9c-1.4-0.35-2.11-0.35-3.16,0 c-5.96,2.81-12.98,24.9-14.03,31.92c-1.4,8.77-0.35,11.57-10.17,30.86c-7.36,14.03-15.78,21.04-23.5,24.55 c-18.59,8.77-45.59-1.4-46.65-22.45c-0.7-17.19,13.68-33.32,34.02-41.03c12.28-4.91,23.15-9.12,35.78-17.19 c15.08-9.12,29.46-30.51,22.45-47c-7.02-15.43-29.46-20.34-45.24-20.34c-27.71,0-54.01,21.04-56.12,36.48 c0.35,5.96,5.26,8.42,10.17,8.07c5.61,0,11.93-3.51,13.33-8.42c5.26-18.59,15.78-28.41,32.97-28.41 c12.27,0.35,24.2,9.82,29.11,21.74c4.56,10.88-0.35,24.9-13.68,33.32c-5.61,3.51-13.68,7.72-21.74,10.52 c-50.86,17.54-63.48,42.09-59.62,61.38c3.16,16.83,19.99,25.6,41.74,25.95c39.63,0,50.86-28.06,56.12-40.33 c0,2.81,0.35,23.85,1.05,26.31c2.45,9.47,9.12,14.03,21.74,14.38c7.72,0,15.43-1.76,17.54-4.21L482.47,342.79z"/>
+            <path fill="#FFFFFF" d="M110.35,194.63c4.55,0,7.9,0.46,10.07,1.38c2.16,0.92,3.78,2.82,4.84,5.72c1.06,2.9,1.6,7.35,1.6,13.37v112.1 c0,6.01-0.53,10.47-1.6,13.37c-1.06,2.9-2.68,4.8-4.84,5.72c-2.16,0.92-5.52,1.38-10.07,1.38v2.09h49.28v-2.09 c-4.55,0-7.88-0.46-10.01-1.38c-2.13-0.92-3.72-2.82-4.79-5.72c-1.06-2.9-1.6-7.35-1.6-13.37v-112.1c0-6.01,0.53-10.47,1.6-13.37 c1.06-2.9,2.66-4.8,4.79-5.72c2.13-0.92,5.46-1.38,10.01-1.38v-2.09h-49.28V194.63z"/>
+            <path fill="#FFFFFF" d="M304.88,192.76l-0.61-0.22l-45.98,126.08c-3.19-5.8-6.61-12.84-10.26-21.18c-4-9.13-6.95-16.15-8.86-21.07 c-1.91-4.91-4.77-12.47-8.58-22.66c-2.42-6.53-4.77-12.39-7.04-17.6c-2.27-5.21-4.44-9.83-6.49-13.86 c-2.05-4.03-4.2-7.55-6.44-10.56c-2.24-3.01-4.29-5.57-6.16-7.7c-1.87-2.13-4.02-3.91-6.44-5.34c-2.42-1.43-4.58-2.55-6.49-3.36 c-1.91-0.81-4.25-1.41-7.04-1.82c-2.79-0.4-5.28-0.66-7.48-0.77c-2.2-0.11-4.99-0.17-8.36-0.17v2.09c5.72,0,10.36,0.72,13.92,2.15 c2.53,1.02,4.88,2.61,7.05,4.76v137.9c-1.16,2.06-2.68,3.65-4.58,4.75c-2.35,1.36-4.77,2.27-7.26,2.75 c-2.49,0.48-5.54,0.72-9.13,0.72v2.09h49.28v-2.09c-3.59,0-6.64-0.24-9.13-0.72c-2.49-0.48-4.93-1.39-7.32-2.75 c-1.97-1.12-3.53-2.75-4.7-4.86V211.6c0.02,0.05,0.05,0.09,0.08,0.13c0.84,1.58,1.76,3.48,2.75,5.72c0.99,2.24,1.87,4.24,2.64,6 c0.77,1.76,1.82,4.33,3.14,7.7c1.32,3.37,2.37,6.05,3.14,8.03c0.77,1.98,2.02,5.26,3.74,9.85c1.72,4.58,3.06,8.12,4.02,10.62 c3.45,9.02,6.4,16.59,8.86,22.72c2.46,6.12,5.12,12.39,7.98,18.81c2.86,6.42,5.45,11.66,7.76,15.73c2.31,4.07,4.88,8.12,7.7,12.16 c2.82,4.03,5.59,7.19,8.31,9.46c2.71,2.27,5.74,4.35,9.08,6.22c3.34,1.87,6.84,3.17,10.51,3.91c3.67,0.73,7.7,1.1,12.1,1.1h49.28 v-2.09c-4.55,0-7.88-0.46-10.01-1.38c-2.13-0.92-3.72-2.82-4.79-5.72c-1.06-2.9-1.6-7.35-1.6-13.37v-112.1 c0-6.01,0.53-10.47,1.6-13.37c1.06-2.9,2.66-4.8,4.79-5.72c2.13-0.92,5.46-1.38,10.01-1.38v-2.09h-32.89L304.88,192.76z M303.36,340.56c-1.06,2.9-2.66,4.8-4.79,5.72c-2.13,0.92-5.43,1.38-9.9,1.38c-8.12,0-16.67-7.05-25.64-21.11l41.93-114.97v115.62 C304.96,333.2,304.43,337.66,303.36,340.56z"/>
+          </svg>
+          <span>Dashboard</span>
+        </div>
         <nav className="sidebar-nav">
           {nav.map(s=>(
             <div className="nav-sec" key={s.sec}>
-              <div className="nav-sec-title">{s.sec}</div>
-              {s.items.map(it=>(
-                <div key={it.id} className={`nav-item ${page===it.id?'active':''}`} onClick={()=>{setPage(it.id);setSidebarOpen(false);}}>
-                  {it.ic}{it.l}
-                </div>
-              ))}
+              <div className="nav-sec-title" onClick={()=>toggleSec(s.sec)}>{s.sec}<span className={`chevron${openSecs[s.sec]?' open':''}`}>&#9654;</span></div>
+              <div className={`nav-sec-items${openSecs[s.sec]?' open':''}`}>
+                {s.items.map(it=>(
+                  <div key={it.id} className={`nav-item ${page===it.id?'active':''}`} onClick={()=>{setPage(it.id);setSidebarOpen(false);}}>
+                    {it.ic}{it.l}
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </nav>
