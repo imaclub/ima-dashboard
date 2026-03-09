@@ -438,10 +438,13 @@ const SupplierMap={
       let ht=parseFloat(inv.currency_amount_before_tax||0);
       const ttc=parseFloat(inv.amount||0);
       if(!ht&&ttc){
-        // Pas de HT dispo → convertir TTC en HT avec le bon taux TVA
-        if(cat==='Food')ht=Math.round(ttc/1.10*100)/100;
+        // Pas de HT dispo → convertir TTC en HT avec le bon taux TVA fournisseur
+        // Food (matières premières alimentaires) = TVA 5,5%
+        // Bar (boissons alcoolisées) = TVA 20%
+        // Autres = TVA 20% par défaut
+        if(cat==='Food')ht=Math.round(ttc/1.055*100)/100;
         else if(cat==='Bar')ht=Math.round(ttc/1.20*100)/100;
-        else ht=Math.round(ttc/1.20*100)/100; // défaut 20%
+        else ht=Math.round(ttc/1.20*100)/100;
       }
       totals[cat]=(totals[cat]||0)+ht;
     });
@@ -1781,8 +1784,13 @@ function Dashboard(){
       .catch(e=>{console.error('Google Places error:',e);setGoogleLoading(false);});
   },[]);
 
-  // Utiliser TOUTES les factures (Nov 1 → aujourd'hui) pour les KPIs coûts
-  const seasonInvoices=allInvoices;
+  // Filtrer les factures à la même période que le CA Trivec (déc→fév)
+  const seasonInvoices=useMemo(()=>{
+    if(!hasSeason)return[];
+    const from='2025-12-01';
+    const to='2026-02-28';
+    return allInvoices.filter(inv=>inv.date&&inv.date>=from&&inv.date<=to);
+  },[allInvoices,hasSeason]);
 
   // Calculate KPIs
   const s=hasSeason?TRIVEC_SEASON:null;
@@ -1792,7 +1800,7 @@ function Dashboard(){
   const caSaison=s?s.ventesNet:0;
   const caEcart=bp.annual.caTotal>0?Math.round((caSaison-bp.annual.caTotal)/bp.annual.caTotal*1000)/10:0;
 
-  const supplierTotals=useMemo(()=>SupplierMap.getTotals(allInvoices),[allInvoices]);
+  const supplierTotals=useMemo(()=>SupplierMap.getTotals(seasonInvoices),[seasonInvoices]);
   const foodCostHT=supplierTotals['Food']||0;
   const caNourritureHT=s?s.categories.find(c=>c.nom==='Nourriture').montant/1.10:0;
   const foodCostPct=caNourritureHT>0?Math.round(foodCostHT/caNourritureHT*1000)/10:0;
@@ -2001,8 +2009,12 @@ function Finance(){
     }
   },[]); */
 
-  // Utiliser TOUTES les factures (Nov 1 → aujourd'hui) pour le P&L
-  const totals=useMemo(()=>SupplierMap.getTotals(allInvoices),[allInvoices]);
+  // Filtrer les factures à la période saison (déc→fév, même période que CA Trivec)
+  const _SF=typeof TRIVEC_SEASON!=='undefined'?TRIVEC_SEASON:null;
+  const _sfFrom=_SF?_SF.periode.from.split('/').reverse().join('-'):'2025-12-01';
+  const _sfTo=_SF?_SF.periode.to.split('/').reverse().join('-'):'2026-02-28';
+  const seasonInvFin=useMemo(()=>allInvoices.filter(function(inv){return inv.date&&inv.date>=_sfFrom&&inv.date<=_sfTo;}),[allInvoices,_sfFrom,_sfTo]);
+  const totals=useMemo(()=>SupplierMap.getTotals(seasonInvFin),[seasonInvFin]);
   const groupTotals=useMemo(()=>SupplierMap.getGroupTotals(totals),[totals]);
   const totalCosts=Object.values(totals).reduce((s,v)=>s+v,0);
 
@@ -2322,11 +2334,16 @@ function Costs(){
   const isSeason=tp._fromSeason||false;
   const realStaffMS=isSeason?pCtx.msActive:pCtx.msProrata;
   const _S=typeof TRIVEC_SEASON!=='undefined'?TRIVEC_SEASON:null;
-  // Utiliser TOUTES les factures (Nov 1 → aujourd'hui, déjà filtré dans InvoiceProvider)
-  // Alias pour compatibilité avec le reste du code
-  const seasonInvoices=allInvoices;
-  const categorized=useMemo(()=>SupplierMap.categorize(allInvoices),[allInvoices,mapVersion]);
-  const totals=useMemo(()=>SupplierMap.getTotals(allInvoices),[allInvoices,mapVersion]);
+  // Filtrer les factures à la MÊME période que le CA Trivec (déc→fév)
+  // pour que les ratios Food Cost / Bar Cost soient cohérents
+  const seasonDateFrom=_S?_S.periode.from.split('/').reverse().join('-'):'2025-12-01';
+  const seasonDateTo=_S?_S.periode.to.split('/').reverse().join('-'):'2026-02-28';
+  const seasonInvoices=useMemo(()=>allInvoices.filter(function(inv){
+    return inv.date&&inv.date>=seasonDateFrom&&inv.date<=seasonDateTo;
+  }),[allInvoices,seasonDateFrom,seasonDateTo]);
+  // Tous les calculs basés sur seasonInvoices (même période que CA)
+  const categorized=useMemo(()=>SupplierMap.categorize(seasonInvoices),[seasonInvoices,mapVersion]);
+  const totals=useMemo(()=>SupplierMap.getTotals(seasonInvoices),[seasonInvoices,mapVersion]);
   const groupTotals=useMemo(()=>SupplierMap.getGroupTotals(totals),[totals]);
   const totalAll=Object.values(totals).reduce((s,v)=>s+v,0);
   const foodTotal=totals['Food']||0;
@@ -2426,9 +2443,9 @@ function Costs(){
 
     {/* Détail achats */}
     <div className="kpi-g" style={{marginBottom:0}}>
-      <div className="kpi"><div className="kpi-label">Achats Food</div><div className="kpi-val" style={{color:'#059669'}}>{eur(foodTotal)}</div><div className="kpi-chg pos">{allInvoices.filter(function(inv){return SupplierMap.getCategory(String(inv.supplier&&inv.supplier.id||''))==='Food';}).length} factures</div></div>
-      <div className="kpi"><div className="kpi-label">Achats Bar</div><div className="kpi-val" style={{color:'#581527'}}>{eur(barTotal)}</div><div className="kpi-chg pos">{allInvoices.filter(function(inv){return SupplierMap.getCategory(String(inv.supplier&&inv.supplier.id||''))==='Bar';}).length} factures</div></div>
-      <div className="kpi"><div className="kpi-label">Total charges</div><div className="kpi-val">{eur(totalAll)}</div><div className="kpi-chg neu">{allInvoices.length} factures (nov→auj.)</div></div>
+      <div className="kpi"><div className="kpi-label">Achats Food (déc-fév)</div><div className="kpi-val" style={{color:'#059669'}}>{eur(foodTotal)}</div><div className="kpi-chg pos">{seasonInvoices.filter(function(inv){return SupplierMap.getCategory(String(inv.supplier&&inv.supplier.id||''))==='Food';}).length} factures</div></div>
+      <div className="kpi"><div className="kpi-label">Achats Bar (déc-fév)</div><div className="kpi-val" style={{color:'#581527'}}>{eur(barTotal)}</div><div className="kpi-chg pos">{seasonInvoices.filter(function(inv){return SupplierMap.getCategory(String(inv.supplier&&inv.supplier.id||''))==='Bar';}).length} factures</div></div>
+      <div className="kpi"><div className="kpi-label">Total charges</div><div className="kpi-val">{eur(totalAll)}</div><div className="kpi-chg neu">{seasonInvoices.length} factures déc-fév</div></div>
       <div className="kpi"><div className="kpi-label">Non classé</div><div className="kpi-val" style={{color:(totals['Non classé']||0)>0?'var(--rouge)':'var(--vert)'}}>{eur(totals['Non classé']||0)}</div>
         <div className="kpi-chg neg">{supplierGroups.filter(s=>s.cat==='Non classé').length} fournisseurs</div></div>
     </div>
