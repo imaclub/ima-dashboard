@@ -1599,12 +1599,66 @@ const PennylaneService={
     return allInvoices;
   },
 
+  // Auto-classification par mots-clés dans le nom fournisseur
+  _autoClassifyRules:[
+    // Food — fournisseurs alimentaires
+    {re:/cot[eé]\s*frais|cote\s*frais|boucherie|viande|poissonn|mar[eé]e|primeur|l[eé]gume|fruit|boulang|p[aâ]tiss|traiteur|mamafiore|fromag|lait|cr[eè]me|epicerie|[eé]picerie|volaille|caf[eé]|torr[eé]f|chocolat|glace|huile|olive|pasta|riz|farine|levure|condiment|aromat|herbes|thé|tisane|jus\s*de|nectar|sirop\s*(?:grenadine|menthe|orgeat)|eau\s*min[eé]ral/i,cat:'Food'},
+    // Bar — boissons alcoolisées & fournisseurs bar
+    {re:/tresallet|pernod|ricard|diageo|bacardi|martini|campari|r[eé]my\s*cointreau|mo[eë]t|hennessy|roederer|krug|veuve\s*clicquot|laurent[\s-]*perrier|bollinger|taittinger|dom\s*p[eé]rignon|champagne|spiritueux|alcool|bi[eè]re|brasserie|distill|vigneron|viticult|domaine|ch[aâ]teau|cave|n[eé]gociant|vin\s|vins\s|wine|cocktail|aperitif|liqueur|cognac|armagnac|whisky|whiskey|vodka|gin\s|rhum|tequila|mezcal|absinthe|vermouth|porto|sherry|prosecco|cava|barman|sommel/i,cat:'Bar'},
+    // Hygiène & Entretien
+    {re:/hygi[eè]ne|nettoy|entretien|propret[eé]|d[eé]sinfect|d[eé]ratis|d[eé]sinsect|3d\s*services|clean|lavage|d[eé]tergent|savon|papier\s*toil|essuie|sac\s*poubelle|produit.*entretien|elis\s|initial\s|rentokil/i,cat:'Hygiène & Entretien'},
+    // Énergie & Fluides
+    {re:/edf|engie|total\s*[eé]nerg|gaz|[eé]lectricit|eau\s*(?:de\s*)?(?:paris|ville|suez|veolia)|chauffag|climatis|fioul|fuel/i,cat:'Énergie & Fluides'},
+    // Matériel & Équipement
+    {re:/mat[eé]riel|[eé]quipement|cuisine\s*pro|chr\s|metro\s|fournit|vaisselle|couvert|nappe|serviette|bougie|d[eé]co|meuble|chaise|table\s|luminaire|ampoule|[eé]clairag/i,cat:'Matériel & Équipement'},
+    // Travaux & Maintenance
+    {re:/travaux|maintenan|plomb|[eé]lectric|serrur|peintur|r[eé]par|ascenseur|climatisation|ventil|chauffag|install|r[eé]nov/i,cat:'Travaux & Maintenance'},
+    // Blanchisserie
+    {re:/blanchiss|pressing|linge|teintur|lav[eé]|buanderie|majordom/i,cat:'Blanchisserie'},
+    // Loyer & Charges
+    {re:/loyer|bail|foncier|copropri[eé]t[eé]|syndic|charges\s*locative|immobili|sci\s/i,cat:'Loyer & Charges'},
+    // Communication & Marketing
+    {re:/communic|market|publicit|agence|graphi|design|photo|vid[eé]o|r[eé]seau|social|instagram|facebook|google\s*ads|flyer|carte\s*visite|imprim|affich|signal[eé]tique|web|site\s*internet|seo|influenc/i,cat:'Communication & Marketing'},
+    // Administratif & Juridique
+    {re:/avocat|notaire|juridi|comptab|expert[\s-]*compta|audit|fiduciai|cabinet|conseil|consult|huissier|greffe|tribunal|urssaf|fisc|social\s*expert|paie\s|bulletin|silae|pennylane/i,cat:'Administratif & Juridique'},
+    // Transport & Véhicules
+    {re:/transport|v[eé]hicule|voiture|location\s*auto|carburant|parking|taxi|uber|vtc|livraison|coursier|chrono|colissimo|dhl|ups\s|fedex/i,cat:'Transport & Véhicules'},
+    // Assurances
+    {re:/assurance|mutuelle|pr[eé]voyance|axa|allianz|generali|maif|maaf|macif|groupama|mma\s/i,cat:'Assurances'},
+    // IT & Logiciels
+    {re:/logiciel|software|saas|informatique|ordinateur|caisse|tpe|terminal|trivec|lightspeed|zelty|l['']addition|sumup|izettle|stripe|payplug|ovh|amazon\s*web|google\s*cloud|microsoft|apple|adobe|office\s*365/i,cat:'IT & Logiciels'},
+    // Investissements
+    {re:/investiss|immobilis|amortiss|cr[eé]dit[\s-]*bail|leasing/i,cat:'Investissements'},
+  ],
+
   _discoverSuppliers(invoices){
     const map=SupplierMap.getAll();
+    let autoCount=0;
     invoices.forEach(inv=>{
       const sid=String(inv.supplier?.id||'');
-      if(sid&&!map[sid])SupplierMap.setCategory(sid,'Non classé');
+      if(!sid)return;
+      const existing=map[sid];
+      // Si déjà classé (et pas "Non classé"), on touche pas
+      if(existing&&existing!=='Non classé')return;
+      // Essayer l'auto-classification par nom
+      const name=(inv.supplier?.name||'').trim();
+      if(!name){
+        if(!existing)SupplierMap.setCategory(sid,'Non classé');
+        return;
+      }
+      let matched=false;
+      for(const rule of this._autoClassifyRules){
+        if(rule.re.test(name)){
+          SupplierMap.setCategory(sid,rule.cat);
+          console.log('[IMA] Auto-classé: "'+name+'" → '+rule.cat);
+          autoCount++;
+          matched=true;
+          break;
+        }
+      }
+      if(!matched&&!existing)SupplierMap.setCategory(sid,'Non classé');
     });
+    if(autoCount>0)console.log('%c[IMA] Auto-classification: '+autoCount+' fournisseurs classés automatiquement','color:purple;font-weight:bold');
   },
 
   async getSupplierInvoices(params={}){
@@ -2014,7 +2068,11 @@ function Dashboard(){
   const primeCostPct=caSaison>0?Math.round((foodCostHT+barCostHT+msCost)/caSaison*1000)/10:0;
 
   const cogsTotal=foodCostHT+barCostHT;
-  const ebitdaEst=caSaison-cogsTotal-msCost;
+  // OPEX = Charges d'Exploitation + Charges Générales (G&A) — tout sauf Prime Cost, Hors Exploitation et Non classé
+  const opexCats=['Hygiène & Entretien','Énergie & Fluides','Matériel & Équipement','Travaux & Maintenance','Blanchisserie',
+    'Loyer & Charges','Communication & Marketing','Administratif & Juridique','Transport & Véhicules','Assurances','IT & Logiciels','Divers'];
+  const opexTotal=opexCats.reduce((s,cat)=>s+(supplierTotals[cat]||0),0);
+  const ebitdaEst=caSaison-cogsTotal-msCost-opexTotal;
 
   // Row 2: Ticket Moyen (CA Nourriture / couverts), Couverts, Staff Cost %, Google Rating
   const caNourritureTTC_dash=s?s.categories.find(c=>c.nom==='Nourriture').montant:0;
@@ -2049,7 +2107,8 @@ function Dashboard(){
       <div className="kpi">
         <div className="kpi-label">EBITDA Estimé</div>
         <div className="kpi-val" style={{color:ebitdaEst>0?'var(--vert)':'var(--rouge)'}}>{eur(ebitdaEst)}</div>
-        <div className={`kpi-chg ${ebitdaEst>0?'pos':'neg'}`}>{(ebitdaEst/caSaison*100).toFixed(1)}% de marge</div>
+        <div className={`kpi-chg ${ebitdaEst>0?'pos':'neg'}`}>{caSaison>0?(ebitdaEst/caSaison*100).toFixed(1):0}% de marge</div>
+        {opexTotal>0&&<div style={{fontSize:9,color:'var(--gris-400)',marginTop:2}}>CA − COGS − Staff − Opex {eur(opexTotal)}</div>}
       </div>
     </div>
 
