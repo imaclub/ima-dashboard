@@ -3688,16 +3688,25 @@ function Stocks(){
   const[ventesCat,setVentesCat]=useState('Tous');
 
   // Full inventory with counted qty, theoretical stock, Trivec sales
+  // Version de l'inventaire codé en dur — incrémenter quand InventoryDataAll0103 change
+  const INVENTORY_VERSION=2; // v1=spirits+vins, v2=+food
   const[inventory,setInventory]=useState(()=>{
     try{
-      const saved=JSON.parse(localStorage.getItem('ima_inventory_v1')||'[]');
-      return saved.length>0?saved:InventoryDataAll0103;
+      const savedVer=parseInt(localStorage.getItem('ima_inventory_ver')||'0');
+      if(savedVer>=INVENTORY_VERSION){
+        const saved=JSON.parse(localStorage.getItem('ima_inventory_v1')||'[]');
+        if(saved.length>0)return saved;
+      }
+      // Version obsolète ou pas de données → utiliser les données fraîches
+      console.log('[IMA] Inventaire: reset localStorage (v'+savedVer+' → v'+INVENTORY_VERSION+', '+InventoryDataAll0103.length+' items)');
+      return InventoryDataAll0103;
     }catch(e){return InventoryDataAll0103;}
   });
 
-  // Save inventory to localStorage
+  // Save inventory to localStorage avec version
   useEffect(()=>{
     localStorage.setItem('ima_inventory_v1',JSON.stringify(inventory));
+    localStorage.setItem('ima_inventory_ver',String(INVENTORY_VERSION));
   },[inventory]);
 
   // Aggregate all assortiment data from Trivec
