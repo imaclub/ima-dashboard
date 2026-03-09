@@ -409,7 +409,7 @@ const SupplierMap={
     };
     let changed=false;
     for(const[id,cat]of Object.entries(defaults)){
-      if(!map[id]){map[id]=cat;changed=true;}
+      if(!map[id]||map[id]!==cat){map[id]=cat;changed=true;}
     }
     if(changed)this._saveMap(map);
     return map;
@@ -1311,7 +1311,7 @@ const PennylaneService={
   _companyInfo:null,
   _cache:{},
   _lsCacheKey:'ima_pennylane_invoices_cache',
-  _lsCacheVersion:4, // Incrémenter pour forcer invalidation après changement de nettoyage
+  _lsCacheVersion:5, // Incrémenter pour forcer invalidation après changement de nettoyage
   _lsCacheTTL:3600000, // 1 heure
   _getLsCache(){try{const c=JSON.parse(localStorage.getItem(this._lsCacheKey));if(!c||c.v!==this._lsCacheVersion){console.log('[IMA] Cache invalidé (version',c?.v,'→',this._lsCacheVersion,')');localStorage.removeItem(this._lsCacheKey);return null;}if(Date.now()-c.ts<this._lsCacheTTL)return c.data;return null;}catch(e){return null;}},
   _setLsCache(data){try{localStorage.setItem(this._lsCacheKey,JSON.stringify({data,ts:Date.now(),v:this._lsCacheVersion}));}catch(e){console.warn('Cache write failed',e);}},
@@ -1489,31 +1489,54 @@ const PennylaneService={
       return true;
     });
 
-    // Passe 7: Détecter et supprimer les récaps mensuels génériques
-    // Pattern: même fournisseur, même mois, un gros montant = somme d'autres factures du mois
-    const bySupplierMonth={};
+    // Passe 7: Détecter les récaps/relevés mensuels par fournisseur
+    // Pattern 1: un montant = somme des autres du même mois (tolérance 1%)
+    // Pattern 2: outliers statistiques — facture > 5× la médiane du fournisseur (récap cross-mois)
+    const bySupplier7={};
     allInvoices.forEach(inv=>{
       const sid=inv.supplier?.id||'';
-      const m=(inv.date||'').substring(0,7); // YYYY-MM
-      const key=sid+'_'+m;
-      if(!bySupplierMonth[key])bySupplierMonth[key]=[];
-      bySupplierMonth[key].push(inv);
+      if(!sid)return;
+      if(!bySupplier7[sid])bySupplier7[sid]=[];
+      bySupplier7[sid].push(inv);
     });
     const recapIds=new Set();
-    for(const[key,invs]of Object.entries(bySupplierMonth)){
+
+    for(const[sid,invs]of Object.entries(bySupplier7)){
       if(invs.length<3)continue;
-      const amounts=invs.map(inv=>parseFloat(inv.amount||0));
-      // Chercher si un montant est ~égal à la somme des autres (tolérance 1%)
-      for(let i=0;i<amounts.length;i++){
-        const others=amounts.filter((_,j)=>j!==i);
-        const sumOthers=others.reduce((s,v)=>s+v,0);
-        if(Math.abs(amounts[i]-sumOthers)<sumOthers*0.01&&amounts[i]>0){
-          console.log('[IMA] Clean7: récap-somme détecté',invs[i].invoice_number,invs[i].amount+'€','=somme des',others.length,'autres factures du mois pour',invs[i].supplier?.name);
-          recapIds.add(invs[i].id);
+      const amounts=invs.map(inv=>Math.abs(parseFloat(inv.amount||0))).filter(a=>a>0).sort((a,b)=>a-b);
+      if(amounts.length<3)continue;
+      const median=amounts[Math.floor(amounts.length/2)];
+
+      // Pattern 1: récap-somme dans le même mois
+      const byMonth={};
+      invs.forEach(inv=>{const m=(inv.date||'').substring(0,7);if(!byMonth[m])byMonth[m]=[];byMonth[m].push(inv);});
+      for(const[m,mInvs]of Object.entries(byMonth)){
+        if(mInvs.length<3)continue;
+        const mAmounts=mInvs.map(inv=>parseFloat(inv.amount||0));
+        for(let i=0;i<mAmounts.length;i++){
+          const others=mAmounts.filter((_,j)=>j!==i);
+          const sumOthers=others.reduce((s,v)=>s+v,0);
+          if(sumOthers>0&&Math.abs(mAmounts[i]-sumOthers)<sumOthers*0.02&&mAmounts[i]>0){
+            console.log('[IMA] Clean7a: récap-somme',mInvs[i].invoice_number,mInvs[i].amount+'€','=somme de',others.length,'autres factures',m,mInvs[i].supplier?.name);
+            recapIds.add(mInvs[i].id);
+          }
         }
+      }
+
+      // Pattern 2: facture > 5× la médiane = récap/relevé mensuel
+      // Seulement pour fournisseurs avec assez de factures normales pour calculer une médiane fiable
+      if(amounts.length>=5&&median>50){
+        invs.forEach(inv=>{
+          const a=Math.abs(parseFloat(inv.amount||0));
+          if(a>median*5&&a>5000){
+            console.log('[IMA] Clean7b: outlier',inv.invoice_number,inv.amount+'€','(médiane:'+Math.round(median)+'€, ×'+Math.round(a/median)+') pour',inv.supplier?.name);
+            recapIds.add(inv.id);
+          }
+        });
       }
     }
     if(recapIds.size>0){
+      console.log('[IMA] Passe 7: '+recapIds.size+' récaps/outliers supprimés');
       allInvoices=allInvoices.filter(inv=>!recapIds.has(inv.id));
     }
 
@@ -1961,11 +1984,15 @@ function Dashboard(){
   const caEcart=bp.annual.caTotal>0?Math.round((caSaison-bp.annual.caTotal)/bp.annual.caTotal*1000)/10:0;
 
   const supplierTotals=useMemo(()=>SupplierMap.getTotals(seasonInvoices),[seasonInvoices]);
-  const foodCostHT=supplierTotals['Food']||0;
+  // Achats bruts
+  const foodAchatsHT=supplierTotals['Food']||0;
+  const barAchatsHT=supplierTotals['Bar']||0;
+  // Consommation = Achats - Stock Clôture (formule standard)
+  const foodCostHT=Math.max(0,foodAchatsHT-STOCK_VALUE_0103.food);
+  const barCostHT=Math.max(0,barAchatsHT-STOCK_VALUE_0103.bar);
   const caNourritureHT=s?s.categories.find(c=>c.nom==='Nourriture').montant/1.10:0;
   const foodCostPct=caNourritureHT>0?Math.round(foodCostHT/caNourritureHT*1000)/10:0;
 
-  const barCostHT=supplierTotals['Bar']||0;
   const caBoissonsTTC=s?s.categories.find(c=>c.nom==='Boissons Alcoolisées').montant:0;
   const caBoissonAlcHT=caBoissonsTTC/1.20;
   const msCost=PayrollService.getMasseSalarialeActive();
@@ -1996,6 +2023,7 @@ function Dashboard(){
         <div className="kpi-label">Food Cost %</div>
         <div className="kpi-val" style={{color:foodCostPct>35?'var(--rouge)':foodCostPct>30?'var(--orange)':'var(--vert)'}}>{foodCostPct}%</div>
         <div className="text-muted" style={{marginTop:6}}>{eur(foodCostHT)} / {eur(caNourritureHT)}</div>
+        {STOCK_VALUE_0103.food>0&&<div className="text-muted" style={{fontSize:9,marginTop:2}}>Achats {eur(foodAchatsHT)} − Stock {eur(STOCK_VALUE_0103.food)}</div>}
       </div>
       <div className="kpi">
         <div className="kpi-label">Prime Cost %</div>
@@ -2509,30 +2537,35 @@ function Costs(){
     if(!seasonInvoices.length)return;
     // Log RAW invoice fields for top suppliers (debug API data quality)
     const tresalletInvs=seasonInvoices.filter(inv=>SupplierMap.extractName(inv).toLowerCase().includes('tresallet'));
-    // Diagnostic détaillé pour les top fournisseurs Bar
-    ['tresallet','david'].forEach(searchName=>{
+    // === DIAGNOSTIC COMPLET : toutes les factures par fournisseur (Food + Bar top) ===
+    console.log('%c[IMA DIAG] DÉTAIL FACTURES PAR FOURNISSEUR','color:red;font-weight:bold;font-size:14px');
+    const diagSuppliers=['david','tresallet','cote frais','mammafiore','metzger','huguenin','armara','pernod'];
+    diagSuppliers.forEach(searchName=>{
       const invs=seasonInvoices.filter(inv=>SupplierMap.extractName(inv).toLowerCase().includes(searchName));
-      if(invs.length>0){
-        console.log(`[IMA DIAG] === ${searchName.toUpperCase()} RAW API DATA (${invs.length} factures) ===`);
-        invs.sort((a,b)=>(b.date||'').localeCompare(a.date||'')).forEach(inv=>{
-          console.log(`  #${inv.invoice_number||'?'} | date:${inv.date} | HT:${inv.currency_amount_before_tax} | TTC:${inv.amount} | id:${inv.id}`);
+      if(invs.length===0)return;
+      const htTotal=invs.reduce((s,inv)=>s+parseFloat(inv.currency_amount_before_tax||0),0);
+      const ttcTotal=invs.reduce((s,inv)=>s+parseFloat(inv.amount||0),0);
+      // Group by month
+      const byMonth={};
+      invs.forEach(inv=>{const m=(inv.date||'?').substring(0,7);if(!byMonth[m])byMonth[m]=[];byMonth[m].push(inv);});
+      console.log(`\n[IMA] === ${searchName.toUpperCase()} : ${invs.length} fact. = ${Math.round(htTotal)}€ HT / ${Math.round(ttcTotal)}€ TTC ===`);
+      Object.keys(byMonth).sort().forEach(m=>{
+        const mInvs=byMonth[m].sort((a,b)=>parseFloat(b.amount||0)-parseFloat(a.amount||0));
+        const mHT=mInvs.reduce((s,i)=>s+parseFloat(i.currency_amount_before_tax||0),0);
+        console.log(`  ${m} (${mInvs.length} fact. = ${Math.round(mHT)}€ HT):`);
+        mInvs.forEach(inv=>{
+          console.log(`    #${(inv.invoice_number||'?').padEnd(25)} ${inv.date} | HT:${String(inv.currency_amount_before_tax).padStart(10)} | TTC:${String(inv.amount).padStart(10)} | id:${inv.id}`);
         });
-        const ttcTotal=invs.reduce((s,inv)=>s+parseFloat(inv.amount||0),0);
-        const htTotal=invs.reduce((s,inv)=>s+parseFloat(inv.currency_amount_before_tax||0),0);
-        console.log(`  TOTAL: ${Math.round(htTotal)}€ HT / ${Math.round(ttcTotal)}€ TTC — ${invs.length} factures`);
-      }
-    });
-    // Diagnostic Food suppliers top
-    ['cote frais','mammafiore','metzger'].forEach(searchName=>{
-      const invs=seasonInvoices.filter(inv=>SupplierMap.extractName(inv).toLowerCase().includes(searchName));
-      if(invs.length>0){
-        console.log(`[IMA DIAG] === ${searchName.toUpperCase()} (${invs.length} factures) ===`);
-        invs.sort((a,b)=>(b.date||'').localeCompare(a.date||'')).forEach(inv=>{
-          console.log(`  #${inv.invoice_number||'?'} | date:${inv.date} | HT:${inv.currency_amount_before_tax} | TTC:${inv.amount} | id:${inv.id}`);
-        });
-        const htTotal=invs.reduce((s,inv)=>s+parseFloat(inv.currency_amount_before_tax||0),0);
-        console.log(`  TOTAL HT: ${Math.round(htTotal)}€`);
-      }
+      });
+      // Detect suspicious patterns
+      const nums=invs.map(i=>i.invoice_number||'');
+      const numericOnly=nums.filter(n=>/^\d+$/.test(n));
+      const withPrefix=nums.filter(n=>/^[A-Za-z]/.test(n));
+      const amountDupes={};
+      invs.forEach(inv=>{const a=inv.amount;if(!amountDupes[a])amountDupes[a]=0;amountDupes[a]++;});
+      const dupeAmounts=Object.entries(amountDupes).filter(([_,c])=>c>1&&parseFloat(_)>0);
+      if(numericOnly.length>0)console.log(`  ⚠️ ${numericOnly.length} n° purement numériques: ${numericOnly.slice(0,5).join(', ')}`);
+      if(dupeAmounts.length>0)console.log(`  ⚠️ ${dupeAmounts.length} montants en double: ${dupeAmounts.slice(0,5).map(([a,c])=>`${a}€ ×${c}`).join(', ')}`);
     });
     ['Food','Bar'].forEach(cat=>{
       const catInvs=seasonInvoices.filter(inv=>SupplierMap.getCategory(String(inv.supplier?.id||''))===cat);
@@ -2556,8 +2589,12 @@ function Costs(){
   },[seasonInvoices,totals]);
   const groupTotals=useMemo(()=>SupplierMap.getGroupTotals(totals),[totals]);
   const totalAll=Object.values(totals).reduce((s,v)=>s+v,0);
-  const foodTotal=totals['Food']||0;
-  const barTotal=totals['Bar']||0;
+  // Achats bruts
+  const foodAchats=totals['Food']||0;
+  const barAchats=totals['Bar']||0;
+  // Consommation = Achats - Stock Clôture (formule standard)
+  const foodTotal=Math.max(0,foodAchats-STOCK_VALUE_0103.food);
+  const barTotal=Math.max(0,barAchats-STOCK_VALUE_0103.bar);
   const primeCost=(foodTotal+barTotal+realStaffMS);
   // CA HT par catégorie Trivec (les montants Trivec sont TTC, on convertit en HT)
   const caNourritureTTC=isSeason&&_S?(_S.categories.find(function(c){return c.nom==='Nourriture';})||{}).montant||0:(tp.caResto||0);
@@ -2637,7 +2674,9 @@ function Costs(){
     </div>
 
     <div style={{background:'var(--cream,#fdf6f0)',border:'1px solid #e8d5c4',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:11,color:'var(--gris-600)'}}>
-      <strong>Calcul des ratios :</strong> Food Cost et Bar Cost sont calculés <strong>HT/HT</strong> (achats Pennylane HT ÷ CA catégorie Trivec converti HT). Seules les factures de la période saison (déc-fév) sont prises en compte, les achats pré-ouverture (novembre) sont exclus des ratios. TVA mixte : les spiritueux avec mixers offerts (sauf Red Bull) ont une TVA mixte (alcool 20%, soft 10%).
+      <strong>Calcul des ratios :</strong> Food Cost et Bar Cost = <strong>Consommation HT ÷ CA HT</strong>. Consommation = Achats Pennylane − Stock clôture (inventaire 01/03/2026). Seules les factures de la période saison sont prises en compte.
+      {STOCK_VALUE_0103.bar>0&&<span style={{display:'block',marginTop:4,color:'var(--bordeaux)'}}><strong>Stock Bar déduit :</strong> {eur(STOCK_VALUE_0103.bar)} (Achats bruts: {eur(barAchats)} → Conso: {eur(barTotal)})</span>}
+      {STOCK_VALUE_0103.food>0&&<span style={{display:'block',marginTop:2,color:'var(--bordeaux)'}}><strong>Stock Food déduit :</strong> {eur(STOCK_VALUE_0103.food)} (Achats bruts: {eur(foodAchats)} → Conso: {eur(foodTotal)})</span>}
     </div>
 
     {loading&&<div style={{textAlign:'center',padding:40}}><div className="spinner" style={{width:24,height:24}}/><div style={{marginTop:10,fontSize:13,color:'var(--gris-500)'}}>Chargement Pennylane...</div></div>}
@@ -2645,8 +2684,8 @@ function Costs(){
     {!loading&&loaded&&<div>
     {/* KPI */}
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">Food Cost %</div><div className="kpi-val" style={{color:foodCostPct!==null?(foodCostPct<=30?'var(--vert)':foodCostPct<=35?'var(--orange)':'var(--rouge)'):'var(--gris-300)'}}>{foodCostPct!==null?foodCostPct+'%':'—'}</div><div className={`kpi-chg ${foodCostPct!==null&&foodCostPct<=30?'pos':'neg'}`}>{foodCostPct!==null?`${eur(foodTotal)} HT / CA ${eur(caNourriture)} HT`:'Objectif ≤ 30%'}</div></div>
-      <div className="kpi"><div className="kpi-label">Bar Cost %</div><div className="kpi-val" style={{color:barCostPct!==null?(barCostPct<=22?'var(--vert)':barCostPct<=28?'var(--orange)':'var(--rouge)'):'var(--gris-300)'}}>{barCostPct!==null?barCostPct+'%':'—'}</div><div className={`kpi-chg ${barCostPct!==null&&barCostPct<=22?'pos':'neg'}`}>{barCostPct!==null?`${eur(barTotal)} HT / CA ${eur(caBoissons)} HT`:'Objectif ≤ 22%'}</div></div>
+      <div className="kpi"><div className="kpi-label">Food Cost %</div><div className="kpi-val" style={{color:foodCostPct!==null?(foodCostPct<=30?'var(--vert)':foodCostPct<=35?'var(--orange)':'var(--rouge)'):'var(--gris-300)'}}>{foodCostPct!==null?foodCostPct+'%':'—'}</div><div className={`kpi-chg ${foodCostPct!==null&&foodCostPct<=30?'pos':'neg'}`}>{foodCostPct!==null?`Conso ${eur(foodTotal)} / CA ${eur(caNourriture)}`:'Objectif ≤ 30%'}</div>{STOCK_VALUE_0103.food>0&&<div style={{fontSize:9,color:'var(--gris-400)',marginTop:2}}>Achats {eur(foodAchats)} − Stock {eur(STOCK_VALUE_0103.food)}</div>}</div>
+      <div className="kpi"><div className="kpi-label">Bar Cost %</div><div className="kpi-val" style={{color:barCostPct!==null?(barCostPct<=22?'var(--vert)':barCostPct<=28?'var(--orange)':'var(--rouge)'):'var(--gris-300)'}}>{barCostPct!==null?barCostPct+'%':'—'}</div><div className={`kpi-chg ${barCostPct!==null&&barCostPct<=22?'pos':'neg'}`}>{barCostPct!==null?`Conso ${eur(barTotal)} / CA ${eur(caBoissons)}`:'Objectif ≤ 22%'}</div>{STOCK_VALUE_0103.bar>0&&<div style={{fontSize:9,color:'var(--gris-400)',marginTop:2}}>Achats {eur(barAchats)} − Stock {eur(STOCK_VALUE_0103.bar)}</div>}</div>
       <div className="kpi"><div className="kpi-label">Prime Cost %</div><div className="kpi-val" style={{color:primeCostPct!==null?(primeCostPct<=65?'var(--vert)':primeCostPct<=70?'var(--orange)':'var(--rouge)'):'var(--gris-300)'}}>{primeCostPct!==null?primeCostPct+'%':'—'}</div><div className={`kpi-chg ${primeCostPct!==null&&primeCostPct<=65?'pos':'neg'}`}>{primeCostPct!==null?`Food+Bar+Staff / CA Net`:'Objectif ≤ 65%'}</div></div>
       <div className="kpi"><div className="kpi-label">Staff Cost %</div><div className="kpi-val" style={{color:caTotalSeason>0?(realStaffMS/caTotalSeason>0.3?'var(--rouge)':realStaffMS/caTotalSeason>0.25?'var(--orange)':'var(--vert)'):'var(--gris-300)'}}>{caTotalSeason>0?Math.round(realStaffMS/caTotalSeason*1000)/10+'%':'—'}</div><div className={`kpi-chg ${caTotalSeason>0&&realStaffMS/caTotalSeason<=0.3?'pos':'neg'}`}>{caTotalSeason>0?`${eur(realStaffMS)} / CA ${eur(caTotalSeason)}`:'Objectif ≤ 30%'}</div></div>
     </div>
@@ -3482,6 +3521,23 @@ const InventoryData0103=[{"id":1,"nom":"Noam","cat":"Spiritueux","subCat":"BIERR
 // ===== INVENTAIRE VIN 01/03/2026 (extrait du PDF) =====
 const InventoryDataVin0103=[{"id":184,"nom":"Seyssel « Cep Noir – Vieilles Vignes » 2021","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":8.21,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":9,"dateInventaire":"01/03/2026"},{"id":185,"nom":"Chignin Bergeron 2022","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":9.71,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":0,"dateInventaire":"01/03/2026"},{"id":186,"nom":"Argile 2022","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":15.05,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":13,"dateInventaire":"01/03/2026"},{"id":187,"nom":"Pouilly Fumé « Calcite » 2024","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":11.87,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":14,"dateInventaire":"01/03/2026"},{"id":188,"nom":"POUILLY FUME PAUL CORNEAU 2023","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":13.95,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":0,"dateInventaire":"01/03/2026"},{"id":189,"nom":"Sancerre Blanc Silex 2023","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":18.2,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":9,"dateInventaire":"01/03/2026"},{"id":190,"nom":"Pouilly-Fume Les Filles 2019","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":29.5,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":3,"dateInventaire":"01/03/2026"},{"id":191,"nom":"Sancerre Pour Vous 2019","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":56.7,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":11,"dateInventaire":"01/03/2026"},{"id":192,"nom":"Sancerre Blanc Mont Damnes 2023","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":50.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":4,"dateInventaire":"01/03/2026"},{"id":193,"nom":"Coudoulet de Beaucastel Blanc 2024","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":17.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":15,"dateInventaire":"01/03/2026"},{"id":194,"nom":"Saint Joseph blanc 2023","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":18.99,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":5,"dateInventaire":"01/03/2026"},{"id":195,"nom":"Les Alexandrins 2024","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":27.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":10,"dateInventaire":"01/03/2026"},{"id":196,"nom":"Condrieu Pagus Luminis 2023","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":26.24,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":8,"dateInventaire":"01/03/2026"},{"id":197,"nom":"Les Terrasses du Palat 2022","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":31.9,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":2,"dateInventaire":"01/03/2026"},{"id":198,"nom":"Château de Beaucastel Blanc 2024","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":69.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":5,"dateInventaire":"01/03/2026"},{"id":199,"nom":"Rully 1er Cru Meix Cadot 2022","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":19.5,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":5,"dateInventaire":"01/03/2026"},{"id":200,"nom":"Maranges Les Meurées 2023","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":23.4,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":13,"dateInventaire":"01/03/2026"},{"id":201,"nom":"Chablis 1er cru Fourchaume 2023","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":26.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":13,"dateInventaire":"01/03/2026"},{"id":202,"nom":"PERNAND-VERGELESSES 2022","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":24.5,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":7,"dateInventaire":"01/03/2026"},{"id":203,"nom":"Meursault 2022","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":45.5,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":18,"dateInventaire":"01/03/2026"},{"id":204,"nom":"SAINT-AUBIN Vieille Vignes 2022","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":26.9,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":16,"dateInventaire":"01/03/2026"},{"id":205,"nom":"Chassagne Montrachet 2022","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":45.03,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":6,"dateInventaire":"01/03/2026"},{"id":206,"nom":"PULIGNY MONTRACHET Grands Champs 2021","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":63.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":6,"dateInventaire":"01/03/2026"},{"id":207,"nom":"Chassagne-Montrachet 1er cru Fairendes 2022","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":71.5,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":2,"dateInventaire":"01/03/2026"},{"id":208,"nom":"MEURSAULT NARVAUX 2020","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":57.5,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":3,"dateInventaire":"01/03/2026"},{"id":209,"nom":"Corton Charlemagne 2020","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":200.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":2,"dateInventaire":"01/03/2026"},{"id":210,"nom":"CRIOT BATARD MONTRACHET Gd Cru 2019","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":279.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":1,"dateInventaire":"01/03/2026"},{"id":211,"nom":"Chablis Vieilles Vignes 2020","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":37.3,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":12,"dateInventaire":"01/03/2026"},{"id":212,"nom":"Meursault Clos des corvees de citeau Monopole 2023","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":145.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":2,"dateInventaire":"01/03/2026"},{"id":213,"nom":"Puligny-Montrachet Les Enseigneres 2023","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":145.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":3,"dateInventaire":"01/03/2026"},{"id":214,"nom":"CARMES DE RIEUSSEC 2016","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":16.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":0,"dateInventaire":"01/03/2026"},{"id":215,"nom":"Vallée de la Békaa Blanc 2024","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":8.15,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":4,"dateInventaire":"01/03/2026"},{"id":216,"nom":"Pinot Grigio Colterenzio 2024","cat":"Vin Blanc","subCat":"Vin Blanc","unite":"bt","prixUnit":9.55,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":4,"dateInventaire":"01/03/2026"},{"id":217,"nom":"Rose & Or 2024","cat":"Vin rosé","subCat":"Vin rosé","unite":"bt","prixUnit":14.08,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":12,"dateInventaire":"01/03/2026"},{"id":218,"nom":"Cuvée 281 2024","cat":"Vin rosé","subCat":"Vin rosé","unite":"bt","prixUnit":0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":5,"dateInventaire":"01/03/2026"},{"id":219,"nom":"Whispering Angel 2024","cat":"Vin rosé","subCat":"Vin rosé","unite":"bt","prixUnit":0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":9,"dateInventaire":"01/03/2026"},{"id":220,"nom":"Rose & Or MAG 2024","cat":"Vin rosé","subCat":"Vin rosé","unite":"bt","prixUnit":0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":0,"dateInventaire":"01/03/2026"},{"id":221,"nom":"Cuvée 281 MAG 2024","cat":"Vin rosé","subCat":"Vin rosé","unite":"bt","prixUnit":0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":2,"dateInventaire":"01/03/2026"},{"id":222,"nom":"Cuvée Avalanche 2023","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":10.45,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":11,"dateInventaire":"01/03/2026"},{"id":223,"nom":"Les Chemins de Lourdens 2024","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":12.95,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":17,"dateInventaire":"01/03/2026"},{"id":224,"nom":"Persan Bio Les Chemins de Miolans 2023","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":16.07,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":18,"dateInventaire":"01/03/2026"},{"id":225,"nom":"Améthyste 2018","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":50.05,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":3,"dateInventaire":"01/03/2026"},{"id":226,"nom":"Sancerre Jean-Marc et Romain Pastou 2023","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":11.52,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":12,"dateInventaire":"01/03/2026"},{"id":227,"nom":"Sancerre Rouge Silex 2023","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":18.5,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":11,"dateInventaire":"01/03/2026"},{"id":228,"nom":"Sancerre Rouge Silex 2020","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":37.5,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":4,"dateInventaire":"01/03/2026"},{"id":229,"nom":"Crozes Hermitage 2022","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":9.4,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":21,"dateInventaire":"01/03/2026"},{"id":230,"nom":"CROZES-HERMITAGE BIO Les Aigrettes 2023","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":11.75,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":0,"dateInventaire":"01/03/2026"},{"id":231,"nom":"Coudoulet de Beaucastel 2021","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":16.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":0,"dateInventaire":"01/03/2026"},{"id":232,"nom":"Saint Joseph 2023","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":16.85,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":7,"dateInventaire":"01/03/2026"},{"id":233,"nom":"Côte du Rhone L Enclave 2022","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":18.2,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":17,"dateInventaire":"01/03/2026"},{"id":234,"nom":"Crozes Hermitage Clos des Grives 2022","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":32.5,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":3,"dateInventaire":"01/03/2026"},{"id":235,"nom":"Cote Rotie Terrasses 2016","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":49.4,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":4,"dateInventaire":"01/03/2026"},{"id":236,"nom":"CÔTE ROTIE Les Bécasses 2021","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":49.9,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":4,"dateInventaire":"01/03/2026"},{"id":237,"nom":"Château de Beaucastel 2016","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":80.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":0,"dateInventaire":"01/03/2026"},{"id":238,"nom":"Cote Rotie Champin le seigneur 2020","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":75.6,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":6,"dateInventaire":"01/03/2026"},{"id":239,"nom":"Chateauneuf du Pape Vieilles Vignes 2016","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":123.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":5,"dateInventaire":"01/03/2026"},{"id":240,"nom":"Château de Beaucastel 2022","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":121.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":3,"dateInventaire":"01/03/2026"},{"id":241,"nom":"Haute cote de nuit 2020","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":12.6,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":20,"dateInventaire":"01/03/2026"},{"id":242,"nom":"Côte de Nuits Villages 2021","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":16.9,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":5,"dateInventaire":"01/03/2026"},{"id":243,"nom":"Santenay 1er cru Maladiere 2021","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":24.7,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":0,"dateInventaire":"01/03/2026"},{"id":244,"nom":"MERCUREY 1er Cru Fortoul 2019","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":25.05,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":0,"dateInventaire":"01/03/2026"},{"id":245,"nom":"MOREY SAINT-DENIS BIO Coeur d Argile 2017","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":33.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":4,"dateInventaire":"01/03/2026"},{"id":246,"nom":"Chambolle Musigny Vieilles Vignes 2021","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":43.3,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":2,"dateInventaire":"01/03/2026"},{"id":247,"nom":"Gevrey Chambertin 2022","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":45.5,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":8,"dateInventaire":"01/03/2026"},{"id":248,"nom":"CHASSAGNE MONTRACHET 1er Cru La Boudriotte 2018","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":41.1,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":0,"dateInventaire":"01/03/2026"},{"id":249,"nom":"Pommard Chanlins 2022","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":44.2,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":4,"dateInventaire":"01/03/2026"},{"id":250,"nom":"Beaune 1er Cru Clos des Mouches 2022","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":91.8,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":6,"dateInventaire":"01/03/2026"},{"id":251,"nom":"Vosne-Romanee 1er Cru Les Chaumes 2021","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":117.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":5,"dateInventaire":"01/03/2026"},{"id":252,"nom":"Corton Grand Cru Le Rognet 2021","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":123.5,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":3,"dateInventaire":"01/03/2026"},{"id":253,"nom":"CLOS VOUGEOT Grand Cru 2018","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":130.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":1,"dateInventaire":"01/03/2026"},{"id":254,"nom":"Vosne-Romanee 1er cru Les Suchots 2020","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":136.5,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":3,"dateInventaire":"01/03/2026"},{"id":255,"nom":"Santenay 1er cru Maladiere 2021 mag","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":50.7,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":1,"dateInventaire":"01/03/2026"},{"id":256,"nom":"Volnay Les Petits Poisot 2022","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":84.5,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":2,"dateInventaire":"01/03/2026"},{"id":257,"nom":"Gevrey Chambertin 2021","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":91.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":6,"dateInventaire":"01/03/2026"},{"id":258,"nom":"Pommard Chanlins 2022 mag","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":91.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":1,"dateInventaire":"01/03/2026"},{"id":259,"nom":"Volnay 1er cru Clos de la Bousse d Or 2017","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":135.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":2,"dateInventaire":"01/03/2026"},{"id":260,"nom":"Baron de Boutisse Grand cru 2019","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":12.35,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":0,"dateInventaire":"01/03/2026"},{"id":261,"nom":"Château Fleur de Lisse 2020","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":18.5,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":3,"dateInventaire":"01/03/2026"},{"id":262,"nom":"Le Dragon de Quintus Grand Cru 2018","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":35.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":3,"dateInventaire":"01/03/2026"},{"id":263,"nom":"Château Canon la Gaffeliere Grand Cru 2016","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":70.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":1,"dateInventaire":"01/03/2026"},{"id":264,"nom":"CHATEAU ANGELUS GRAND CRU 2017","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":297.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":1,"dateInventaire":"01/03/2026"},{"id":265,"nom":"Château Cheval Blanc 2011","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":490.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":1,"dateInventaire":"01/03/2026"},{"id":266,"nom":"CHATEAU FIEUZAL 2014","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":29.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":16,"dateInventaire":"01/03/2026"},{"id":267,"nom":"CHATEAU PAPE CLEMENT 2018","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":76.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":2,"dateInventaire":"01/03/2026"},{"id":268,"nom":"LES FIEFS DE LAGRANGE 2014","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":19.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":0,"dateInventaire":"01/03/2026"},{"id":269,"nom":"CLOS DU MARQUIS 2011","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":44.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":1,"dateInventaire":"01/03/2026"},{"id":270,"nom":"CHATEAU TALBOT 2014","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":55.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":1,"dateInventaire":"01/03/2026"},{"id":271,"nom":"CHATEAU LEOVILLE POYFERRE 2017","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":61.6,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":2,"dateInventaire":"01/03/2026"},{"id":272,"nom":"CHATEAU BEYCHEVELLE 2016","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":115.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":3,"dateInventaire":"01/03/2026"},{"id":273,"nom":"CHATEAU DUCRU-BEAUCAILLOU 2017","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":142.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":3,"dateInventaire":"01/03/2026"},{"id":274,"nom":"CHÂTEAU CANTEMERLE 2019","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":21.5,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":2,"dateInventaire":"01/03/2026"},{"id":275,"nom":"CHATEAU LA LAGUNE 2016","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":35.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":1,"dateInventaire":"01/03/2026"},{"id":276,"nom":"Château Lacoste Borie 2018","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":20.1,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":2,"dateInventaire":"01/03/2026"},{"id":277,"nom":"CHATEAU LYNCH BAGES 2011","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":102.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":3,"dateInventaire":"01/03/2026"},{"id":278,"nom":"FUGUE DE NENIN 2015","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":22.8,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":1,"dateInventaire":"01/03/2026"},{"id":279,"nom":"CHATEAU GAZIN 2017","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":64.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":0,"dateInventaire":"01/03/2026"},{"id":280,"nom":"CHATEAU LA CONSEILLANTE 2017","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":130.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":1,"dateInventaire":"01/03/2026"},{"id":281,"nom":"LES HAUTS DU TERTRE 2017","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":17.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":10,"dateInventaire":"01/03/2026"},{"id":282,"nom":"Château Prieure-Lichine 4ème Cru Classé 2020","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":31.1,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":0,"dateInventaire":"01/03/2026"},{"id":283,"nom":"CHATEAU GISCOURS 2020","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":45.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":6,"dateInventaire":"01/03/2026"},{"id":284,"nom":"Château Cantenac Brown 2020","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":49.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":3,"dateInventaire":"01/03/2026"},{"id":285,"nom":"CHATEAU RAUZAN-SEGLA 2008","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":96.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":1,"dateInventaire":"01/03/2026"},{"id":286,"nom":"CHATEAU PALMER 2013","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":200.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":1,"dateInventaire":"01/03/2026"},{"id":287,"nom":"Château Clauzet","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":19.1,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":12,"dateInventaire":"01/03/2026"},{"id":288,"nom":"LA DAME DE MONTROSE 2017","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":29.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":6,"dateInventaire":"01/03/2026"},{"id":289,"nom":"CHATEAU CALON SEGUR 2021","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":97.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":3,"dateInventaire":"01/03/2026"},{"id":290,"nom":"COS D ESTOURNEL 2014","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":121.0,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":6,"dateInventaire":"01/03/2026"},{"id":291,"nom":"Vallée de la Békaa Rouge 2022","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":8.15,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":0,"dateInventaire":"01/03/2026"},{"id":292,"nom":"Valpolicella Imperfetto 2023","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":11.95,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":4,"dateInventaire":"01/03/2026"},{"id":293,"nom":"Barolo cuvée Berri 2019","cat":"Vin rouge","subCat":"Vin rouge","unite":"bt","prixUnit":28.6,"seuil":0,"stockPrec":0,"achats":0,"ventesTrivec":0,"compteInventaire":0,"dateInventaire":"01/03/2026"}];
 const InventoryDataAll0103=[...InventoryData0103,...InventoryDataVin0103];
+
+// ===== VALEUR STOCK CLÔTURE 01/03/2026 =====
+// Formule standard resto: Consommation = Stock Ouverture + Achats - Stock Clôture
+// On assume Stock Ouverture ≈ 0 (début saison 04/12/2025)
+// Donc: Consommation ≈ Achats - Stock Clôture
+const STOCK_VALUE_0103=(function(){
+  var bar=0,food=0,itemsSansPrix=0;
+  InventoryDataAll0103.forEach(function(item){
+    var val=(item.compteInventaire||0)*(item.prixUnit||0);
+    if(item.compteInventaire>0&&item.prixUnit===0)itemsSansPrix++;
+    // Toutes les catégories actuelles sont Bar (Spiritueux, Vins)
+    bar+=val;
+  });
+  if(itemsSansPrix>0)console.warn('[IMA] Stock: '+itemsSansPrix+' produits avec stock>0 mais prix=0 (valeur sous-estimée)');
+  console.log('[IMA] Stock clôture 01/03: Bar='+Math.round(bar)+'€, Food='+Math.round(food)+'€');
+  return{bar:bar,food:food,total:bar+food};
+})();
 
 // ===== STOCKS =====
 function Stocks(){
