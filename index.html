@@ -2727,13 +2727,32 @@ function Costs(){
 
     {/* ===== TAB: MAPPING ===== */}
     {tab==='mapping'&&<div>
-      {/* Search bar */}
-      <div style={{marginBottom:14,display:'flex',gap:10,alignItems:'center'}}>
-        <input type="text" className="fi" placeholder="Rechercher fournisseur, montant, n° facture, label..." value={mapSearch} onChange={e=>setMapSearch(e.target.value)} style={{flex:1,fontSize:13}}/>
-        {mapSearch&&<button className="btn btn-sm btn-secondary" onClick={()=>setMapSearch('')} style={{whiteSpace:'nowrap'}}>Effacer</button>}
+      {/* Reset + Search bar */}
+      <div style={{marginBottom:14,display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+        <input type="text" className="fi" placeholder="Rechercher fournisseur..." value={mapSearch} onChange={e=>setMapSearch(e.target.value)} style={{flex:1,fontSize:13,minWidth:200}}/>
+        {mapSearch&&<button className="btn btn-sm btn-secondary" onClick={()=>setMapSearch('')}>Effacer</button>}
+        <button className="btn btn-sm" style={{background:'var(--rouge)',color:'white',whiteSpace:'nowrap'}} onClick={()=>{
+          if(confirm('Remettre TOUS les fournisseurs en "Non classé" ? Tu devras les reclasser un par un.')){
+            localStorage.removeItem('ima_supplier_map_v2');
+            setMapVersion(v=>v+1);
+          }
+        }}>Remettre à zéro</button>
       </div>
 
-      {supplierGroups.filter(s=>s.cat==='Non classé').length>0&&!mapSearch&&<div className="alert-i a-err" style={{marginBottom:14}}><I.Warn/><div><div className="at">{supplierGroups.filter(s=>s.cat==='Non classé').length} fournisseur(s) non classé(s)</div><div className="as">Cliquez sur "Modifier" pour assigner une catégorie.</div></div></div>}
+      {/* Quick stats */}
+      <div style={{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap',fontSize:12}}>
+        {['Food','Bar','Non classé'].map(cat=>{
+          const count=supplierGroups.filter(s=>s.cat===cat).length;
+          const total=supplierGroups.filter(s=>s.cat===cat).reduce((s,x)=>s+x.totalHT,0);
+          return <div key={cat} style={{padding:'8px 14px',borderRadius:8,background:cat==='Non classé'?'var(--rouge-light)':cat==='Food'?'var(--vert-light)':'rgba(88,21,39,.1)',display:'flex',gap:8,alignItems:'center'}}>
+            <span style={{fontWeight:600,color:cat==='Non classé'?'var(--rouge)':cat==='Food'?'var(--vert)':'var(--bordeaux)'}}>{cat}</span>
+            <span>{count} fournisseurs</span>
+            <span style={{fontWeight:600}}>{eur(total)} HT</span>
+          </div>;
+        })}
+      </div>
+
+      {supplierGroups.filter(s=>s.cat==='Non classé').length>0&&!mapSearch&&<div className="alert-i a-err" style={{marginBottom:14}}><I.Warn/><div><div className="at">{supplierGroups.filter(s=>s.cat==='Non classé').length} fournisseur(s) non classé(s)</div><div className="as">Assignez une catégorie avec les boutons rapides Food / Bar ou cliquez "Autre" pour plus d'options.</div></div></div>}
 
       {/* Search results mode */}
       {mapSearch.length>1&&(()=>{
@@ -2806,17 +2825,19 @@ function Costs(){
             <div className="card-st">{suppliersToShow.length} fournisseur(s)</div>
           </div></div>
           <div className="card-b"><div className="tbl"><table>
-            <thead><tr><th style={{textAlign:'left'}}>Fournisseur</th><th>Catégorie</th><th style={{textAlign:'right'}}>Total TTC</th><th style={{textAlign:'center'}}>Factures</th><th style={{width:200}}>Action</th></tr></thead>
-            <tbody>{suppliersToShow.sort((a,b)=>a.cat==='Non classé'?-1:b.cat==='Non classé'?1:Math.abs(b.total)-Math.abs(a.total)).map(s=>(
-              <tr key={s.id} style={{background:s.cat==='Non classé'?'rgba(220,38,38,.04)':'transparent',cursor:'pointer'}} onClick={()=>setDetailSupplier(detailSupplier===s.id?null:s.id)}>
+            <thead><tr><th style={{textAlign:'left'}}>Fournisseur</th><th>Catégorie</th><th style={{textAlign:'right'}}>Total HT</th><th style={{textAlign:'right'}}>Total TTC</th><th style={{textAlign:'center'}}>Nb</th><th style={{minWidth:260}}>Classement rapide</th></tr></thead>
+            <tbody>{suppliersToShow.sort((a,b)=>a.cat==='Non classé'?-1:b.cat==='Non classé'?1:Math.abs(b.total)-Math.abs(a.total)).map(s=>{
+              const quickCats=['Food','Bar','Hygiène & Entretien','Matériel & Équipement','Énergie & Fluides','Travaux & Maintenance','Communication & Marketing','IT & Logiciels','Administratif & Juridique','Loyer & Charges','Blanchisserie','Transport & Véhicules','Assurances','Divers','Non classé'];
+              return(<tr key={s.id} style={{background:s.cat==='Non classé'?'rgba(220,38,38,.04)':'transparent',cursor:'pointer'}} onClick={()=>setDetailSupplier(detailSupplier===s.id?null:s.id)}>
                 <td style={{fontWeight:500}}>{s.name} <span style={{fontSize:9,color:'var(--gris-400)'}}>{detailSupplier===s.id?'▼':'▶'}</span></td>
                 <td><span style={{display:'inline-block',padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:600,background:CAT_COLORS[s.cat]||'var(--gris-400)',color:'white'}}>{s.cat}</span></td>
-                <td style={{textAlign:'right',fontWeight:600}}>{eur(s.total)}</td>
+                <td style={{textAlign:'right',fontWeight:500,fontSize:12}}>{eur(s.totalHT)}</td>
+                <td style={{textAlign:'right',color:'var(--gris-400)',fontSize:12}}>{eur(s.total)}</td>
                 <td style={{textAlign:'center'}}>{s.count}</td>
                 <td>
                   {editingSupplier===s.id?
                     <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
-                      {ALL_CATEGORIES.map(cat=>(
+                      {quickCats.map(cat=>(
                         <button key={cat} onClick={e=>{e.stopPropagation();handleCategoryChange(s.id,cat);}}
                           style={{fontSize:9,padding:'3px 6px',borderRadius:4,border:'1px solid var(--gris-200)',background:s.cat===cat?CAT_COLORS[cat]||'var(--bordeaux)':'white',
                             color:s.cat===cat?'white':'var(--gris-700)',cursor:'pointer',fontFamily:'inherit',fontWeight:s.cat===cat?600:400}}>
@@ -2824,11 +2845,15 @@ function Costs(){
                         </button>
                       ))}
                     </div>
-                    :<button className="btn btn-sm btn-secondary" onClick={e=>{e.stopPropagation();setEditingSupplier(s.id);}}>Modifier</button>
+                    :<div style={{display:'flex',gap:4}} onClick={e=>e.stopPropagation()}>
+                      <button className="btn btn-sm" style={{background:s.cat==='Food'?'var(--vert)':'white',color:s.cat==='Food'?'white':'var(--vert)',border:'1px solid var(--vert)',fontSize:10,padding:'3px 10px'}} onClick={()=>handleCategoryChange(s.id,'Food')}>Food</button>
+                      <button className="btn btn-sm" style={{background:s.cat==='Bar'?'var(--bordeaux)':'white',color:s.cat==='Bar'?'white':'var(--bordeaux)',border:'1px solid var(--bordeaux)',fontSize:10,padding:'3px 10px'}} onClick={()=>handleCategoryChange(s.id,'Bar')}>Bar</button>
+                      <button className="btn btn-sm btn-secondary" style={{fontSize:10,padding:'3px 8px'}} onClick={()=>setEditingSupplier(s.id)}>Autre ▾</button>
+                    </div>
                   }
                 </td>
-              </tr>
-              ))}</tbody>
+              </tr>);
+              })}</tbody>
           </table></div>
 
           {/* Detail panel for selected supplier */}
