@@ -4239,10 +4239,24 @@ function Stocks(){
       <div className="card">
         <div className="card-h"><div><div className="card-t">Valeur stock par catégorie</div></div></div>
         <div className="card-b">
-          <HBar data={cats.filter(c=>c!=='Tous').map(c=>{
-            const v=inventory.filter(i=>i.cat===c).reduce((s,i)=>s+(i.compteInventaire*i.prixUnit),0);
-            return{label:c,value:v};
-          }).sort((a,b)=>b.value-a.value)} maxVal={Math.max(...cats.filter(c=>c!=='Tous').map(c=>inventory.filter(i=>i.cat===c).reduce((s,i)=>s+(i.compteInventaire*i.prixUnit),0)))}/>
+          {(()=>{
+            // Regrouper par catégorie réelle (cat + subCat pour Food)
+            const groups={};
+            inventory.forEach(i=>{
+              const val=(i.compteInventaire||0)*(i.prixUnit||0);
+              if(val<=0)return;
+              var grp=i.cat||'Autre';
+              // Regrouper tous les vins ensemble
+              if(grp.startsWith('Vin ')||grp==='Champagne')grp='Vins';
+              // Pour les items Food, utiliser subCat comme catégorie
+              if(grp==='Food'&&i.subCat)grp=i.subCat;
+              if(!groups[grp])groups[grp]=0;
+              groups[grp]+=val;
+            });
+            const data=Object.entries(groups).map(function(e){return{label:e[0],value:Math.round(e[1])};}).sort(function(a,b){return b.value-a.value;});
+            const maxV=data.length>0?data[0].value:1;
+            return <HBar data={data} maxVal={maxV}/>;
+          })()}
         </div>
       </div>
     </div>}
