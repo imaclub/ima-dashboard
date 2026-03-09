@@ -6033,8 +6033,10 @@ function Tresorerie(){
 
   // CA TTC encaissé (ce que les clients ont réellement payé)
   const encaissementsTTC=trivec?trivec.paiements.total:0;
-  // CA HT — utiliser le PeriodContext centralisé
-  const caHT=pCtx.trivecPeriod.total||0;
+  // CA TTC net (ventes nettes, hors interne/cash-in)
+  const caTTC=trivec?trivec.ventesNet:0;
+  // CA HT — calculé depuis la TVA Trivec (taux10.ht + taux20.ht)
+  const caHT=trivec&&trivec.tva?(trivec.tva.taux10.ht+trivec.tva.taux20.ht):0;
 
   // Paiements par moyen
   const paymentBreakdown=trivec&&trivec.paiements&&trivec.paiements.details?
@@ -6091,7 +6093,7 @@ function Tresorerie(){
     {loading&&<div style={{textAlign:'center',padding:20}}><div className="spinner" style={{width:20,height:20}}/><div style={{fontSize:12,color:'var(--gris-400)',marginTop:8}}>Chargement Pennylane...</div></div>}
 
     <div className="kpi-g">
-      <div className="kpi"><div className="kpi-label">CA HT (Encaissé TTC)</div><div className="kpi-val" style={{color:'var(--vert)'}}>{eur(caHT)}</div><div className="kpi-chg pos">TTC encaissé: {eur(encaissementsTTC)}</div></div>
+      <div className="kpi"><div className="kpi-label">CA HT</div><div className="kpi-val" style={{color:'var(--vert)'}}>{eur(caHT)}</div><div className="kpi-chg pos">TTC net: {eur(caTTC)} — Encaissé: {eur(encaissementsTTC)}</div></div>
       <div className="kpi"><div className="kpi-label">Total Charges HT</div><div className="kpi-val" style={{color:'var(--rouge)'}}>{eur(totalAchats+staffCost)}</div><div className="kpi-chg neg">Achats HT {eur(totalAchats)} + MS {eur(staffCost)}</div></div>
       <div className="kpi"><div className="kpi-label">Résultat d'Exploitation</div><div className="kpi-val" style={{color:resultatExploitation>=0?'var(--vert)':'var(--rouge)'}}>{eur(resultatExploitation)}</div><div className="kpi-chg" style={{background:resultatExploitation>=0?'var(--vert-light)':'var(--rouge-light)',color:resultatExploitation>=0?'var(--vert)':'var(--rouge)'}}>{caHT>0?Math.round(resultatExploitation/caHT*100)+'% du CA':''}</div></div>
       <div className="kpi"><div className="kpi-label">TVA Nette à reverser</div><div className="kpi-val" style={{color:'var(--orange)'}}>{eur(tvaNette)}</div><div className="kpi-chg neu">Collectée {eur(tvaCollectee)} - Déductible {eur(tvaDeductible)}</div></div>
